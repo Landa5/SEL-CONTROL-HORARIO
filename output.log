@@ -1,0 +1,22 @@
+Injecting data for 2026-01-31T11:00:00.000Z...
+prisma:query SELECT `main`.`Empleado`.`id`, `main`.`Empleado`.`usuario`, `main`.`Empleado`.`password`, `main`.`Empleado`.`activo`, `main`.`Empleado`.`nombre`, `main`.`Empleado`.`apellidos`, `main`.`Empleado`.`dni`, `main`.`Empleado`.`telefono`, `main`.`Empleado`.`email`, `main`.`Empleado`.`direccion`, `main`.`Empleado`.`rol`, `main`.`Empleado`.`fechaAlta`, `main`.`Empleado`.`fechaBaja`, `main`.`Empleado`.`observaciones`, `main`.`Empleado`.`diasVacaciones`, `main`.`Empleado`.`diasExtras`, `main`.`Empleado`.`horasExtra`, `main`.`Empleado`.`createdAt`, `main`.`Empleado`.`updatedAt` FROM `main`.`Empleado` WHERE ((`main`.`Empleado`.`nombre` LIKE ? OR `main`.`Empleado`.`apellidos` LIKE ?) AND (`main`.`Empleado`.`nombre` LIKE ? OR `main`.`Empleado`.`apellidos` LIKE ?)) LIMIT ? OFFSET ?
+Processing Luis  Molina (ID: 4)...
+prisma:query DELETE FROM `main`.`UsoCamion` WHERE EXISTS(SELECT `t0`.`id` FROM `main`.`JornadaLaboral` AS `t0` WHERE (`t0`.`empleadoId` = ? AND `t0`.`fecha` >= ? AND `t0`.`fecha` <= ? AND (`main`.`UsoCamion`.`jornadaId`) = (`t0`.`id`) AND `t0`.`id` IS NOT NULL))
+SCRIPT ERROR: PrismaClientKnownRequestError: 
+Invalid `prisma.usoCamion.deleteMany()` invocation in
+C:\Users\Usuario.Usuario-PC\sel-control-horario\scripts\inject_jan_totals.ts:47:32
+
+  44 const endDate = new Date(year, month, 0, 23, 59, 59);
+  45 
+  46 // Delete UsosCamion
+→ 47 await prisma.usoCamion.deleteMany(
+Foreign key constraint violated on the foreign key
+    at ei.handleRequestError (C:\Users\Usuario.Usuario-PC\sel-control-horario\node_modules\@prisma\client\src\runtime\RequestHandler.ts:228:13)
+    at ei.handleAndLogRequestError (C:\Users\Usuario.Usuario-PC\sel-control-horario\node_modules\@prisma\client\src\runtime\RequestHandler.ts:174:12)
+    at ei.request (C:\Users\Usuario.Usuario-PC\sel-control-horario\node_modules\@prisma\client\src\runtime\RequestHandler.ts:143:12)
+    at async a (C:\Users\Usuario.Usuario-PC\sel-control-horario\node_modules\@prisma\client\src\runtime\getPrismaClient.ts:833:24)
+    at async main (C:\Users\Usuario.Usuario-PC\sel-control-horario\scripts\inject_jan_totals.ts:47:9) {
+  code: 'P2003',
+  meta: { modelName: 'UsoCamion', constraint: null },
+  clientVersion: '6.19.0'
+}
