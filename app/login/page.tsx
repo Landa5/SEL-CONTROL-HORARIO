@@ -58,7 +58,8 @@ export default function LoginPage() {
             <Card className="w-full max-w-md">
                 <CardHeader>
                     <CardTitle className="text-center text-blue-800">Control Horario</CardTitle>
-                    <p className="text-center text-gray-500">Distribución de Gasoil</p>
+                    <p className="text-center text-gray-500">SUMINISTROS ENERGÉTICOS DE LEVANTE S.A.</p>
+                    <p className="text-center text-xs text-gray-300 mt-2">v1.1 Debug</p>
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
