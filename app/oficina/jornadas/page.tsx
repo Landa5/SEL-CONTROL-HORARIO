@@ -1,15 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Download, Clock, Truck, Users, LayoutDashboard, Calendar, AlertCircle, FileText } from 'lucide-react';
+import { Download, Clock, Truck, Users, LayoutDashboard, Calendar, AlertCircle, FileText, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import MainDashboardLayout from '@/components/layout/MainDashboardLayout';
 
-export default function OficinaJornadasPage() {
+function OficinaJornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [session, setSession] = useState<any>(null);
@@ -203,5 +203,17 @@ export default function OficinaJornadasPage() {
                 </Card>
             </div>
         </MainDashboardLayout>
+    );
+}
+
+export default function OficinaJornadasPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex h-screen items-center justify-center bg-gray-50">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+            </div>
+        }>
+            <OficinaJornadasContent />
+        </Suspense>
     );
 }
