@@ -67,7 +67,7 @@ async function main() {
             }
 
             try {
-                await prisma[table].createMany({ data: rows });
+                await (prisma as any)[table].createMany({ data: rows });
                 console.log(`✅ Imported ${table}`);
             } catch (e) {
                 console.error(`❌ Failed to import ${table}:`, e);

@@ -10,7 +10,7 @@ async function main() {
         create: {
             codigo: 'PORCENTAJE_PRODUCTIVIDAD',
             nombre: '% Productividad (sobre resto)',
-            tipo: 'DATO', // It's a configuration value, not a payment item itself really, but tariffs handle "valor"
+
             descripcion: 'Porcentaje del resto (tras dietas) asignado a Productividad. El resto va a Disponibilidad.'
         }
     });

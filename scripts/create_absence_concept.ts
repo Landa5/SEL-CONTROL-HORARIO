@@ -9,7 +9,7 @@ async function main() {
         create: {
             codigo: 'DESCUENTO_AUSENCIA',
             nombre: 'Descuento por Ausencia',
-            tipo: 'DEDUCCION', // or just use negative val in DEV
+
             descripcion: 'Penalización por día de ausencia injustificada o vacaciones'
         }
     });

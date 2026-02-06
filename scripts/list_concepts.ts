@@ -6,7 +6,7 @@ async function main() {
         orderBy: { nombre: 'asc' } // readable order
     });
     console.log('--- CONCEPTOS EXISTENTES ---');
-    concepts.forEach(c => console.log(`[${c.tipo}] ${c.codigo} - ${c.nombre}`));
+    concepts.forEach(c => console.log(`[${c.active ? 'ACTIVO' : 'INACTIVO'}] ${c.codigo} - ${c.nombre}`));
     console.log('--- FIN ---');
 }
 

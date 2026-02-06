@@ -9,7 +9,7 @@ async function main() {
         create: {
             codigo: 'DESCUENTO_VACACIONES',
             nombre: 'Descuento por Vacaciones',
-            tipo: 'DEDUCCION',
+
             descripcion: 'Penalización por día de vacaciones disfrutadas'
         }
     });
