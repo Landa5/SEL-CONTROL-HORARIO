@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Download } from 'lucide-react';
+import { Download, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-export default function AdminJornadas() {
+
+function JornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
     const searchParams = useSearchParams();
 
@@ -159,5 +160,17 @@ export default function AdminJornadas() {
                 ))}
             </div>
         </div>
+    );
+}
+
+export default function AdminJornadas() {
+    return (
+        <Suspense fallback={
+            <div className="flex h-[50vh] items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+            </div>
+        }>
+            <JornadasContent />
+        </Suspense>
     );
 }
