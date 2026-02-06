@@ -58,7 +58,6 @@ export async function POST(request: Request) {
                     await prisma.notificacion.create({
                         data: {
                             usuarioId: admin.id,
-                            tipo: 'AVISO',
                             mensaje: `Descuadre de KM en camión ${camionId} corregido. Anterior: ${lastUsage.kmFinal}, Corregido: ${kInitial}. Foto: Sí.`
                         }
                     });

@@ -72,7 +72,7 @@ export async function POST(request: Request) {
             update: {
                 litros: parseFloat(litros),
                 notas: notas,
-                updatedBy: user.id
+                updatedBy: Number(user.id)
             },
             create: {
                 empleadoId: parseInt(empleadoId),
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
                 month: parseInt(month),
                 litros: parseFloat(litros),
                 notas: notas,
-                updatedBy: user.id
+                updatedBy: Number(user.id)
             }
         });
 

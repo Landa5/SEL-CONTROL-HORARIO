@@ -72,7 +72,7 @@ export async function POST(request: Request) {
                 await prisma.nominaLinea.deleteMany({ where: { nominaId: existing.id } });
 
                 // Merge: Use override if exists, else use calculated
-                const finalLines = [];
+                const finalLines: any[] = [];
                 const codesProcessed = new Set();
 
                 // Add calculated lines (unless overridden)
