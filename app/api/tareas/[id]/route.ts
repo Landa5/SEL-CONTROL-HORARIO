@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: { id: string } }) {
     // Wait for params to be available
     const { id } = await context.params;
 
@@ -40,7 +40,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 }
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, context: { params: { id: string } }) {
     const { id } = await context.params;
 
     try {

@@ -22,27 +22,18 @@ export async function signToken(payload: any) {
         .sign(key);
 }
 
-export interface UserPayload {
-    id: number | string;
-    nombre: string;
-    usuario: string;
-    rol: string;
-    [key: string]: any;
-}
-
-export async function verifyToken(token: string | undefined): Promise<UserPayload | null> {
-    if (!token) return null;
+export async function verifyToken(token: string) {
     try {
         const { payload } = await jwtVerify(token, key, {
             algorithms: ['HS256'],
         });
-        return payload as unknown as UserPayload;
+        return payload;
     } catch (error) {
         return null;
     }
 }
 
-export async function getSession(): Promise<UserPayload | null> {
+export async function getSession() {
     const cookieStore = await cookies();
     const session = cookieStore.get('session')?.value;
     if (!session) return null;

@@ -34,7 +34,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
                 importe: importe !== undefined ? parseFloat(importe) : undefined,
                 notas: notas,
                 override: true,
-                updatedBy: Number(user.id)
+                updatedBy: user.id
             }
         });
 

@@ -21,7 +21,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         if (!nomina) return NextResponse.json({ error: 'No encontrada' }, { status: 404 });
 
         // Access Control: Admin or Own
-        if (user.rol !== 'ADMIN' && user.rol !== 'OFICINA' && nomina.empleadoId !== Number(user.id)) {
+        if (user.rol !== 'ADMIN' && user.rol !== 'OFICINA' && nomina.empleadoId !== user.id) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
         }
 
@@ -50,7 +50,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
             where: { id: parseInt(id) },
             data: {
                 estado: estado,
-                ...(estado === 'CERRADA' ? { fechaCierre: new Date(), cerradaPorId: Number(user.id) } : {})
+                ...(estado === 'CERRADA' ? { fechaCierre: new Date(), cerradaPorId: user.id } : {})
             }
         });
 

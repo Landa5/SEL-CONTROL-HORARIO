@@ -443,7 +443,7 @@ export default function PayrollMonthDetail(props: Props) {
                                                     <span className="text-sm font-bold text-gray-600 uppercase tracking-wider">Detalle de Nómina</span>
                                                     <div className="flex gap-2">
                                                         {details.estado === 'BORRADOR' && (
-                                                            <Button size="sm" variant="danger" onClick={() => handleClosePayroll(details.id)}>Cerrar Nómina</Button>
+                                                            <Button size="sm" variant="destructive" onClick={() => handleClosePayroll(details.id)}>Cerrar Nómina</Button>
                                                         )}
                                                         <Button size="sm" variant="outline" onClick={handleExportPDF}>
                                                             <FileText className="w-4 h-4 mr-2" /> PDF

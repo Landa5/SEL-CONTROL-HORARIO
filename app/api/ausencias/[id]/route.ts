@@ -41,26 +41,3 @@ export async function PATCH(
         return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
     }
 }
-
-export async function DELETE(
-    request: Request,
-    { params }: { params: Promise<{ id: string }> }
-) {
-    try {
-        const session = await getSession();
-        if (!session || (session.rol !== 'ADMIN' && session.rol !== 'OFICINA')) {
-            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-        }
-
-        const { id } = await params;
-
-        await prisma.ausencia.delete({
-            where: { id: parseInt(id) }
-        });
-
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error(error);
-        return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 });
-    }
-}
