@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 
 export async function PUT(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: any }
 ) {
     try {
         const session = await getSession();
@@ -28,13 +28,13 @@ export async function PUT(
 
         return NextResponse.json(updated);
     } catch (error) {
-        return NextResponse.json({ error: '常Err al actualizar' }, { status: 500 });
+        return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
     }
 }
 
 export async function DELETE(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: any }
 ) {
     try {
         const session = await getSession();

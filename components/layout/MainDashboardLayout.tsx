@@ -118,7 +118,7 @@ export default function MainDashboardLayout({
 
                 {/* MOBILE SIDEBAR OVERLAY */}
                 {mobileMenuOpen && (
-                    <div className="fixed inset-0 z-50 md:hidden relative">
+                    <div className="fixed inset-0 z-50 md:hidden">
                         <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)}></div>
                         <div className="absolute left-0 top-0 bottom-0 w-3/4 max-w-xs bg-slate-900 text-white shadow-2xl p-6 overflow-y-auto">
                             <div className="flex justify-between items-center mb-8">

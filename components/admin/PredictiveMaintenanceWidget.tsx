@@ -63,7 +63,7 @@ export default function PredictiveMaintenanceWidget() {
 
     return (
         <section className="space-y-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-purple-600 animate-pulse" />
                     <h2 className="text-sm font-black text-gray-900 uppercase tracking-widest flex items-center gap-2">
@@ -71,51 +71,54 @@ export default function PredictiveMaintenanceWidget() {
                         <span className="bg-purple-100 text-purple-700 text-[10px] px-1.5 py-0.5 rounded-full lowercase font-normal">beta</span>
                     </h2>
                 </div>
-                <button
-                    onClick={handleProcessInvoices}
-                    disabled={processing}
-                    className={`text-[10px] font-bold px-3 py-1 rounded-full border transition-all flex items-center gap-1.5 ${processing
-                        ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
-                        : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100 hover:border-purple-200 shadow-sm'
-                        }`}
-                >
-                    <FileText className={`w-3 h-3 ${processing ? 'animate-spin' : ''}`} />
-                    {processing ? 'Procesando...' : 'Sincronizar Facturas'}
-                </button>
-                <button
-                    onClick={async () => {
-                        if (!confirm('¿Quieres re-procesar las facturas fallidas? Se borrarán sus datos actuales (0 KM, etc.) y se volverán a enviar a la IA.')) return;
-                        setProcessing(true);
-                        try {
-                            const res = await fetch('/api/admin/reset-fallbacks', { method: 'POST' });
-                            const json = await res.json();
-                            alert(json.message);
-                            if (json.success) handleProcessInvoices(); // Auto-sync after reset
-                        } catch (e) { alert('Error al reiniciar'); }
-                        setProcessing(false);
-                    }}
-                    disabled={processing}
-                    className="text-[10px] font-bold px-3 py-1 rounded-full border border-orange-100 bg-orange-50 text-orange-600 hover:bg-orange-100 transition-all"
-                >
-                    Reforzar IA
-                </button>
-                <button
-                    onClick={async () => {
-                        if (!confirm('¿Eliminar facturas duplicadas? Se mantendrá la más reciente y se borrarán las copias idénticas.')) return;
-                        setProcessing(true);
-                        try {
-                            const res = await fetch('/api/admin/deduplicate', { method: 'POST' });
-                            const json = await res.json();
-                            alert(json.message);
-                            fetchData(); // Refresh data
-                        } catch (e) { alert('Error al limpiar'); }
-                        setProcessing(false);
-                    }}
-                    disabled={processing}
-                    className="text-[10px] font-bold px-3 py-1 rounded-full border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-all"
-                >
-                    Limpiar Duplicados
-                </button>
+
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                    <button
+                        onClick={handleProcessInvoices}
+                        disabled={processing}
+                        className={`text-[10px] font-bold px-3 py-1 rounded-full border transition-all flex items-center gap-1.5 flex-1 sm:flex-none justify-center ${processing
+                            ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
+                            : 'bg-purple-50 text-purple-700 border-purple-100 hover:bg-purple-100 hover:border-purple-200 shadow-sm'
+                            }`}
+                    >
+                        <FileText className={`w-3 h-3 ${processing ? 'animate-spin' : ''}`} />
+                        {processing ? 'Procesando...' : 'Sincronizar'}
+                    </button>
+                    <button
+                        onClick={async () => {
+                            if (!confirm('¿Quieres re-procesar las facturas fallidas? Se borrarán sus datos actuales (0 KM, etc.) y se volverán a enviar a la IA.')) return;
+                            setProcessing(true);
+                            try {
+                                const res = await fetch('/api/admin/reset-fallbacks', { method: 'POST' });
+                                const json = await res.json();
+                                alert(json.message);
+                                if (json.success) handleProcessInvoices(); // Auto-sync after reset
+                            } catch (e) { alert('Error al reiniciar'); }
+                            setProcessing(false);
+                        }}
+                        disabled={processing}
+                        className="text-[10px] font-bold px-3 py-1 rounded-full border border-orange-100 bg-orange-50 text-orange-600 hover:bg-orange-100 transition-all flex-1 sm:flex-none justify-center"
+                    >
+                        Reforzar IA
+                    </button>
+                    <button
+                        onClick={async () => {
+                            if (!confirm('¿Eliminar facturas duplicadas? Se mantendrá la más reciente y se borrarán las copias idénticas.')) return;
+                            setProcessing(true);
+                            try {
+                                const res = await fetch('/api/admin/deduplicate', { method: 'POST' });
+                                const json = await res.json();
+                                alert(json.message);
+                                fetchData(); // Refresh data
+                            } catch (e) { alert('Error al limpiar'); }
+                            setProcessing(false);
+                        }}
+                        disabled={processing}
+                        className="text-[10px] font-bold px-3 py-1 rounded-full border border-red-100 bg-red-50 text-red-600 hover:bg-red-100 transition-all flex-1 sm:flex-none justify-center"
+                    >
+                        Limpiar Duplicados
+                    </button>
+                </div>
             </div>
 
             {data.length === 0 ? (

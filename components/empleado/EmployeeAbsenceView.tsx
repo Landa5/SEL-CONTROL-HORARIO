@@ -79,15 +79,15 @@ export default function EmployeeAbsenceView() {
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <div className="flex space-x-4">
+                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
                         <button
-                            className={`px-4 py-2 font-bold ${activeTab === 'VACACIONES' ? 'border-b-2 border-blue-500' : ''}`}
+                            className={`px-4 py-2 font-bold w-full sm:w-auto ${activeTab === 'VACACIONES' ? 'border-b-2 border-blue-500 bg-blue-50 sm:bg-transparent' : ''}`}
                             onClick={() => setActiveTab('VACACIONES')}
                         >
                             Solicitar Vacaciones
                         </button>
                         <button
-                            className={`px-4 py-2 font-bold ${activeTab === 'BAJA' ? 'border-b-2 border-blue-500' : ''}`}
+                            className={`px-4 py-2 font-bold w-full sm:w-auto ${activeTab === 'BAJA' ? 'border-b-2 border-blue-500 bg-blue-50 sm:bg-transparent' : ''}`}
                             onClick={() => setActiveTab('BAJA')}
                         >
                             Notificar Baja / Ausencia
@@ -96,7 +96,7 @@ export default function EmployeeAbsenceView() {
                 </CardHeader>
                 <CardContent>
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Fecha Inicio</label>
                                 <Input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} required />

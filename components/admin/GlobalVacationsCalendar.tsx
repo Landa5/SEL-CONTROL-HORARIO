@@ -6,7 +6,7 @@ import {
     format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth,
     isSameDay, addMonths, subMonths, isWithinInterval, parseISO,
     startOfYear, endOfYear, eachWeekOfInterval, startOfWeek, endOfWeek,
-    addYears, subYears, isValid, getYear, setMonth, getMonth, isWeekend
+    addYears, subYears, isValid, getYear, setMonth, getMonth, isWeekend, endOfDay
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Filter, Calendar as CalendarIcon, Grid, List } from 'lucide-react';
@@ -106,7 +106,7 @@ export default function GlobalVacationsCalendar() {
 
                 return {
                     start: date,
-                    end: date,
+                    end: endOfDay(date),
                     label: format(date, 'd'),
                     subLabel: format(date, 'EEEEE', { locale: es }),
                     id: date.toISOString(),
@@ -222,11 +222,11 @@ export default function GlobalVacationsCalendar() {
             <div className="bg-white p-4 border-b space-y-4">
                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
                     {/* Navigation & Title */}
-                    <div className="flex items-center gap-4 bg-gray-50 p-1 rounded-lg">
+                    <div className="flex items-center gap-2 bg-gray-50 p-1 rounded-lg w-full md:w-auto justify-between md:justify-start">
                         <Button variant="ghost" size="sm" onClick={handlePrev} className="h-8 w-8 p-0">
                             <ChevronLeft className="w-5 h-5" />
                         </Button>
-                        <span className="px-4 py-1 font-bold text-gray-700 capitalize min-w-[180px] text-center">
+                        <span className="px-2 md:px-4 py-1 font-bold text-gray-700 capitalize text-sm md:text-base text-center flex-1 md:flex-none">
                             {getTitle()}
                         </span>
                         <Button variant="ghost" size="sm" onClick={handleNext} className="h-8 w-8 p-0">
@@ -235,8 +235,9 @@ export default function GlobalVacationsCalendar() {
                     </div>
 
                     {/* View Controls */}
-                    <div className="flex gap-2">
-                        <div className="flex bg-gray-100 rounded-lg p-1 text-xs font-medium">
+                    {/* View Controls */}
+                    <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar w-full md:w-auto">
+                        <div className="flex bg-gray-100 rounded-lg p-1 text-xs font-medium shrink-0">
                             <button
                                 onClick={() => setViewScope('MONTH')}
                                 className={`px-3 py-1 rounded transition-all ${viewScope === 'MONTH' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -258,7 +259,7 @@ export default function GlobalVacationsCalendar() {
                         </div>
 
                         {viewScope !== 'MONTH' && (
-                            <div className="flex bg-gray-100 rounded-lg p-1 text-xs font-medium">
+                            <div className="flex bg-gray-100 rounded-lg p-1 text-xs font-medium shrink-0">
                                 <button
                                     onClick={() => setGrouping('WEEK')}
                                     className={`px-3 py-1 rounded transition-all ${grouping === 'WEEK' ? 'bg-white shadow text-purple-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -276,25 +277,27 @@ export default function GlobalVacationsCalendar() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2 justify-end">
-                    {/* Leyenda */}
-                    <div className="flex items-center gap-3 mr-4 text-[10px] text-gray-500">
+                <div className="flex flex-col md:flex-row items-center gap-4 justify-end">
+                    {/* Leyenda - Hidden on very small screens, scrollable on others */}
+                    <div className="hidden sm:flex items-center gap-3 mr-4 text-[10px] text-gray-500 flex-wrap justify-end">
                         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div> Aprobadas</div>
                         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-400 rounded"></div> Pendientes</div>
                         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-100 border border-red-200 rounded"></div> Fest. Nac.</div>
                     </div>
 
-                    <Filter className="w-4 h-4 text-gray-500" />
-                    <select
-                        className="border border-gray-300 rounded-md text-sm p-1.5 focus:ring-2 focus:ring-blue-500 outline-none"
-                        value={selectedRole}
-                        onChange={(e) => setSelectedRole(e.target.value)}
-                    >
-                        <option value="TODOS">Todos los Roles</option>
-                        {roles.map(rol => (
-                            <option key={rol} value={rol}>{rol}</option>
-                        ))}
-                    </select>
+                    <div className="flex items-center gap-2 w-full md:w-auto">
+                        <Filter className="w-4 h-4 text-gray-500 shrink-0" />
+                        <select
+                            className="border border-gray-300 rounded-md text-sm p-1.5 focus:ring-2 focus:ring-blue-500 outline-none w-full md:w-auto"
+                            value={selectedRole}
+                            onChange={(e) => setSelectedRole(e.target.value)}
+                        >
+                            <option value="TODOS">Todos los Roles</option>
+                            {roles.map(rol => (
+                                <option key={rol} value={rol}>{rol}</option>
+                            ))}
+                        </select>
+                    </div>
                 </div>
             </div>
 

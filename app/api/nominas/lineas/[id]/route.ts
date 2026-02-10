@@ -4,7 +4,7 @@ import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
 // PATCH /api/nominas/lineas/[id]
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, context: { params: any }) {
     try {
         const { id } = await context.params;
         const cookieStore = await cookies();

@@ -4,7 +4,7 @@ import { getSession } from '@/lib/auth';
 
 export async function PATCH(
     request: Request,
-    { params }: { params: Promise<{ id: string }> }
+    { params }: { params: any }
 ) {
     try {
         const session = await getSession();

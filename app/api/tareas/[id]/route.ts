@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 
-export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, context: { params: any }) {
     // Wait for params to be available
     const { id } = await context.params;
 
     try {
         const session = await getSession();
-        if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         const tareaId = Number(id);
         const tarea = await prisma.tarea.findUnique({
@@ -41,12 +41,12 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
     }
 }
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: Request, context: { params: any }) {
     const { id } = await context.params;
 
     try {
         const session = await getSession();
-        if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         // Only Staff can edit/manage tickets
         const userRole = session.rol as string;

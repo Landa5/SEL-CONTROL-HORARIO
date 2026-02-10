@@ -411,24 +411,27 @@ export default function EmpleadoDashboard() {
 
                             <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                                 {monthlyDetails.map((day: any) => (
-                                    <div key={day.id} className="p-4 border-b last:border-0 hover:bg-gray-50 flex items-center justify-between transition-colors">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 text-center bg-gray-100 rounded p-1">
+                                    <div key={day.id} className="p-4 border-b last:border-0 hover:bg-gray-50 flex flex-col sm:flex-row items-start sm:items-center justify-between transition-colors gap-3 sm:gap-0">
+                                        <div className="flex items-center gap-4 w-full">
+                                            <div className="w-12 text-center bg-gray-100 rounded p-1 shrink-0">
                                                 <p className="text-xs text-gray-500 uppercase">{format(new Date(day.fecha), 'EEE', { locale: es })}</p>
                                                 <p className="font-bold text-lg text-gray-800">{format(new Date(day.fecha), 'dd')}</p>
                                             </div>
-                                            <div>
-                                                <div className="flex gap-4 text-sm mb-1">
-                                                    <span className="flex items-center gap-1 text-gray-600"><Clock className="w-3 h-3" /> {format(new Date(day.horaEntrada), 'HH:mm')} - {day.horaSalida ? format(new Date(day.horaSalida), 'HH:mm') : 'En curso'}</span>
+                                            <div className="flex-1">
+                                                <div className="flex flex-col sm:flex-row gap-1 sm:gap-4 text-sm mb-1">
+                                                    <span className="flex items-center gap-1 text-gray-600 font-medium">
+                                                        <Clock className="w-3 h-3" />
+                                                        {format(new Date(day.horaEntrada), 'HH:mm')} - {day.horaSalida ? format(new Date(day.horaSalida), 'HH:mm') : 'En curso'}
+                                                    </span>
                                                 </div>
                                                 {isConductor ? (
-                                                    <div className="flex gap-3 text-xs">
-                                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold">{day.km} KM</span>
-                                                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">{day.viajes || 0} Viajes</span>
-                                                        <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold">{day.descargas} Descargas</span>
+                                                    <div className="flex flex-wrap gap-2 text-xs mt-1">
+                                                        <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-bold whitespace-nowrap">{day.km} KM</span>
+                                                        <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold whitespace-nowrap">{day.viajes || 0} Viajes</span>
+                                                        <span className="bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded font-bold whitespace-nowrap">{day.descargas} Descargas</span>
                                                     </div>
                                                 ) : (
-                                                    <div className="flex gap-3 text-xs">
+                                                    <div className="flex flex-wrap gap-2 text-xs mt-1">
                                                         <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-bold">Día Registrado</span>
                                                         {day.horaSalida && session?.rol === 'ADMIN' && (
                                                             <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded font-bold">
@@ -638,28 +641,36 @@ export default function EmpleadoDashboard() {
             {/* CONFLICT MODAL */}
             {showConflictModal && (
                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                    <div className="bg-white p-6 rounded-xl max-w-md w-full space-y-4">
+                    <div className="bg-white p-6 rounded-xl max-w-md w-full space-y-4 shadow-2xl mx-4">
                         <div className="text-center">
                             <AlertTriangle className="w-12 h-12 text-red-500 mx-auto mb-2" />
                             <h3 className="text-xl font-bold text-red-600">Conflicto de Kilometraje</h3>
-                            <p className="text-gray-600">
+                            <p className="text-gray-600 text-sm">
                                 El odómetro no coincide con el registro anterior.
                             </p>
                         </div>
 
-                        <div className="bg-gray-100 p-4 rounded text-sm space-y-2">
-                            <div className="flex justify-between">
-                                <span>Anterior Conductor:</span>
-                                <span className="font-bold">{conflictData?.expectedKm} KM</span>
+                        <div className="bg-gray-100 p-4 rounded-lg text-sm space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-gray-600">Registro Anterior:</span>
+                                <span className="font-bold text-gray-800 text-lg">{conflictData?.expectedKm} KM</span>
                             </div>
-                            <div className="flex justify-between text-red-600 font-bold">
-                                <span>Tu dato:</span>
-                                <span>{kmInicial} KM</span>
+                            <div className="border-t border-gray-300 my-2"></div>
+                            <div className="space-y-1">
+                                <label className="block text-xs font-bold text-red-600 uppercase">Tu Registro (Editable)</label>
+                                <Input
+                                    type="number"
+                                    value={kmInicial}
+                                    onChange={(e) => setKmInicial(e.target.value)}
+                                    className="text-lg font-bold border-red-300 focus:border-red-500 focus:ring-red-500 bg-white"
+                                />
                             </div>
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-sm font-bold block">Sube una foto del odómetro:</label>
+                            <label className="text-sm font-bold block text-gray-700">
+                                📸 Sube una foto del odómetro (Obligatorio):
+                            </label>
                             <input
                                 type="file"
                                 accept="image/*"
@@ -672,13 +683,17 @@ export default function EmpleadoDashboard() {
                                         reader.readAsDataURL(file);
                                     }
                                 }}
-                                className="w-full text-sm"
+                                className="w-full text-sm p-2 border rounded-lg bg-gray-50 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                             />
                         </div>
 
-                        <div className="flex gap-2 pt-4">
-                            <Button onClick={() => setShowConflictModal(false)} variant="ghost" className="flex-1">Cancelar</Button>
-                            <Button onClick={handleConfirmConflict} className="flex-1 bg-red-600 hover:bg-red-700 text-white">
+                        <div className="flex gap-3 pt-4">
+                            <Button onClick={() => setShowConflictModal(false)} variant="ghost" className="flex-1 py-6">Cancelar</Button>
+                            <Button
+                                onClick={handleConfirmConflict}
+                                disabled={!conflictPhoto}
+                                className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-6 shadow-red-200 shadow-lg"
+                            >
                                 Confirmar y Corregir
                             </Button>
                         </div>

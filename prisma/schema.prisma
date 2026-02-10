@@ -175,32 +175,58 @@ model Ausencia {
 }
 
 // TICKET SYSTEM (AVERIAS & TAREAS)
+
+enum TareaTipo {
+  OPERATIVA
+  ADMINISTRATIVA
+  RECURRENTE
+  AUTOMATICA
+}
+
+enum TareaPrioridad {
+  ALTA
+  MEDIA
+  BAJA
+}
+
+enum TareaEstado {
+  BACKLOG
+  PENDIENTE
+  EN_CURSO
+  BLOQUEADA
+  REVISION
+  COMPLETADA
+  CANCELADA
+}
+
 model Tarea {
   id              Int      @id @default(autoincrement())
   
-  // Enums (represented as Strings for SQLite)
-  // tipo: "AVERIA", "TAREA_INTERNA", "MANTENIMIENTO"
-  tipo            String   @default("AVERIA")
-  // estado: "ABIERTA", "EN_CURSO", "CERRADA", "CANCELADA"
-  estado          String   @default("ABIERTA")
-  // prioridad: "BAJA", "MEDIA", "ALTA", "URGENTE"
-  prioridad       String   @default("MEDIA")
-  // activoTipo: "CAMION", "DEPOSITO_CLIENTE", "BASE", "OTRO"
-  activoTipo      String?  // Opcional para tareas internas
-
+  tipo            TareaTipo      @default(OPERATIVA)
+  estado          TareaEstado    @default(BACKLOG)
+  prioridad       TareaPrioridad @default(MEDIA)
+  
+  // Contexto
+  activoTipo      String?  // "CAMION", "DEPOSITO_CLIENTE", "BASE", "OTRO"
   matricula       String?
   clienteNombre   String?
   ubicacionTexto  String?
 
   titulo          String
   descripcion     String
-
-  contactoNombre  String?
-  contactoTelefono String?
-
-  fechaInicio     DateTime @default(now())
+  
+  // Fechas
+  fechaLimite     DateTime?      // Para "Hoy" y control de vencimiento
+  fechaInicio     DateTime       @default(now())
   fechaCierre     DateTime?
-  resumenCierre   String?
+  
+  // Bloqueo
+  motivoBloqueo   String?
+
+  // Contacto (Legacy/Optional)
+  contactoNombre   String?
+  contactoTelefono String?
+  resumenCierre    String?
 
   // Relaciones
   creadoPorId     Int
@@ -209,6 +235,11 @@ model Tarea {
   asignadoAId     Int?
   asignadoA       Empleado? @relation("AsignadoTarea", fields: [asignadoAId], references: [id])
   
+  // Jerarquía (Subtareas)
+  parentId        Int?
+  parent          Tarea?   @relation("Subtareas", fields: [parentId], references: [id])
+  subtareas       Tarea[]  @relation("Subtareas")
+
   historial       TareaHistorial[]
   adjuntos        TareaAdjunto[]
 

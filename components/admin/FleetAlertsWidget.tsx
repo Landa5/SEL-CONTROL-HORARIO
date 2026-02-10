@@ -42,7 +42,7 @@ export default function FleetAlertsWidget({ alerts, hrefPrefix = '/admin' }: Fle
                             href={`${hrefPrefix}/camiones`}
                             className="block p-4 hover:bg-gray-50 transition-colors group"
                         >
-                            <div className="flex items-center justify-between gap-4">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-2 rounded-lg ${alert.isExpired ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
                                         <Truck className="w-4 h-4" />
@@ -54,12 +54,12 @@ export default function FleetAlertsWidget({ alerts, hrefPrefix = '/admin' }: Fle
                                         </p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${alert.isExpired ? 'bg-red-600 text-white' : 'bg-orange-50 text-orange-700'}`}>
+                                <div className="text-left sm:text-right pl-11 sm:pl-0">
+                                    <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${alert.isExpired ? 'bg-red-600 text-white' : 'bg-orange-50 text-orange-700'}`}>
                                         <Calendar className="w-4 h-4" />
                                         {format(new Date(alert.date), 'dd/MM/yy', { locale: es })}
                                     </div>
-                                    <p className="text-[10px] font-medium text-gray-400 mt-1 flex items-center justify-end gap-1">
+                                    <p className="text-[10px] font-medium text-gray-400 mt-1 flex items-center sm:justify-end gap-1">
                                         <Clock className="w-2.5 h-2.5" />
                                         {alert.isExpired ? 'Acción urgente' : 'Revisar pronto'}
                                     </p>
