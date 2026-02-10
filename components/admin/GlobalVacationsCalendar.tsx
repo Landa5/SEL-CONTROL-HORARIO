@@ -6,7 +6,7 @@ import {
     format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth,
     isSameDay, addMonths, subMonths, isWithinInterval, parseISO,
     startOfYear, endOfYear, eachWeekOfInterval, startOfWeek, endOfWeek,
-    addYears, subYears, isValid, getYear, setMonth, getMonth
+    addYears, subYears, isValid, getYear, setMonth, getMonth, isWeekend
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Filter, Calendar as CalendarIcon, Grid, List } from 'lucide-react';
@@ -17,6 +17,7 @@ interface Vacation {
     id: number;
     fechaInicio: string;
     fechaFin: string;
+    estado: 'APROBADA' | 'PENDIENTE'; // Added status
     empleado: {
         id: number;
         nombre: string;
@@ -31,7 +32,8 @@ type Grouping = 'DAY' | 'WEEK' | 'FORTNIGHT';
 export default function GlobalVacationsCalendar() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [vacations, setVacations] = useState<Vacation[]>([]);
-    const [employees, setEmployees] = useState<any[]>([]); // New state for all employees
+    const [employees, setEmployees] = useState<any[]>([]);
+    const [holidays, setHolidays] = useState<any[]>([]); // New state
     const [loading, setLoading] = useState(true);
     const [selectedRole, setSelectedRole] = useState<string>('TODOS');
 
@@ -54,9 +56,10 @@ export default function GlobalVacationsCalendar() {
 
     async function fetchData() {
         try {
-            const [vacRes, empRes] = await Promise.all([
+            const [vacRes, empRes, holidayRes] = await Promise.all([
                 fetch('/api/ausencias/approved'),
-                fetch('/api/empleados')
+                fetch('/api/empleados'),
+                fetch('/api/admin/fiestas')
             ]);
 
             if (vacRes.ok) {
@@ -65,7 +68,11 @@ export default function GlobalVacationsCalendar() {
             }
             if (empRes.ok) {
                 const empData = await empRes.json();
-                setEmployees(empData.filter((e: any) => e.activo)); // Only active employees
+                setEmployees(empData.filter((e: any) => e.activo));
+            }
+            if (holidayRes.ok) {
+                const hData = await holidayRes.json();
+                setHolidays(hData);
             }
         } catch (error) {
             console.error("Error loading data:", error);
@@ -92,13 +99,21 @@ export default function GlobalVacationsCalendar() {
         if (viewScope === 'MONTH') {
             start = startOfMonth(currentDate);
             end = endOfMonth(currentDate);
-            return eachDayOfInterval({ start, end }).map(date => ({
-                start: date,
-                end: date,
-                label: format(date, 'd'),
-                subLabel: format(date, 'EEEEE', { locale: es }),
-                id: date.toISOString()
-            }));
+            return eachDayOfInterval({ start, end }).map(date => {
+                // Check if holiday
+                const holiday = holidays.find(h => isSameDay(new Date(h.fecha), date));
+                const isWe = isWeekend(date);
+
+                return {
+                    start: date,
+                    end: date,
+                    label: format(date, 'd'),
+                    subLabel: format(date, 'EEEEE', { locale: es }),
+                    id: date.toISOString(),
+                    isWeekend: isWe,
+                    holiday: holiday
+                };
+            });
         }
 
         if (viewScope === 'SEMESTER') {
@@ -115,13 +130,16 @@ export default function GlobalVacationsCalendar() {
             const weeks = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
             return weeks.map(weekStart => {
                 const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-                // Clamp to Scope Range? strictly speaking intervals are continuous
+                // Check if full week matches a holiday? Unlikely for single day holidays.
+                // Just keep standard styling for weeks.
                 return {
                     start: weekStart,
                     end: weekEnd,
                     label: `S${format(weekStart, 'w')}`,
                     subLabel: format(weekStart, 'MMM', { locale: es }),
-                    id: weekStart.toISOString()
+                    id: weekStart.toISOString(),
+                    isWeekend: false,
+                    holiday: null
                 };
             });
         }
@@ -140,7 +158,9 @@ export default function GlobalVacationsCalendar() {
                         end: midMonth,
                         label: 'Q1',
                         subLabel: format(cursor, 'MMM', { locale: es }),
-                        id: cursor.toISOString() + '_1'
+                        id: cursor.toISOString() + '_1',
+                        isWeekend: false,
+                        holiday: null
                     });
                 }
 
@@ -152,15 +172,15 @@ export default function GlobalVacationsCalendar() {
                         end: monthEnd > end ? end : monthEnd,
                         label: 'Q2',
                         subLabel: format(cursor, 'MMM', { locale: es }),
-                        id: secondStart.toISOString() + '_2'
+                        id: secondStart.toISOString() + '_2',
+                        isWeekend: false,
+                        holiday: null
                     });
                 }
 
                 cursor = addMonths(cursor, 1);
                 cursor = startOfMonth(cursor);
             }
-            // Filter out intervals strictly outside if loop logic was loose, but here custom loop ensures.
-            // Actually simpler loop: iterate months in scope, push 2 items.
             return intervals;
         }
 
@@ -184,6 +204,16 @@ export default function GlobalVacationsCalendar() {
         if (viewScope === 'SEMESTER') {
             const isSecond = getMonth(currentDate) >= 6;
             return `${isSecond ? '2º' : '1º'} Semestre ${format(currentDate, 'yyyy')}`;
+        }
+    };
+
+    // Helper for holiday color
+    const getHolidayColor = (ambito: string) => {
+        switch (ambito) {
+            case 'NACIONAL': return 'bg-red-100 text-red-700 font-bold';
+            case 'AUTONOMICO': return 'bg-orange-100 text-orange-700 font-bold';
+            case 'LOCAL': return 'bg-purple-100 text-purple-700 font-bold';
+            default: return 'bg-gray-200 text-gray-700';
         }
     };
 
@@ -247,6 +277,13 @@ export default function GlobalVacationsCalendar() {
                 </div>
 
                 <div className="flex items-center gap-2 justify-end">
+                    {/* Leyenda */}
+                    <div className="flex items-center gap-3 mr-4 text-[10px] text-gray-500">
+                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div> Aprobadas</div>
+                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-400 rounded"></div> Pendientes</div>
+                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-100 border border-red-200 rounded"></div> Fest. Nac.</div>
+                    </div>
+
                     <Filter className="w-4 h-4 text-gray-500" />
                     <select
                         className="border border-gray-300 rounded-md text-sm p-1.5 focus:ring-2 focus:ring-blue-500 outline-none"
@@ -268,45 +305,62 @@ export default function GlobalVacationsCalendar() {
                         <div className="w-48 flex-shrink-0 p-3 font-bold text-gray-600 border-r bg-gray-100 sticky left-0 z-20 shadow-sm">
                             Empleado
                         </div>
-                        {intervals.map(iv => (
-                            <div key={iv.id} className={`flex-1 min-w-[${grouping === 'DAY' ? '30px' : '60px'}] text-center p-2 text-xs border-r border-gray-200 last:border-r-0 
-                                ${grouping === 'DAY' && isSameDay(iv.start, new Date()) ? 'bg-blue-100 text-blue-700 font-bold' : ''}
-                            `}>
-                                <div className="font-bold">{iv.label}</div>
-                                <div className="text-[10px] text-gray-400 uppercase">{iv.subLabel}</div>
-                            </div>
-                        ))}
+                        {intervals.map(iv => {
+                            let cellClass = `flex-1 min-w-[${grouping === 'DAY' ? '30px' : '60px'}] text-center p-2 text-xs border-r border-gray-200 last:border-r-0`;
+
+                            // Highlight styles
+                            if (iv.holiday) {
+                                cellClass += ` ${getHolidayColor(iv.holiday.ambito)}`;
+                            } else if (iv.isWeekend) {
+                                cellClass += ' bg-gray-100 text-gray-400';
+                            } else if (grouping === 'DAY' && isSameDay(iv.start, new Date())) {
+                                cellClass += ' bg-blue-100 text-blue-700 font-bold';
+                            }
+
+                            return (
+                                <div key={iv.id} className={cellClass} title={iv.holiday?.nombre}>
+                                    <div className="font-bold">{iv.label}</div>
+                                    <div className={`text-[10px] uppercase ${!iv.holiday ? 'text-gray-400' : ''}`}>{iv.subLabel}</div>
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {/* Employee Rows */}
                     {filteredEmployees.length === 0 ? (
                         <div className="p-8 text-center text-gray-500 italic">
-                            No hay vacaciones aprobadas para este criterio.
+                            No hay empleados activos en este criterio.
                         </div>
                     ) : (
                         filteredEmployees.map(emp => (
-                            <div key={emp!.id} className="flex border-b hover:bg-gray-50 transition-colors">
+                            <div key={emp.id} className="flex border-b hover:bg-gray-50 transition-colors">
                                 <div className="w-48 flex-shrink-0 p-3 border-r bg-white sticky left-0 z-10 flex flex-col justify-center shadow-sm">
-                                    <span className="font-medium text-gray-800 text-sm truncate" title={`${emp!.nombre} ${emp!.apellidos || ''}`}>
-                                        {emp!.nombre} {emp!.apellidos}
+                                    <span className="font-medium text-gray-800 text-sm truncate" title={`${emp.nombre} ${emp.apellidos || ''}`}>
+                                        {emp.nombre} {emp.apellidos}
                                     </span>
-                                    <span className="text-[10px] text-gray-400 uppercase">{emp!.rol}</span>
+                                    <span className="text-[10px] text-gray-400 uppercase">{emp.rol}</span>
                                 </div>
                                 {intervals.map(iv => {
-                                    // Complex overlap check
-                                    const isVacation = vacations.some(v => {
-                                        if (v.empleado.id !== emp!.id) return false;
-                                        const vacStart = parseISO(v.fechaInicio);
-                                        const vacEnd = parseISO(v.fechaFin);
+                                    // Highlighting for cells
+                                    let cellClass = `flex-1 min-w-[${grouping === 'DAY' ? '30px' : '60px'}] border-r border-gray-100 last:border-r-0 p-1 relative`;
+                                    if (iv.holiday) cellClass += ` ${getHolidayColor(iv.holiday.ambito)} bg-opacity-30`; // Lighter fetch for body cells
+                                    else if (iv.isWeekend) cellClass += ' bg-gray-50';
 
-                                        // Overlap Logic: (StartA <= EndB) and (EndA >= StartB)
+                                    // Find Matching Vacation
+                                    const vacation = vacations.find(v => {
+                                        if (v.empleado.id !== emp.id) return false;
+                                        const vacStart = parseISO(v.fechaInicio as any); // Type assertion if string
+                                        const vacEnd = parseISO(v.fechaFin as any);
                                         return (vacStart <= iv.end) && (vacEnd >= iv.start);
                                     });
 
                                     return (
-                                        <div key={iv.id} className={`flex-1 min-w-[${grouping === 'DAY' ? '30px' : '60px'}] border-r border-gray-100 last:border-r-0 p-1 relative`}>
-                                            {isVacation && (
-                                                <div className="absolute inset-1 bg-blue-500/80 rounded-sm shadow-sm" title="Vacaciones"></div>
+                                        <div key={iv.id} className={cellClass}>
+                                            {vacation && (
+                                                <div
+                                                    className={`absolute inset-1 rounded-sm shadow-sm ${vacation.estado === 'PENDIENTE' ? 'bg-yellow-400' : 'bg-blue-500/80'}`}
+                                                    title={`${vacation.estado} - ${format(new Date(vacation.fechaInicio), 'd MMM')} a ${format(new Date(vacation.fechaFin), 'd MMM')}`}
+                                                ></div>
                                             )}
                                         </div>
                                     );
