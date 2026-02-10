@@ -4,11 +4,13 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Trash2, Edit, Plus, FileText, Calendar, ShieldAlert, Truck } from 'lucide-react';
+import { Trash2, Edit, Plus, FileText, Calendar, ShieldAlert, Truck, TrendingUp } from 'lucide-react';
 import FichaTecnica from '@/components/fleet/FichaTecnica';
 import { format } from 'date-fns';
+import { useRouter } from 'next/navigation';
 
 export default function AdminCamiones() {
+    const router = useRouter();
     const [camiones, setCamiones] = useState<any[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -148,6 +150,7 @@ export default function AdminCamiones() {
                                                 </div>
                                             </td>
                                             <td className="p-4 text-right space-x-1">
+                                                <Button size="sm" variant="outline" onClick={() => router.push(`/admin/camiones/${cam.id}`)} title="Ver Estadísticas" className="h-8 w-8 p-0 border-blue-200 text-blue-600 hover:bg-blue-50"><TrendingUp className="w-4 h-4" /></Button>
                                                 <Button size="sm" variant="outline" onClick={() => setViewingCamionId(cam.id)} className="h-8 w-8 p-0 border-indigo-200 text-indigo-600 hover:bg-indigo-50"><FileText className="w-4 h-4" /></Button>
                                                 <Button size="sm" variant="secondary" onClick={() => openEdit(cam)} className="h-8 w-8 p-0"><Edit className="w-4 h-4" /></Button>
                                                 <Button size="sm" variant="danger" onClick={() => handleDelete(cam.id)} className="h-8 w-8 p-0"><Trash2 className="w-4 h-4" /></Button>

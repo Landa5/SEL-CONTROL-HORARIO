@@ -221,28 +221,40 @@ export default function AdminEmpleados() {
                                                 {/* Carnet */}
                                                 <div className="flex items-center gap-2">
                                                     <span className="font-bold bg-gray-100 px-1 rounded">
-                                                        {emp.perfilProfesional.carnetTipo}
+                                                        {emp.perfilProfesional.carnetTipo || 'Sin tipo'}
                                                     </span>
-                                                    <span className={`${new Date(emp.perfilProfesional.carnetCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                                        Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString()}
-                                                    </span>
+                                                    {emp.perfilProfesional.carnetCaducidad ? (
+                                                        <span className={`${new Date(emp.perfilProfesional.carnetCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                            Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString()}
+                                                        </span>
+                                                    ) : <span className="text-red-500">Sin fecha</span>}
                                                 </div>
                                                 {/* ADR */}
                                                 {emp.perfilProfesional.tieneAdr && (
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-bold bg-orange-100 text-orange-800 px-1 rounded">ADR</span>
-                                                        <span className={`${new Date(emp.perfilProfesional.adrCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                                            Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString()}
-                                                        </span>
+                                                        {emp.perfilProfesional.adrCaducidad ? (
+                                                            <span className={`${new Date(emp.perfilProfesional.adrCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                                Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString()}
+                                                            </span>
+                                                        ) : <span className="text-red-500">Sin fecha</span>}
                                                     </div>
                                                 )}
                                                 {/* DNI Warning if near */}
-                                                <div className="text-gray-400 text-[10px]">
-                                                    DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString()}
-                                                </div>
+                                                {emp.perfilProfesional.dniCaducidad && (
+                                                    <div className="text-gray-400 text-[10px]">
+                                                        DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString()}
+                                                    </div>
+                                                )}
                                             </div>
                                         ) : (
-                                            <span className="text-xs text-gray-400 italic">No requiere</span>
+                                            (emp.rol === 'CONDUCTOR' || emp.rol === 'MECANICO') ? (
+                                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                    ⚠ Faltan Datos
+                                                </span>
+                                            ) : (
+                                                <span className="text-xs text-gray-400 italic">No requiere</span>
+                                            )
                                         )}
                                     </td>
                                     <td className="p-4">
