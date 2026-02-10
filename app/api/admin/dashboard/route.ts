@@ -23,7 +23,7 @@ export async function GET(request: Request) {
         });
 
         const openIncidents = await prisma.tarea.count({
-            where: { estado: { in: ['ABIERTA', 'EN_CURSO'] } }
+            where: { estado: { in: ['PENDIENTE', 'EN_CURSO', 'REVISION'] } }
         });
 
         // Current status
