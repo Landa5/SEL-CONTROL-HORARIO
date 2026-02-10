@@ -55,8 +55,8 @@ async function main() {
     console.log('Status:', ausenciasRes.status);
     console.log('Body:', ausenciasRes.body);
 
-    console.log('\n--- 3. Fetch Tareas (estado=ABIERTA) ---');
-    const tareasRes = await request('/api/tareas?estado=ABIERTA', 'GET', null, cookie);
+    console.log('\n--- 3. Fetch Tareas (estado=PENDIENTE) ---');
+    const tareasRes = await request('/api/tareas?estado=PENDIENTE', 'GET', null, cookie);
     console.log('Status:', tareasRes.status);
     console.log('Body:', tareasRes.body);
 }
