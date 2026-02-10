@@ -192,6 +192,7 @@ export default function AdminEmpleados() {
                             <tr className="bg-gray-100 border-b border-gray-200">
                                 <th className="p-4 font-bold text-gray-600 text-sm uppercase">Empleado</th>
                                 <th className="p-4 font-bold text-gray-600 text-sm uppercase">Contacto</th>
+                                <th className="p-4 font-bold text-gray-600 text-sm uppercase">Documentación</th>
                                 <th className="p-4 font-bold text-gray-600 text-sm uppercase">Rol / Usuario</th>
                                 <th className="p-4 font-bold text-gray-600 text-sm uppercase text-right">Acciones</th>
                             </tr>
@@ -213,6 +214,36 @@ export default function AdminEmpleados() {
                                     <td className="p-4 text-sm">
                                         {emp.telefono && <div className="flex items-center gap-2"><Phone className="w-3 h-3 text-gray-400" /> {emp.telefono}</div>}
                                         {emp.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3 text-gray-400" /> {emp.email}</div>}
+                                    </td>
+                                    <td className="p-4">
+                                        {emp.perfilProfesional ? (
+                                            <div className="space-y-1 text-xs">
+                                                {/* Carnet */}
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold bg-gray-100 px-1 rounded">
+                                                        {emp.perfilProfesional.carnetTipo}
+                                                    </span>
+                                                    <span className={`${new Date(emp.perfilProfesional.carnetCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                        Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                                {/* ADR */}
+                                                {emp.perfilProfesional.tieneAdr && (
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-bold bg-orange-100 text-orange-800 px-1 rounded">ADR</span>
+                                                        <span className={`${new Date(emp.perfilProfesional.adrCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                            Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString()}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {/* DNI Warning if near */}
+                                                <div className="text-gray-400 text-[10px]">
+                                                    DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString()}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <span className="text-xs text-gray-400 italic">No requiere</span>
+                                        )}
                                     </td>
                                     <td className="p-4">
                                         <div className="space-y-1">
