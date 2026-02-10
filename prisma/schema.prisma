@@ -57,6 +57,9 @@ model Empleado {
   nominas         NominaMes[]
   comercialLitros ComercialLitros[]
   tarifasEspecificas TarifaNomina[]
+  
+  perfilProfesional PerfilProfesional?
+  alertasDocumento  AlertaDocumento[]
 }
 
 model Camion {
@@ -592,4 +595,40 @@ model EnvioGestoria {
   
   urlPdfConsolidado String?
   status          String   @default("OK")
+}
+
+// PERFIL PROFESIONAL (Conductores / Taller)
+model PerfilProfesional {
+  id              Int      @id @default(autoincrement())
+  
+  empleadoId      Int      @unique
+  empleado        Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  
+  // Documento Identidad (El número se coge de Empleado.dni)
+  dniCaducidad    DateTime
+  
+  // Conducción
+  carnetTipo      String
+  carnetCaducidad DateTime
+  
+  // ADR
+  tieneAdr        Boolean  @default(false)
+  adrCaducidad    DateTime? // Obligatorio si tieneAdr = true
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model AlertaDocumento {
+  id              Int      @id @default(autoincrement())
+  
+  empleadoId      Int
+  empleado        Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+  
+  documento       String   // "DNI", "CARNET", "ADR"
+  fechaCaducidad  DateTime
+  diasRestantes   Int
+  
+  fechaEnvio      DateTime @default(now())
+  destinatarios   String   // JSON o lista de roles/emails que recibieron la alerta
 }

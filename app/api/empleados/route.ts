@@ -5,6 +5,7 @@ import { hashPassword } from '@/lib/auth';
 export async function GET() {
     const empleados = await prisma.empleado.findMany({
         orderBy: { nombre: 'asc' },
+        include: { perfilProfesional: true }
     });
     // Omit passwords
     const safeEmpleados = empleados.map(({ password, ...rest }) => rest);
@@ -48,8 +49,19 @@ export async function POST(request: Request) {
                 direccion: sanitize(data.direccion),
                 observaciones: sanitize(data.observaciones),
                 activo: data.activo !== undefined ? data.activo : true,
-                fechaAlta: new Date()
+                fechaAlta: new Date(),
+                // PERFIL PROFESIONAL (If applicable)
+                perfilProfesional: (data.rol === 'CONDUCTOR' || data.rol === 'MECANICO') ? {
+                    create: {
+                        dniCaducidad: new Date(data.dniCaducidad),
+                        carnetTipo: data.carnetTipo,
+                        carnetCaducidad: new Date(data.carnetCaducidad),
+                        tieneAdr: data.tieneAdr || false,
+                        adrCaducidad: data.tieneAdr && data.adrCaducidad ? new Date(data.adrCaducidad) : null
+                    }
+                } : undefined
             },
+            include: { perfilProfesional: true }
         });
 
         const { password, ...safeEmpleado } = empleado;
@@ -96,7 +108,28 @@ export async function PUT(request: Request) {
 
         const empleado = await prisma.empleado.update({
             where: { id: parseInt(id) },
-            data: updateData,
+            data: {
+                ...updateData,
+                perfilProfesional: (rest.rol === 'CONDUCTOR' || rest.rol === 'MECANICO') && rest.dniCaducidad ? {
+                    upsert: {
+                        create: {
+                            dniCaducidad: new Date(rest.dniCaducidad),
+                            carnetTipo: rest.carnetTipo,
+                            carnetCaducidad: new Date(rest.carnetCaducidad),
+                            tieneAdr: rest.tieneAdr || false,
+                            adrCaducidad: rest.tieneAdr && rest.adrCaducidad ? new Date(rest.adrCaducidad) : null
+                        },
+                        update: {
+                            dniCaducidad: new Date(rest.dniCaducidad),
+                            carnetTipo: rest.carnetTipo,
+                            carnetCaducidad: new Date(rest.carnetCaducidad),
+                            tieneAdr: rest.tieneAdr || false,
+                            adrCaducidad: rest.tieneAdr && rest.adrCaducidad ? new Date(rest.adrCaducidad) : null
+                        }
+                    }
+                } : undefined
+            },
+            include: { perfilProfesional: true }
         });
 
         const { password: _, ...safeEmpleado } = empleado;

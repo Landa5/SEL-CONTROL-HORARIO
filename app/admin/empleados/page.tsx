@@ -34,7 +34,13 @@ export default function AdminEmpleados() {
         password: '',
         rol: 'CONDUCTOR',
         observaciones: '',
-        activo: true
+        activo: true,
+        // Perfil Profesional
+        dniCaducidad: '',
+        carnetTipo: '',
+        carnetCaducidad: '',
+        tieneAdr: false,
+        adrCaducidad: ''
     });
 
     useEffect(() => {
@@ -55,6 +61,24 @@ export default function AdminEmpleados() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        // Custom Validation for Professional Profile
+        if (formData.rol === 'CONDUCTOR' || formData.rol === 'MECANICO') {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            if (!formData.dniCaducidad) { alert('Fecha caducidad DNI obligatoria'); return; }
+            if (new Date(formData.dniCaducidad) <= today) { alert('La caducidad del DNI debe ser futura'); return; }
+
+            if (!formData.carnetTipo) { alert('Tipo de carnet obligatorio'); return; }
+            if (!formData.carnetCaducidad) { alert('Caducidad carnet obligatoria'); return; }
+            if (new Date(formData.carnetCaducidad) <= today) { alert('La caducidad del carnet debe ser futura'); return; }
+
+            if (formData.tieneAdr) {
+                if (!formData.adrCaducidad) { alert('Caducidad ADR obligatoria si tiene ADR'); return; }
+                if (new Date(formData.adrCaducidad) <= today) { alert('La caducidad del ADR debe ser futura'); return; }
+            }
+        }
 
         const payload: any = { ...formData };
         if (!payload.password) delete payload.password; // Don't send empty password on edit
@@ -109,7 +133,12 @@ export default function AdminEmpleados() {
             password: '',
             rol: emp.rol || 'CONDUCTOR',
             observaciones: emp.observaciones || '',
-            activo: emp.activo
+            activo: emp.activo,
+            dniCaducidad: emp.perfilProfesional?.dniCaducidad ? new Date(emp.perfilProfesional.dniCaducidad).toISOString().split('T')[0] : '',
+            carnetTipo: emp.perfilProfesional?.carnetTipo || '',
+            carnetCaducidad: emp.perfilProfesional?.carnetCaducidad ? new Date(emp.perfilProfesional.carnetCaducidad).toISOString().split('T')[0] : '',
+            tieneAdr: emp.perfilProfesional?.tieneAdr || false,
+            adrCaducidad: emp.perfilProfesional?.adrCaducidad ? new Date(emp.perfilProfesional.adrCaducidad).toISOString().split('T')[0] : ''
         });
         setCurrentTab('PERSONAL');
         setIsModalOpen(true);
@@ -128,7 +157,12 @@ export default function AdminEmpleados() {
             password: '',
             rol: 'CONDUCTOR',
             observaciones: '',
-            activo: true
+            activo: true,
+            dniCaducidad: '',
+            carnetTipo: '',
+            carnetCaducidad: '',
+            tieneAdr: false,
+            adrCaducidad: ''
         });
         setCurrentTab('PERSONAL');
         setIsModalOpen(true);
