@@ -1,4 +1,4 @@
-```
+
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
@@ -22,7 +22,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
                 },
                 adjuntos: true,
                 subtareas: {
-                   include: { asignadoA: { select: { nombre: true } } }
+                    include: { asignadoA: { select: { nombre: true } } }
                 }
             }
         });
@@ -42,7 +42,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     try {
         const body = await request.json();
-        
+
         // Fetch current state
         const currentTarea = await prisma.tarea.findUnique({ where: { id: Number(id) } });
         if (!currentTarea) return NextResponse.json({ error: 'Tarea no encontrada' }, { status: 404 });
@@ -53,8 +53,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // Status Change
         if (body.estado && body.estado !== currentTarea.estado) {
             updateData.estado = body.estado as TareaEstado;
-            historialMensaje += `Estado cambiado a ${ body.estado }.`;
-            
+            historialMensaje += `Estado cambiado a ${body.estado}.`;
+
             // Handle closing dates
             if (body.estado === 'COMPLETADA' || body.estado === 'CANCELADA') {
                 updateData.fechaCierre = new Date();
@@ -63,10 +63,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
             // Handle Bloqueo
             if (body.estado === 'BLOQUEADA') {
-                 if (body.motivoBloqueo) {
-                     updateData.motivoBloqueo = body.motivoBloqueo;
-                     historialMensaje += `Motivo: ${ body.motivoBloqueo }.`;
-                 }
+                if (body.motivoBloqueo) {
+                    updateData.motivoBloqueo = body.motivoBloqueo;
+                    historialMensaje += `Motivo: ${body.motivoBloqueo}.`;
+                }
             } else {
                 updateData.motivoBloqueo = null;
             }
@@ -75,23 +75,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         // Priority Change
         if (body.prioridad && body.prioridad !== currentTarea.prioridad) {
             updateData.prioridad = body.prioridad as TareaPrioridad;
-            historialMensaje += `Prioridad cambiada a ${ body.prioridad }.`;
+            historialMensaje += `Prioridad cambiada a ${body.prioridad}.`;
         }
-        
+
         // Assignment Change
-        if (body.asignadoAId !== undefined) { 
-             const newAssignee = body.asignadoAId ? Number(body.asignadoAId) : null;
-             if (newAssignee !== currentTarea.asignadoAId) {
-                 updateData.asignadoAId = newAssignee;
-                 historialMensaje += `Asignación actualizada. `;
-             }
+        if (body.asignadoAId !== undefined) {
+            const newAssignee = body.asignadoAId ? Number(body.asignadoAId) : null;
+            if (newAssignee !== currentTarea.asignadoAId) {
+                updateData.asignadoAId = newAssignee;
+                historialMensaje += `Asignación actualizada. `;
+            }
         }
 
         // Other fields
         if (body.titulo) updateData.titulo = body.titulo;
         if (body.descripcion) updateData.descripcion = body.descripcion;
         if (body.fechaLimite) updateData.fechaLimite = new Date(body.fechaLimite);
-        
+
         // Update
         const updatedTarea = await prisma.tarea.update({
             where: { id: Number(id) },
@@ -99,8 +99,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         });
 
         // Add History if meaningful change
-        const fullMessage = (historialMensaje + (body.comentario ? ` Comentario: ${ body.comentario } ` : '')).trim();
-        
+        const fullMessage = (historialMensaje + (body.comentario ? ` Comentario: ${body.comentario} ` : '')).trim();
+
         if (fullMessage) {
             await prisma.tareaHistorial.create({
                 data: {
@@ -120,4 +120,4 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         return NextResponse.json({ error: 'Error actualizando tarea' }, { status: 500 });
     }
 }
-```
+
