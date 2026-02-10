@@ -213,10 +213,21 @@ export default function EmpleadoDashboard() {
 
     const handleEndShift = async () => {
         if (!activeTurno || !kmFinal) return;
+        // Auto-save pending values if they exist
+        const payload: any = {
+            id: activeTurno.id,
+            horaFin: new Date(),
+            kmFinal: parseInt(kmFinal)
+        };
+
+        if (numDescargas) payload.descargasCount = numDescargas;
+        if (numViajes) payload.viajesCount = numViajes;
+        if (litrosRepostados) payload.litrosRepostados = litrosRepostados;
+
         await fetch('/api/turnos', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: activeTurno.id, horaFin: new Date(), kmFinal: parseInt(kmFinal) })
+            body: JSON.stringify(payload)
         });
         setKmFinal('');
         fetchData();

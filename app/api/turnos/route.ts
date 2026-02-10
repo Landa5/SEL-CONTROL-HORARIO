@@ -85,7 +85,7 @@ export async function POST(request: Request) {
 export async function PUT(request: Request) {
     try {
         const body = await request.json();
-        const { id, horaFin, kmFinal } = body;
+        const { id, horaFin, kmFinal, descargasCount, viajesCount, litrosRepostados } = body;
 
         if (!id || kmFinal === undefined) {
             return NextResponse.json({ error: 'ID y KM finales son requeridos' }, { status: 400 });
@@ -100,13 +100,19 @@ export async function PUT(request: Request) {
             return NextResponse.json({ error: 'Los KM finales no pueden ser menores que los iniciales' }, { status: 400 });
         }
 
+        const data: any = {
+            horaFin: new Date(horaFin),
+            kmFinal: kFinal,
+            kmRecorridos: kFinal - current.kmInicial
+        };
+
+        if (descargasCount !== undefined && descargasCount !== '') data.descargasCount = parseInt(descargasCount);
+        if (viajesCount !== undefined && viajesCount !== '') data.viajesCount = parseInt(viajesCount);
+        if (litrosRepostados !== undefined && litrosRepostados !== '') data.litrosRepostados = parseFloat(litrosRepostados);
+
         const uso = await prisma.usoCamion.update({
             where: { id: parseInt(id) },
-            data: {
-                horaFin: new Date(horaFin),
-                kmFinal: kFinal,
-                kmRecorridos: kFinal - current.kmInicial
-            }
+            data
         });
         return NextResponse.json(uso);
     } catch (error) {
