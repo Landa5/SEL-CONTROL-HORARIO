@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 
-export async function GET(request: Request, context: { params: { id: string } }) {
+export async function GET(request: Request, context: { params: Promise<{ id: string }> }) {
     // Wait for params to be available
     const { id } = await context.params;
 
@@ -28,7 +28,8 @@ export async function GET(request: Request, context: { params: { id: string } })
         if (!tarea) return NextResponse.json({ error: 'Tarea no encontrada' }, { status: 404 });
 
         // Visibility Check
-        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(session.rol);
+        const userRole = session.rol as string;
+        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(userRole);
         if (!isStaff && tarea.creadoPorId !== Number(session.id) && tarea.asignadoAId !== Number(session.id)) {
             return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
         }
@@ -40,7 +41,7 @@ export async function GET(request: Request, context: { params: { id: string } })
     }
 }
 
-export async function PATCH(request: Request, context: { params: { id: string } }) {
+export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
     const { id } = await context.params;
 
     try {
@@ -48,7 +49,8 @@ export async function PATCH(request: Request, context: { params: { id: string } 
         if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
         // Only Staff can edit/manage tickets
-        if (!['ADMIN', 'MECANICO'].includes(session.rol)) {
+        const userRole = session.rol as string;
+        if (!['ADMIN', 'MECANICO'].includes(userRole)) {
             return NextResponse.json({ error: 'Permisos insuficientes para gestionar tareas' }, { status: 403 });
         }
 

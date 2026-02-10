@@ -9,9 +9,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         const { id } = await context.params;
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = await verifyToken(session);
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
-        if (!user || user.rol !== 'ADMIN') return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+        const user: any = await verifyToken(session);
+        if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
         const body = await request.json();
         const { cantidad, rate, importe, notas } = body;
@@ -34,7 +35,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
                 importe: importe !== undefined ? parseFloat(importe) : undefined,
                 notas: notas,
                 override: true,
-                updatedBy: user.id
+                updatedBy: parseInt(user.id as string)
             }
         });
 

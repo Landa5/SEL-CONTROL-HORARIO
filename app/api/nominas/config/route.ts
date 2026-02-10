@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     try {
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = session ? await verifyToken(session) : null;
+        const user: any = session ? await verifyToken(session) : null;
 
         if (!user || (user.rol && user.rol.toUpperCase() !== 'ADMIN')) {
             console.log('Unauthorized config access attempt:', user?.rol);
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     try {
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = session ? await verifyToken(session) : null;
+        const user: any = session ? await verifyToken(session) : null;
 
         if (!user || (user.rol && user.rol.toUpperCase() !== 'ADMIN')) {
             return NextResponse.json({ error: `No autorizado (Tu rol es: ${user?.rol})` }, { status: 403 });

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 
-export async function POST(request: Request, context: { params: { id: string } }) {
+export async function POST(request: Request, context: { params: Promise<{ id: string }> }) {
     const { id } = await context.params;
 
     try {
@@ -21,7 +21,8 @@ export async function POST(request: Request, context: { params: { id: string } }
         const tarea = await prisma.tarea.findUnique({ where: { id: tareaId } });
         if (!tarea) return NextResponse.json({ error: 'No existe' }, { status: 404 });
 
-        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(session.rol);
+        const userRole = session.rol as string;
+        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(userRole);
         const isOwner = tarea.creadoPorId === Number(session.id);
         const isAssigned = tarea.asignadoAId === Number(session.id);
 

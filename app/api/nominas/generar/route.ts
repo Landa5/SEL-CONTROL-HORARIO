@@ -10,7 +10,9 @@ export async function POST(request: Request) {
     try {
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = await verifyToken(session);
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+
+        const user: any = await verifyToken(session);
         if (!user || user.rol !== 'ADMIN') {
             return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
         }
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
                 await prisma.nominaLinea.deleteMany({ where: { nominaId: existing.id } });
 
                 // Merge: Use override if exists, else use calculated
-                const finalLines = [];
+                const finalLines: any[] = [];
                 const codesProcessed = new Set();
 
                 // Add calculated lines (unless overridden)

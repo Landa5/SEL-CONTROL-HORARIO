@@ -12,7 +12,10 @@ export async function GET(request: Request) {
 
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        if (!session || !['ADMIN', 'OFICINA', 'COMERCIAL'].includes(((await verifyToken(session))?.rol || ''))) {
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+
+        const user: any = await verifyToken(session);
+        if (!user || !['ADMIN', 'OFICINA', 'COMERCIAL'].includes(user.rol)) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
         }
 
@@ -46,7 +49,9 @@ export async function POST(request: Request) {
     try {
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = await verifyToken(session);
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+
+        const user: any = await verifyToken(session);
         if (!user || !['ADMIN', 'OFICINA'].includes(user.rol)) {
             // Commercials might be able to input their own data? Prompt says "Editable and exportable to agency".
             // Context says "First version: manual monthly entry". 
@@ -72,7 +77,7 @@ export async function POST(request: Request) {
             update: {
                 litros: parseFloat(litros),
                 notas: notas,
-                updatedBy: user.id
+                updatedBy: parseInt(user.id as string)
             },
             create: {
                 empleadoId: parseInt(empleadoId),

@@ -12,7 +12,9 @@ export async function GET(request: Request) {
 
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = await verifyToken(session);
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+
+        const user: any = await verifyToken(session);
         if (!user) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
         }

@@ -112,7 +112,7 @@ export async function GET(request: Request) {
         // MECANICO & ADMIN & OFICINA -> See ALL
         // CONDUCTOR -> See ONLY created by them OR assigned to them
 
-        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(session.rol);
+        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(session.rol as string);
 
         if (!isStaff) {
             where.OR = [

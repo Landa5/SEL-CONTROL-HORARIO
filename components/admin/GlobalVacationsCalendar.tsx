@@ -31,6 +31,7 @@ type Grouping = 'DAY' | 'WEEK' | 'FORTNIGHT';
 export default function GlobalVacationsCalendar() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [vacations, setVacations] = useState<Vacation[]>([]);
+    const [employees, setEmployees] = useState<any[]>([]); // New state for all employees
     const [loading, setLoading] = useState(true);
     const [selectedRole, setSelectedRole] = useState<string>('TODOS');
 
@@ -39,7 +40,7 @@ export default function GlobalVacationsCalendar() {
     const [grouping, setGrouping] = useState<Grouping>('DAY');
 
     useEffect(() => {
-        fetchVacations();
+        fetchData();
     }, []);
 
     // Force grouping constraints
@@ -51,15 +52,23 @@ export default function GlobalVacationsCalendar() {
         }
     }, [viewScope]);
 
-    async function fetchVacations() {
+    async function fetchData() {
         try {
-            const res = await fetch('/api/ausencias/approved');
-            if (res.ok) {
-                const data = await res.json();
+            const [vacRes, empRes] = await Promise.all([
+                fetch('/api/ausencias/approved'),
+                fetch('/api/empleados')
+            ]);
+
+            if (vacRes.ok) {
+                const data = await vacRes.json();
                 setVacations(data);
             }
+            if (empRes.ok) {
+                const empData = await empRes.json();
+                setEmployees(empData.filter((e: any) => e.activo)); // Only active employees
+            }
         } catch (error) {
-            console.error("Error loading vacations:", error);
+            console.error("Error loading data:", error);
         } finally {
             setLoading(false);
         }
@@ -160,17 +169,12 @@ export default function GlobalVacationsCalendar() {
 
     const intervals = getIntervals();
 
-    // Filter employees
-    const uniqueEmployees = Array.from(new Set(vacations.map(v => v.empleado.id)))
-        .map(id => vacations.find(v => v.empleado.id === id)?.empleado)
-        .filter(emp => emp !== undefined)
-        .sort((a, b) => a!.nombre.localeCompare(b!.nombre));
-
+    // Filter employees from the master list
     const filteredEmployees = selectedRole === 'TODOS'
-        ? uniqueEmployees
-        : uniqueEmployees.filter(emp => emp?.rol === selectedRole);
+        ? employees
+        : employees.filter(emp => emp.rol === selectedRole);
 
-    const roles = Array.from(new Set(uniqueEmployees.map(e => e?.rol))).filter(Boolean);
+    const roles = Array.from(new Set(employees.map(e => e.rol))).filter(Boolean);
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando calendario...</div>;
 

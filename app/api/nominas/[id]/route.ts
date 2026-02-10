@@ -9,9 +9,9 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
         const { id } = await context.params;
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = await verifyToken(session);
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
-        if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+        const user: any = await verifyToken(session);
 
         const nomina = await prisma.nominaMes.findUnique({
             where: { id: parseInt(id) },
@@ -39,9 +39,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         const { id } = await context.params;
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
-        const user = await verifyToken(session);
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
-        if (!user || user.rol !== 'ADMIN') return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
+        const user: any = await verifyToken(session);
+        if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
 
         const body = await request.json();
         const { estado } = body;
@@ -50,7 +51,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
             where: { id: parseInt(id) },
             data: {
                 estado: estado,
-                ...(estado === 'CERRADA' ? { fechaCierre: new Date(), cerradaPorId: user.id } : {})
+                ...(estado === 'CERRADA' ? { fechaCierre: new Date(), cerradaPorId: parseInt(user.id as string) } : {})
             }
         });
 
