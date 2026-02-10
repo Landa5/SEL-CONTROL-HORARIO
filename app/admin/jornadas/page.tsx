@@ -39,15 +39,21 @@ function JornadasContent() {
 
     const sortedDates = Object.keys(groupedJornadas).sort((a, b) => b.localeCompare(a));
 
+    const [selectedJornada, setSelectedJornada] = useState<any>(null);
+
     const exportCSV = () => {
-        const headers = ['ID', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado', 'KM Totales', 'Total Descargas'];
+        const headers = ['ID', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado', 'KM Totales', 'Total Descargas', 'Total Viajes', 'Total Repostajes'];
         const rows = jornadas.flatMap(jor => {
             let kmTotal = 0;
             let countDescargas = 0;
+            let countViajes = 0;
+            let countRepostajes = 0;
 
             jor.usosCamion.forEach((t: any) => {
                 if (t.kmFinal) kmTotal += (parseInt(t.kmFinal) - parseInt(t.kmInicial));
-                countDescargas += t.descargas.length;
+                countDescargas += t.descargasCount || t.descargas.length || 0;
+                countViajes += t.viajesCount || 0;
+                countRepostajes += t.litrosRepostados || 0;
             });
 
             return [
@@ -59,7 +65,9 @@ function JornadasContent() {
                 formatDuration(jor.totalHoras),
                 jor.estado,
                 kmTotal,
-                countDescargas
+                countDescargas,
+                countViajes,
+                countRepostajes
             ].join(',');
         });
 
@@ -110,12 +118,19 @@ function JornadasContent() {
                                                 <th className="p-4 font-bold text-gray-600 text-center">Total</th>
                                                 <th className="p-4 font-bold text-gray-600 text-center text-indigo-600">KM</th>
                                                 <th className="p-4 font-bold text-gray-600 text-center">Descargas</th>
+                                                <th className="p-4 font-bold text-gray-600 text-center">Viajes</th>
+                                                <th className="p-4 font-bold text-gray-600 text-center">Repostajes</th>
                                                 <th className="p-4 font-bold text-gray-600 text-center">Estado</th>
+                                                <th className="p-4 font-bold text-gray-600 text-center">Acciones</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {groupedJornadas[date].map((jor: any) => {
                                                 const totalKm = jor.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0) || 0;
+                                                const totalDescargas = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0) || 0;
+                                                const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
+                                                const totalRepostajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0) || 0;
+
                                                 return (
                                                     <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                                                         <td className="p-4">
@@ -140,13 +155,28 @@ function JornadasContent() {
                                                         </td>
                                                         <td className="p-4 text-center">
                                                             <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
-                                                                {jor.usosCamion.reduce((acc: number, t: any) => acc + (t.descargas?.length || 0), 0)}
+                                                                {totalDescargas}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
+                                                                {totalViajes}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
+                                                                {totalRepostajes} L
                                                             </span>
                                                         </td>
                                                         <td className="p-4 text-center">
                                                             <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                                                                 {jor.estado}
                                                             </span>
+                                                        </td>
+                                                        <td className="p-4 text-center">
+                                                            <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
+                                                                Detalles
+                                                            </Button>
                                                         </td>
                                                     </tr>
                                                 );
@@ -159,6 +189,125 @@ function JornadasContent() {
                     </div>
                 ))}
             </div>
+
+            {/* DETAIL DIALOG */}
+            {selectedJornada && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedJornada(null)}>
+                    <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                        <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                            <div>
+                                <h2 className="text-xl font-black text-gray-900">Detalle de Jornada</h2>
+                                <p className="text-sm text-gray-600">{selectedJornada.empleado?.nombre} • {format(new Date(selectedJornada.fecha), "dd 'de' MMMM", { locale: es })}</p>
+                            </div>
+                            <Button variant="ghost" className="h-8 w-8 p-0 text-gray-400" onClick={() => setSelectedJornada(null)}>X</Button>
+                        </div>
+                        <div className="p-6 space-y-6">
+                            {/* Summary Stats */}
+                            <div className="grid grid-cols-4 gap-4">
+                                <div className="bg-blue-50 p-4 rounded-lg text-center">
+                                    <p className="text-xs text-blue-600 font-bold uppercase">Total Horas</p>
+                                    <p className="text-xl font-black text-blue-900">{formatDuration(selectedJornada.totalHoras)}</p>
+                                </div>
+                                <div className="bg-indigo-50 p-4 rounded-lg text-center">
+                                    <p className="text-xs text-indigo-600 font-bold uppercase">Total KM</p>
+                                    <p className="text-xl font-black text-indigo-900">
+                                        {selectedJornada.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0)} km
+                                    </p>
+                                </div>
+                                <div className="bg-green-50 p-4 rounded-lg text-center">
+                                    <p className="text-xs text-green-600 font-bold uppercase">Viajes/Desc.</p>
+                                    <p className="text-xl font-black text-green-900">
+                                        {selectedJornada.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0)} / {selectedJornada.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0)}
+                                    </p>
+                                </div>
+                                <div className="bg-purple-50 p-4 rounded-lg text-center">
+                                    <p className="text-xs text-purple-600 font-bold uppercase">Total Repostado</p>
+                                    <p className="text-xl font-black text-purple-900">
+                                        {selectedJornada.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0)} L
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Truck Usage Timeline */}
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide mb-4 flex items-center gap-2">
+                                    <div className="w-1.5 h-4 bg-gray-900 rounded-full"></div>
+                                    Desglose por Camión
+                                </h3>
+                                <div className="space-y-4">
+                                    {selectedJornada.usosCamion.map((uso: any, index: number) => {
+                                        const kmRecorridos = (uso.kmFinal || uso.kmInicial) - uso.kmInicial;
+                                        const prevUso = index > 0 ? selectedJornada.usosCamion[index - 1] : null;
+                                        // Audit Check: If same truck, check continuity. Or generally check gaps.
+
+                                        return (
+                                            <div key={uso.id} className="border rounded-xl p-4 hover:shadow-md transition-shadow relative overflow-hidden group">
+                                                <div className="absolute top-0 right-0 p-2 opacity-5 scale-150 group-hover:scale-100 transition-transform origin-top-right">
+                                                    {/* Truck Icon Watermark */}
+                                                </div>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-lg font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{uso.camion?.matricula} {uso.camion?.modelo ? `(${uso.camion.modelo})` : ''}</span>
+                                                            <span className="text-xs text-gray-400 font-mono">#{uso.id}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
+                                                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{format(new Date(uso.horaInicio), 'HH:mm')}</span>
+                                                            <span>➔</span>
+                                                            <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{uso.horaFin ? format(new Date(uso.horaFin), 'HH:mm') : 'En curso'}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <p className="text-xs font-bold text-gray-400 uppercase">Kilometraje</p>
+                                                        <div className="font-mono text-sm text-gray-700">
+                                                            {uso.kmInicial} ➔ {uso.kmFinal || '...'}
+                                                        </div>
+                                                        <p className="font-black text-indigo-600 text-lg">
+                                                            {kmRecorridos} km
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                <div className="grid grid-cols-3 gap-2 text-sm border-t pt-3">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-gray-400">Descargas</span>
+                                                        <span className="font-bold">{uso.descargasCount || uso.descargas?.length || 0}</span>
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-gray-400">Viajes</span>
+                                                        <span className="font-bold">{uso.viajesCount || 0}</span>
+                                                    </div>
+                                                    <div className="flex flex-col">
+                                                        <span className="text-xs text-gray-400">Repostado</span>
+                                                        <span className="font-bold">{uso.litrosRepostados || 0} L</span>
+                                                    </div>
+                                                </div>
+
+                                                {uso.fotoKmInicial && (
+                                                    <div className="mt-3 pt-3 border-t">
+                                                        <p className="text-xs font-bold text-red-500 mb-1">Evidencia de Conflicto:</p>
+                                                        <img src={uso.fotoKmInicial} alt="Inconsistencia KM" className="h-20 rounded border cursor-pointer hover:scale-110 transition-transform" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {selectedJornada.observaciones && (
+                                <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100">
+                                    <h4 className="font-bold text-yellow-800 text-sm mb-1 uppercase">Observaciones</h4>
+                                    <p className="text-sm text-yellow-700 italic">"{selectedJornada.observaciones}"</p>
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-6 border-t bg-gray-50 rounded-b-xl flex justify-end">
+                            <Button onClick={() => setSelectedJornada(null)}>Cerrar</Button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
