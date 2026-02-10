@@ -30,6 +30,11 @@ interface TareaDetalle {
     updatedAt: string;
     proyectoId: number | null;
     motivoBloqueo: string | null;
+    subtareas: {
+        id: number;
+        titulo: string;
+        estado: TareaEstado;
+    }[];
 }
 
 export default function AdminTaskDetailPage() {
