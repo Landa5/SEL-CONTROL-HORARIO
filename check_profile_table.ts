@@ -8,7 +8,7 @@ async function main() {
         console.log('Checking PerfilProfesional table...');
         const count = await prisma.perfilProfesional.count();
         console.log(`Table exists. Count: ${count}`);
-    } catch (e) {
+    } catch (e: any) {
         console.error('ERROR accessing PerfilProfesional:', e.message);
     } finally {
         await prisma.$disconnect();
