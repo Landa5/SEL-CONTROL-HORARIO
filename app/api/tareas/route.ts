@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
+import { TareaTipo, TareaPrioridad, TareaEstado } from '@prisma/client';
 
 export async function POST(request: Request) {
     try {
@@ -12,64 +13,49 @@ export async function POST(request: Request) {
         const body = await request.json();
 
         // Validation Logic
-        if (!body.titulo || !body.descripcion) {
-            return NextResponse.json({ error: 'Título y descripción son obligatorios' }, { status: 400 });
+        if (!body.titulo) {
+            return NextResponse.json({ error: 'El título es obligatorio' }, { status: 400 });
         }
 
-        // Camion specific validation
+        // Camion specific validation for OPERATIVA/AVERIA
         if (body.activoTipo === 'CAMION') {
             if (!body.matricula) {
                 return NextResponse.json({ error: 'La matrícula es obligatoria para incidencias de camión' }, { status: 400 });
             }
-            if (!body.kilometros) {
-                return NextResponse.json({ error: 'Los kilómetros son obligatorios para incidencias de camión' }, { status: 400 });
-            }
         }
 
         // Handle Camion Relation if matricula provided
-        let camionId = undefined;
+        let camionId: number | undefined = undefined;
         if (body.matricula) {
             const camion = await prisma.camion.findUnique({ where: { matricula: body.matricula } });
-            if (camion) {
-                camionId = camion.id;
-            } else {
-                // Or create it? Usually we expect existing truck. 
-                // For now, if truck doesn't exist, we just store the matricula string but no relation?
-                // Rule: "Una tarea afecta a un activo". Should link if possible.
-            }
+            if (camion) camionId = camion.id;
         }
 
         const tarea = await prisma.tarea.create({
             data: {
                 titulo: body.titulo,
-                descripcion: body.descripcion,
-                tipo: body.tipo || 'AVERIA',
-                estado: 'ABIERTA', // Always open initially
-                prioridad: body.prioridad || 'MEDIA',
+                descripcion: body.descripcion || '',
+                tipo: (body.tipo as TareaTipo) || TareaTipo.OPERATIVA,
+                estado: TareaEstado.BACKLOG, // Default state
+                prioridad: (body.prioridad as TareaPrioridad) || TareaPrioridad.MEDIA,
+
                 activoTipo: body.activoTipo,
-
                 matricula: body.matricula,
-                // store KMs in description or history? Schema doesn't have `kilometros` field on Tarea explicitly? 
-                // Wait, schema `Tarea` had `matricula` but NOT `kilometros`.
-                // Requirement 3: "Kilómetros obligatorios".
-                // I might need to put KMs in description OR strictly add `kilometros` to Tarea schema? 
-                // Ah, I missed adding `kilometros` to Tarea in schema update!
-                // But `UsoCamion` has KMs. `MantenimientoRealizado` has `kmEnEseMomento`.
-                // Tarea SHOULD have `kmEnEseMomento` if it's an event.
-                // For now I will append to description to avoid another migration immediately, OR use `ubicacionTexto`? No.
-                // Let's add it to description: "KM: 12345\n\nDesc..."
-
                 clienteNombre: body.clienteNombre,
                 ubicacionTexto: body.ubicacionTexto,
+
+                fechaLimite: body.fechaLimite ? new Date(body.fechaLimite) : null,
+
+                creadoPorId: Number(session.id),
+                asignadoAId: body.asignadoAId ? Number(body.asignadoAId) : undefined,
+                parentId: body.parentId ? Number(body.parentId) : undefined,
+                proyectoId: body.proyectoId ? Number(body.proyectoId) : undefined,
+
+                camionId: camionId,
                 descargas: body.descargas ? Number(body.descargas) : undefined,
 
                 contactoNombre: body.contactoNombre,
                 contactoTelefono: body.contactoTelefono,
-
-                creadoPorId: Number(session.id),
-                asignadoAId: body.asignadoAId ? Number(body.asignadoAId) : undefined, // Optional assignment
-
-                camionId: camionId
             }
         });
 
@@ -79,7 +65,7 @@ export async function POST(request: Request) {
                 tareaId: tarea.id,
                 autorId: Number(session.id),
                 tipoAccion: 'CREACION',
-                mensaje: `Tarea creada. Prioridad: ${tarea.prioridad}. ${body.kilometros ? 'KM: ' + body.kilometros : ''}`
+                mensaje: `Tarea creada. Tipo: ${tarea.tipo}, Prioridad: ${tarea.prioridad}`
             }
         });
 
@@ -101,19 +87,24 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const tipo = searchParams.get('tipo');
         const estado = searchParams.get('estado');
+        const prioridad = searchParams.get('prioridad');
+        const asignadoAId = searchParams.get('asignadoAId');
+        const parentId = searchParams.get('parentId');
 
         let where: any = {};
 
         // Filtering
-        if (tipo) where.tipo = tipo;
-        if (estado) where.estado = estado;
+        if (tipo) where.tipo = tipo as TareaTipo;
+        if (estado) where.estado = estado as TareaEstado;
+        if (prioridad) where.prioridad = prioridad as TareaPrioridad;
+        if (asignadoAId) where.asignadoAId = Number(asignadoAId);
+
+        // Subtasks filtering
+        if (parentId === 'null') where.parentId = null; // Top level tasks
+        else if (parentId) where.parentId = Number(parentId);
 
         // VISIBILITY RULES
-        // MECANICO & ADMIN & OFICINA -> See ALL
-        // CONDUCTOR -> See ONLY created by them OR assigned to them
-
         const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(session.rol as string);
-
         if (!isStaff) {
             where.OR = [
                 { creadoPorId: Number(session.id) },
@@ -125,17 +116,28 @@ export async function GET(request: Request) {
             where,
             include: {
                 creadoPor: { select: { nombre: true, rol: true } },
-                asignadoA: { select: { nombre: true } },
-                camion: { select: { matricula: true, modelo: true } }
+                asignadoA: { select: { nombre: true, rol: true } },
+                camion: { select: { matricula: true, modelo: true } },
+                proyecto: { select: { id: true, nombre: true } },
+                subtareas: {
+                    select: { id: true, titulo: true, estado: true, asignadoA: { select: { nombre: true } } }
+                },
+                _count: {
+                    select: { subtareas: true, adjuntos: true, historial: true }
+                }
             },
-            orderBy: {
-                createdAt: 'desc'
-            }
+            orderBy: [
+                { prioridad: 'asc' }, // ALTA (0) -> MEDIA (?) wait, usually Enum order matters. 
+                // Default Enum order: ALTA, MEDIA, BAJA. So 'asc' is correct if ALTA is first.
+                { fechaLimite: 'asc' }, // Nulls last? Prisma sorts nulls based on DB. 
+                { createdAt: 'desc' }
+            ]
         });
 
         return NextResponse.json(tareas);
 
     } catch (error) {
+        console.error('Error fetching tareas:', error);
         return NextResponse.json({ error: 'Error fetching tareas' }, { status: 500 });
     }
 }

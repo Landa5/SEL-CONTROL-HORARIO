@@ -1,111 +1,123 @@
+```
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
+import { TareaEstado, TareaPrioridad, TareaTipo } from '@prisma/client';
 
-export async function GET(request: Request, context: { params: any }) {
-    // Wait for params to be available
-    const { id } = await context.params;
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-        const tareaId = Number(id);
         const tarea = await prisma.tarea.findUnique({
-            where: { id: tareaId },
+            where: { id: Number(id) },
             include: {
                 creadoPor: { select: { nombre: true, rol: true } },
-                asignadoA: { select: { nombre: true } },
-                camion: { select: { matricula: true, marca: true, modelo: true } },
+                asignadoA: { select: { nombre: true, rol: true } },
+                camion: { select: { matricula: true, modelo: true } },
                 historial: {
                     include: { autor: { select: { nombre: true } } },
                     orderBy: { createdAt: 'desc' }
                 },
-                adjuntos: true
+                adjuntos: true,
+                subtareas: {
+                   include: { asignadoA: { select: { nombre: true } } }
+                }
             }
         });
 
         if (!tarea) return NextResponse.json({ error: 'Tarea no encontrada' }, { status: 404 });
 
-        // Visibility Check
-        const userRole = session.rol as string;
-        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(userRole);
-        if (!isStaff && tarea.creadoPorId !== Number(session.id) && tarea.asignadoAId !== Number(session.id)) {
-            return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
-        }
-
         return NextResponse.json(tarea);
-
     } catch (error) {
         return NextResponse.json({ error: 'Error interno' }, { status: 500 });
     }
 }
 
-export async function PATCH(request: Request, context: { params: any }) {
-    const { id } = await context.params;
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+    const { id } = await params;
+    const session = await getSession();
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     try {
-        const session = await getSession();
-        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
-
-        // Only Staff can edit/manage tickets
-        const userRole = session.rol as string;
-        if (!['ADMIN', 'MECANICO'].includes(userRole)) {
-            return NextResponse.json({ error: 'Permisos insuficientes para gestionar tareas' }, { status: 403 });
-        }
-
         const body = await request.json();
-        const tareaId = Number(id);
+        
+        // Fetch current state
+        const currentTarea = await prisma.tarea.findUnique({ where: { id: Number(id) } });
+        if (!currentTarea) return NextResponse.json({ error: 'Tarea no encontrada' }, { status: 404 });
 
-        const currentTarea = await prisma.tarea.findUnique({ where: { id: tareaId } });
-        if (!currentTarea) return NextResponse.json({ error: 'No existe' }, { status: 404 });
+        const updateData: any = {};
+        let historialMensaje = '';
 
-        // Validate Closure
-        if (body.estado === 'CERRADA' && currentTarea.estado !== 'CERRADA') {
-            if (!body.resumenCierre && !body.descripcion) {
-                // Either explicit 'resumenCierre' field or we take 'descripcion' as summary if passed
-                return NextResponse.json({ error: 'Para cerrar la incidencia es obligatorio un resumen' }, { status: 400 });
+        // Status Change
+        if (body.estado && body.estado !== currentTarea.estado) {
+            updateData.estado = body.estado as TareaEstado;
+            historialMensaje += `Estado cambiado a ${ body.estado }.`;
+            
+            // Handle closing dates
+            if (body.estado === 'COMPLETADA' || body.estado === 'CANCELADA') {
+                updateData.fechaCierre = new Date();
+                if (body.resumenCierre) updateData.resumenCierre = body.resumenCierre;
+            }
+
+            // Handle Bloqueo
+            if (body.estado === 'BLOQUEADA') {
+                 if (body.motivoBloqueo) {
+                     updateData.motivoBloqueo = body.motivoBloqueo;
+                     historialMensaje += `Motivo: ${ body.motivoBloqueo }.`;
+                 }
+            } else {
+                updateData.motivoBloqueo = null;
             }
         }
 
-        const updateData: any = {};
-        if (body.estado) updateData.estado = body.estado;
-        if (body.prioridad) updateData.prioridad = body.prioridad;
-        if (body.asignadoAId) updateData.asignadoAId = Number(body.asignadoAId);
-        if (body.resumenCierre) updateData.resumenCierre = body.resumenCierre;
-        if (body.fechaCierre) updateData.fechaCierre = body.fechaCierre; // or automatic new Date() if closed
-
-        if (body.estado === 'CERRADA' && !currentTarea.fechaCierre) {
-            updateData.fechaCierre = new Date();
+        // Priority Change
+        if (body.prioridad && body.prioridad !== currentTarea.prioridad) {
+            updateData.prioridad = body.prioridad as TareaPrioridad;
+            historialMensaje += `Prioridad cambiada a ${ body.prioridad }.`;
+        }
+        
+        // Assignment Change
+        if (body.asignadoAId !== undefined) { 
+             const newAssignee = body.asignadoAId ? Number(body.asignadoAId) : null;
+             if (newAssignee !== currentTarea.asignadoAId) {
+                 updateData.asignadoAId = newAssignee;
+                 historialMensaje += `Asignación actualizada. `;
+             }
         }
 
-        const updated = await prisma.tarea.update({
-            where: { id: tareaId },
+        // Other fields
+        if (body.titulo) updateData.titulo = body.titulo;
+        if (body.descripcion) updateData.descripcion = body.descripcion;
+        if (body.fechaLimite) updateData.fechaLimite = new Date(body.fechaLimite);
+        
+        // Update
+        const updatedTarea = await prisma.tarea.update({
+            where: { id: Number(id) },
             data: updateData
         });
 
-        // Add History Log
-        const changes = [];
-        if (body.estado && body.estado !== currentTarea.estado) changes.push(`Estado: ${currentTarea.estado} -> ${body.estado}`);
-        if (body.prioridad && body.prioridad !== currentTarea.prioridad) changes.push(`Prioridad: ${currentTarea.prioridad} -> ${body.prioridad}`);
-        if (body.asignadoAId) changes.push('Asignación actualizada');
-        if (body.resumenCierre) changes.push('Resumen de cierre añadido');
-
-        if (changes.length > 0) {
+        // Add History if meaningful change
+        const fullMessage = (historialMensaje + (body.comentario ? ` Comentario: ${ body.comentario } ` : '')).trim();
+        
+        if (fullMessage) {
             await prisma.tareaHistorial.create({
                 data: {
-                    tareaId: tareaId,
+                    tareaId: Number(id),
                     autorId: Number(session.id),
-                    tipoAccion: 'CAMBIO_ESTADO',
-                    mensaje: changes.join('. '),
-                    estadoNuevo: body.estado || undefined
+                    tipoAccion: body.estado ? 'CAMBIO_ESTADO' : 'EDICION',
+                    mensaje: fullMessage,
+                    estadoNuevo: body.estado ? (body.estado as string) : undefined
                 }
             });
         }
 
-        return NextResponse.json(updated);
+        return NextResponse.json(updatedTarea);
 
     } catch (error) {
-        return NextResponse.json({ error: 'Error updating' }, { status: 500 });
+        console.error("Error updating tarea:", error);
+        return NextResponse.json({ error: 'Error actualizando tarea' }, { status: 500 });
     }
 }
+```

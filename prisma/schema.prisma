@@ -250,8 +250,23 @@ model Tarea {
   
   mantenimientosRealizados MantenimientoRealizado[]
 
+  proyectoId      Int?
+  proyecto        Proyecto? @relation(fields: [proyectoId], references: [id])
+  
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+model Proyecto {
+  id          Int      @id @default(autoincrement())
+  nombre      String
+  descripcion String?
+  activo      Boolean  @default(true)
+  
+  tareas      Tarea[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model TareaHistorial {
