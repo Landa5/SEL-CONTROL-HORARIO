@@ -114,6 +114,10 @@ export default function EmployeeAbsenceView() {
                             </div>
                         ) : (
                             <div>
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-1">Observaciones / Motivo</label>
+                                    <Input value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Explica el motivo..." />
+                                </div>
                                 <label className="block text-sm font-medium mb-1">Justificante Médico (PDF/Imagen)</label>
                                 <Input type="file" onChange={e => setFile(e.target.files?.[0] || null)} accept=".pdf,image/*" />
                             </div>

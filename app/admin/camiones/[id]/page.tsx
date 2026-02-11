@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import DocumentManager from '@/components/documents/DocumentManager';
 
 export default function DetalleCamionPage() {
     const params = useParams();
@@ -237,6 +238,20 @@ export default function DetalleCamionPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* DOCUMENTATION SECTION */}
+            <Card className="shadow-sm">
+                <CardHeader>
+                    <CardTitle>Gestión Documental</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {id ? (
+                        <DocumentManager entityId={Number(id)} entityType="CAMION" />
+                    ) : (
+                        <p>Cargando...</p>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* DETAILED TABLE */}
             <Card className="shadow-sm">

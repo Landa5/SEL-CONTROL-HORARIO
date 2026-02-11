@@ -6,176 +6,179 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
 model Empleado {
-  id              Int      @id @default(autoincrement())
-  usuario         String   @unique
-  password        String
-  activo          Boolean  @default(true)
-  
+  id       Int     @id @default(autoincrement())
+  usuario  String  @unique
+  password String
+  activo   Boolean @default(true)
+
   // Datos personales
-  nombre          String
-  apellidos       String?
-  dni             String?  @unique
-  telefono        String?
-  email           String?
-  direccion       String?
-  
+  nombre    String
+  apellidos String?
+  dni       String? @unique
+  telefono  String?
+  email     String?
+  direccion String?
+
   // Datos laborales
-  rol             RolEmpleado @default(CONDUCTOR) 
-  fechaAlta       DateTime @default(now())
-  fechaBaja       DateTime?
-  observaciones   String?
+  rol           RolEmpleado @default(CONDUCTOR)
+  fechaAlta     DateTime    @default(now())
+  fechaBaja     DateTime?
+  observaciones String?
 
   // Vacaciones
-  diasVacaciones  Int      @default(30)
-  diasExtras      Int      @default(0) // Por festivos trabajados
-  horasExtra      Float    @default(0) // Acumulado para oficina
+  diasVacaciones Int   @default(30)
+  diasExtras     Int   @default(0) // Por festivos trabajados
+  horasExtra     Float @default(0) // Acumulado para oficina
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relaciones
-  jornadas        JornadaLaboral[]
-  ausencias       Ausencia[]
-  
-  tareasCreadas   Tarea[]  @relation("CreadorTarea")
-  tareasAsignadas Tarea[]  @relation("AsignadoTarea")
-  
-  historialTareas TareaHistorial[]
-  adjuntos        TareaAdjunto[]
-  notificaciones  Notificacion[]
-  auditorias      Auditoria[]
-  compensaciones  CompensacionFestivo[]
-  modulosCreados  ModuloFormacion[] @relation("CreadorModulo")
+  jornadas  JornadaLaboral[]
+  ausencias Ausencia[]
+
+  tareasCreadas   Tarea[] @relation("CreadorTarea")
+  tareasAsignadas Tarea[] @relation("AsignadoTarea")
+
+  historialTareas     TareaHistorial[]
+  adjuntos            TareaAdjunto[]
+  notificaciones      Notificacion[]
+  auditorias          Auditoria[]
+  compensaciones      CompensacionFestivo[]
+  modulosCreados      ModuloFormacion[]     @relation("CreadorModulo")
   resultadosFormacion ResultadoFormacion[]
 
   // Payroll Relations
-  nominas         NominaMes[]
-  comercialLitros ComercialLitros[]
+  nominas            NominaMes[]
+  comercialLitros    ComercialLitros[]
   tarifasEspecificas TarifaNomina[]
-  
+
   perfilProfesional PerfilProfesional?
   alertasDocumento  AlertaDocumento[]
+  documentos        Documento[]
+  documentosSubidos Documento[] @relation("SubidoPor")
 }
 
 model Camion {
-  id              Int      @id @default(autoincrement())
-  matricula       String   @unique
-  modelo          String?
-  marca           String?
-  nVin            String?  @unique // Bastidor
-  anio            Int?
-  activo          Boolean  @default(true)
-  kmActual        Int      @default(0)
-  
+  id        Int     @id @default(autoincrement())
+  matricula String  @unique
+  modelo    String?
+  marca     String?
+  nVin      String? @unique // Bastidor
+  anio      Int?
+  activo    Boolean @default(true)
+  kmActual  Int     @default(0)
+
   // Vencimientos
-  itvVencimiento  DateTime?
-  seguroVencimiento DateTime?
+  itvVencimiento       DateTime?
+  seguroVencimiento    DateTime?
   tacografoVencimiento DateTime?
-  adrVencimiento  DateTime?  // Certificación ADR (mercancías peligrosas)
-  
+  adrVencimiento       DateTime? // Certificación ADR (mercancías peligrosas)
+
   // Cisterna específica
-  anioCisterna    Int?       // Año de fabricación de la cisterna
-  
+  anioCisterna Int? // Año de fabricación de la cisterna
+
   // Relaciones
-  usos            UsoCamion[]
-  tareas          Tarea[]
+  usos                       UsoCamion[]
+  tareas                     Tarea[]
   mantenimientosPlanificados MantenimientoProximo[]
   historialMantenimientos    MantenimientoRealizado[]
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @default(now()) @updatedAt
+
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @default(now()) @updatedAt
+  documentos Documento[]
 }
 
 model JornadaLaboral {
-  id              Int      @id @default(autoincrement())
-  fecha           DateTime
-  horaEntrada     DateTime
-  horaSalida      DateTime?
-  totalHoras      Float?   // Calculado al cerrar
-  
-  // "TRABAJANDO", "CERRADA", "INCIDENCIA"
-  estado          String   @default("TRABAJANDO") 
-  observaciones   String?
-  
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id])
-  
-  usosCamion      UsoCamion[]
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id          Int       @id @default(autoincrement())
+  fecha       DateTime
+  horaEntrada DateTime
+  horaSalida  DateTime?
+  totalHoras  Float? // Calculado al cerrar
 
-  compensacion    CompensacionFestivo?
+  // "TRABAJANDO", "CERRADA", "INCIDENCIA"
+  estado        String  @default("TRABAJANDO")
+  observaciones String?
+
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  usosCamion UsoCamion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  compensacion CompensacionFestivo?
 }
 
 // Replaces TurnoConductor. Represents a usage slice of a truck within a day.
 model UsoCamion {
-  id              Int      @id @default(autoincrement())
-  
-  jornadaId       Int
-  jornada         JornadaLaboral @relation(fields: [jornadaId], references: [id])
-  
-  camionId        Int
-  camion          Camion   @relation(fields: [camionId], references: [id])
-  
-  horaInicio      DateTime
-  horaFin         DateTime?
-  
-  kmInicial       Int
-  kmFinal         Int?
-  kmRecorridos    Int?     // Calculado: kmFinal - kmInicial
-  
-  descargas       Descarga[]
-  descargasCount  Int      @default(0) // Cantidad de descargas en este tramo
-  viajesCount     Int      @default(0) // Cantidad de viajes
-  litrosRepostados Float   @default(0) // Litros de gasoil repostados al camión
-  fotoKmInicial   String?  // Evidencia si hubo descuadre de KM
-  
-  notas           String?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id Int @id @default(autoincrement())
+
+  jornadaId Int
+  jornada   JornadaLaboral @relation(fields: [jornadaId], references: [id])
+
+  camionId Int
+  camion   Camion @relation(fields: [camionId], references: [id])
+
+  horaInicio DateTime
+  horaFin    DateTime?
+
+  kmInicial    Int
+  kmFinal      Int?
+  kmRecorridos Int? // Calculado: kmFinal - kmInicial
+
+  descargas        Descarga[]
+  descargasCount   Int        @default(0) // Cantidad de descargas en este tramo
+  viajesCount      Int        @default(0) // Cantidad de viajes
+  litrosRepostados Float      @default(0) // Litros de gasoil repostados al camión
+  fotoKmInicial    String? // Evidencia si hubo descuadre de KM
+
+  notas String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Descarga {
-  id              Int      @id @default(autoincrement())
-  hora            DateTime
-  litros          Int
-  tipoGasoil      String
-  lugar           String
-  
-  usoCamionId     Int
-  usoCamion       UsoCamion @relation(fields: [usoCamionId], references: [id])
+  id         Int      @id @default(autoincrement())
+  hora       DateTime
+  litros     Int
+  tipoGasoil String
+  lugar      String
+
+  usoCamionId Int
+  usoCamion   UsoCamion @relation(fields: [usoCamionId], references: [id])
 }
 
 model Ausencia {
-  id              Int      @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   // "VACACIONES", "BAJA", "PERMISO", "OTROS"
-  tipo            String   
-  fechaInicio     DateTime
-  fechaFin        DateTime
-  
+  tipo        String
+  fechaInicio DateTime
+  fechaFin    DateTime
+
   // "PENDIENTE", "APROBADA", "DENEGADA", "CANCELADA"
-  estado          String   @default("PENDIENTE") 
-  
-  observaciones   String?
-  
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id])
-  
-  aprobadoPorId   Int?     // ID del admin/oficina que aprobó
+  estado String @default("PENDIENTE")
+
+  observaciones String?
+
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  aprobadoPorId   Int? // ID del admin/oficina que aprobó
   fechaResolucion DateTime?
-  
+
   justificanteUrl String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // TICKET SYSTEM (AVERIAS & TAREAS)
@@ -204,28 +207,28 @@ enum TareaEstado {
 }
 
 model Tarea {
-  id              Int      @id @default(autoincrement())
-  
-  tipo            TareaTipo      @default(OPERATIVA)
-  estado          TareaEstado    @default(BACKLOG)
-  prioridad       TareaPrioridad @default(MEDIA)
-  
-  // Contexto
-  activoTipo      String?  // "CAMION", "DEPOSITO_CLIENTE", "BASE", "OTRO"
-  matricula       String?
-  clienteNombre   String?
-  ubicacionTexto  String?
+  id Int @id @default(autoincrement())
 
-  titulo          String
-  descripcion     String
-  
+  tipo      TareaTipo      @default(OPERATIVA)
+  estado    TareaEstado    @default(BACKLOG)
+  prioridad TareaPrioridad @default(MEDIA)
+
+  // Contexto
+  activoTipo     String? // "CAMION", "DEPOSITO_CLIENTE", "BASE", "OTRO"
+  matricula      String?
+  clienteNombre  String?
+  ubicacionTexto String?
+
+  titulo      String
+  descripcion String
+
   // Fechas
-  fechaLimite     DateTime?      // Para "Hoy" y control de vencimiento
-  fechaInicio     DateTime       @default(now())
-  fechaCierre     DateTime?
-  
+  fechaLimite DateTime? // Para "Hoy" y control de vencimiento
+  fechaInicio DateTime  @default(now())
+  fechaCierre DateTime?
+
   // Bloqueo
-  motivoBloqueo   String?
+  motivoBloqueo String?
 
   // Contacto (Legacy/Optional)
   contactoNombre   String?
@@ -233,139 +236,139 @@ model Tarea {
   resumenCierre    String?
 
   // Relaciones
-  creadoPorId     Int
-  creadoPor       Empleado @relation("CreadorTarea", fields: [creadoPorId], references: [id])
-  
-  asignadoAId     Int?
-  asignadoA       Empleado? @relation("AsignadoTarea", fields: [asignadoAId], references: [id])
-  
+  creadoPorId Int
+  creadoPor   Empleado @relation("CreadorTarea", fields: [creadoPorId], references: [id])
+
+  asignadoAId Int?
+  asignadoA   Empleado? @relation("AsignadoTarea", fields: [asignadoAId], references: [id])
+
   // Jerarquía (Subtareas)
-  parentId        Int?
-  parent          Tarea?   @relation("Subtareas", fields: [parentId], references: [id])
-  subtareas       Tarea[]  @relation("Subtareas")
+  parentId  Int?
+  parent    Tarea?  @relation("Subtareas", fields: [parentId], references: [id])
+  subtareas Tarea[] @relation("Subtareas")
 
-  historial       TareaHistorial[]
-  adjuntos        TareaAdjunto[]
+  historial TareaHistorial[]
+  adjuntos  TareaAdjunto[]
 
-  camionId        Int?
-  camion          Camion?  @relation(fields: [camionId], references: [id])
+  camionId Int?
+  camion   Camion? @relation(fields: [camionId], references: [id])
 
-  descargas       Int?
-  
+  descargas Int?
+
   mantenimientosRealizados MantenimientoRealizado[]
 
-  proyectoId      Int?
-  proyecto        Proyecto? @relation(fields: [proyectoId], references: [id])
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  proyectoId Int?
+  proyecto   Proyecto? @relation(fields: [proyectoId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Proyecto {
-  id          Int      @id @default(autoincrement())
+  id          Int     @id @default(autoincrement())
   nombre      String
   descripcion String?
-  activo      Boolean  @default(true)
-  
-  tareas      Tarea[]
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  activo      Boolean @default(true)
+
+  tareas Tarea[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TareaHistorial {
-  id          Int      @id @default(autoincrement())
-  tareaId     Int
-  tarea       Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
-  
-  autorId     Int
-  autor       Empleado @relation(fields: [autorId], references: [id])
-  
+  id      Int   @id @default(autoincrement())
+  tareaId Int
+  tarea   Tarea @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+
+  autorId Int
+  autor   Empleado @relation(fields: [autorId], references: [id])
+
   // "COMENTARIO", "CAMBIO_ESTADO", "ASIGNACION", "CREACION", "CIERRE"
-  tipoAccion  String   
+  tipoAccion  String
   mensaje     String
-  estadoNuevo String?  
-  
-  createdAt   DateTime @default(now())
+  estadoNuevo String?
+
+  createdAt DateTime @default(now())
 }
 
 model TareaAdjunto {
-  id          Int      @id @default(autoincrement())
-  tareaId     Int
-  tarea       Tarea    @relation(fields: [tareaId], references: [id], onDelete: Cascade)
-  
-  autorId     Int
-  autor       Empleado @relation(fields: [autorId], references: [id])
-  
-  filename    String
-  url         String
-  mimeType    String
-  
-  createdAt   DateTime @default(now())
+  id      Int   @id @default(autoincrement())
+  tareaId Int
+  tarea   Tarea @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+
+  autorId Int
+  autor   Empleado @relation(fields: [autorId], references: [id])
+
+  filename String
+  url      String
+  mimeType String
+
+  createdAt DateTime @default(now())
 }
 
 model MantenimientoProximo {
-  id          Int      @id @default(autoincrement())
-  camionId    Int
-  camion      Camion   @relation(fields: [camionId], references: [id])
-  
-  tipo        String   // "PREVENTIVO", "CORRECTIVO"
+  id       Int    @id @default(autoincrement())
+  camionId Int
+  camion   Camion @relation(fields: [camionId], references: [id])
+
+  tipo        String // "PREVENTIVO", "CORRECTIVO"
   descripcion String
-  
+
   // Condición de disparo
-  kmObjetivo  Int?     // Se dispara al llegar a estos km
+  kmObjetivo    Int? // Se dispara al llegar a estos km
   fechaObjetivo DateTime? // Se dispara en esta fecha
-  
-  estado      String   @default("PROGRAMADO") // "PROGRAMADO", "COMPLETADO"
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+
+  estado String @default("PROGRAMADO") // "PROGRAMADO", "COMPLETADO"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model MantenimientoRealizado {
   id              Int      @id @default(autoincrement())
   fecha           DateTime @default(now())
   kmEnEseMomento  Int
-  tipo            String   // "ACEITE", "FRENOS", "MOTOR", "ITV", etc.
+  tipo            String // "ACEITE", "FRENOS", "MOTOR", "ITV", etc.
   descripcion     String
-  piezasCambiadas String?  // TextArea o JSON
+  piezasCambiadas String? // TextArea o JSON
   costo           Float?
-  taller          String?  // Nombre del taller externo o "Propio"
-  
-  camionId        Int
-  camion          Camion   @relation(fields: [camionId], references: [id])
-  
-  tareaId         Int?     // Enlace opcional a la avería que originó esto
-  tarea           Tarea?   @relation(fields: [tareaId], references: [id])
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  taller          String? // Nombre del taller externo o "Propio"
+
+  camionId Int
+  camion   Camion @relation(fields: [camionId], references: [id])
+
+  tareaId Int? // Enlace opcional a la avería que originó esto
+  tarea   Tarea? @relation(fields: [tareaId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Auditoria {
-  id          Int      @id @default(autoincrement())
-  usuarioId   Int
-  usuario     Empleado @relation(fields: [usuarioId], references: [id])
-  
-  accion      String   // "EDICION_JORNADA", "CAMBIO_PASSWORD", etc.
-  entidad     String   // "JornadaLaboral", "Empleado"
-  entidadId   Int
-  
-  detalles    String   // JSON o texto con el cambio (ej: "KM 100 -> 120")
-  
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  usuario   Empleado @relation(fields: [usuarioId], references: [id])
+
+  accion    String // "EDICION_JORNADA", "CAMBIO_PASSWORD", etc.
+  entidad   String // "JornadaLaboral", "Empleado"
+  entidadId Int
+
+  detalles String // JSON o texto con el cambio (ej: "KM 100 -> 120")
+
+  createdAt DateTime @default(now())
 }
 
 model Notificacion {
-  id          Int      @id @default(autoincrement())
-  usuarioId   Int
-  usuario     Empleado @relation(fields: [usuarioId], references: [id])
-  
-  mensaje     String
-  link        String?
-  leida       Boolean  @default(false)
-  
-  createdAt   DateTime @default(now())
+  id        Int      @id @default(autoincrement())
+  usuarioId Int
+  usuario   Empleado @relation(fields: [usuarioId], references: [id])
+
+  mensaje String
+  link    String?
+  leida   Boolean @default(false)
+
+  createdAt DateTime @default(now())
 }
 
 enum RolEmpleado {
@@ -378,109 +381,109 @@ enum RolEmpleado {
 }
 
 model FiestaLocal {
-  id              Int      @id @default(autoincrement())
-  fecha           DateTime
-  nombre          String
-  ambito          String?  // Municipio / Centro de trabajo
-  esAnual         Boolean  @default(true)
-  activa          Boolean  @default(true)
+  id      Int      @id @default(autoincrement())
+  fecha   DateTime
+  nombre  String
+  ambito  String? // Municipio / Centro de trabajo
+  esAnual Boolean  @default(true)
+  activa  Boolean  @default(true)
 
-  compensaciones  CompensacionFestivo[]
+  compensaciones CompensacionFestivo[]
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([fecha, nombre])
 }
 
 model CompensacionFestivo {
-  id              Int      @id @default(autoincrement())
-  
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id])
+  id Int @id @default(autoincrement())
 
-  jornadaId       Int      @unique
-  jornada         JornadaLaboral @relation(fields: [jornadaId], references: [id])
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
 
-  fiestaId        Int
-  fiesta          FiestaLocal @relation(fields: [fiestaId], references: [id])
+  jornadaId Int            @unique
+  jornada   JornadaLaboral @relation(fields: [jornadaId], references: [id])
+
+  fiestaId Int
+  fiesta   FiestaLocal @relation(fields: [fiestaId], references: [id])
 
   // "DIA_VACACIONES", "HORAS_EXTRA"
-  tipo            String   
-  valor           Float    // 1 (día) o N (horas)
-  motivo          String   @default("Compensación por fiesta local trabajada")
+  tipo   String
+  valor  Float // 1 (día) o N (horas)
+  motivo String @default("Compensación por fiesta local trabajada")
 
-  createdAt       DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
 // FORMACIÓN INTERNA
 model ModuloFormacion {
-  id              Int      @id @default(autoincrement())
-  titulo          String
-  descripcion     String
-  fechaInicio     DateTime
-  fechaFin        DateTime
-  duracionEstimada Int     @default(0) // En minutos
-  activo          Boolean  @default(true)
-  
-  creadoPorId     Int
-  creadoPor       Empleado @relation("CreadorModulo", fields: [creadoPorId], references: [id])
-  
-  temas           TemaFormacion[]
-  preguntas       PreguntaFormacion[]
-  resultados      ResultadoFormacion[]
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  titulo           String
+  descripcion      String
+  fechaInicio      DateTime
+  fechaFin         DateTime
+  duracionEstimada Int      @default(0) // En minutos
+  activo           Boolean  @default(true)
+
+  creadoPorId Int
+  creadoPor   Empleado @relation("CreadorModulo", fields: [creadoPorId], references: [id])
+
+  temas      TemaFormacion[]
+  preguntas  PreguntaFormacion[]
+  resultados ResultadoFormacion[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model TemaFormacion {
-  id              Int      @id @default(autoincrement())
-  moduloId        Int
-  modulo          ModuloFormacion @relation(fields: [moduloId], references: [id], onDelete: Cascade)
-  
-  orden           Int      @default(0)
-  titulo          String
-  contenido       String   // Texto enriquecido o descripción
-  tipo            String   @default("TEXTO") // TEXTO, VIDEO, PDF
-  resourceUrl     String?  // Link a video o archivo
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id       Int             @id @default(autoincrement())
+  moduloId Int
+  modulo   ModuloFormacion @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+
+  orden       Int     @default(0)
+  titulo      String
+  contenido   String // Texto enriquecido o descripción
+  tipo        String  @default("TEXTO") // TEXTO, VIDEO, PDF
+  resourceUrl String? // Link a video o archivo
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model PreguntaFormacion {
-  id              Int      @id @default(autoincrement())
-  moduloId        Int
-  modulo          ModuloFormacion @relation(fields: [moduloId], references: [id], onDelete: Cascade)
-  
-  texto           String
-  opcionA         String
-  opcionB         String
-  opcionC         String
-  correcta        String   @default("A") // A, B, C
-  puntos          Int      @default(10)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id       Int             @id @default(autoincrement())
+  moduloId Int
+  modulo   ModuloFormacion @relation(fields: [moduloId], references: [id], onDelete: Cascade)
+
+  texto    String
+  opcionA  String
+  opcionB  String
+  opcionC  String
+  correcta String @default("A") // A, B, C
+  puntos   Int    @default(10)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ResultadoFormacion {
-  id              Int      @id @default(autoincrement())
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id])
-  
-  moduloId        Int
-  modulo          ModuloFormacion @relation(fields: [moduloId], references: [id])
-  
-  puntuacion      Int      @default(0)
-  aprobado        Boolean  @default(false)
-  intentos        Int      @default(1)
-  
-  completadoAl    DateTime @default(now())
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  moduloId Int
+  modulo   ModuloFormacion @relation(fields: [moduloId], references: [id])
+
+  puntuacion Int     @default(0)
+  aprobado   Boolean @default(false)
+  intentos   Int     @default(1)
+
+  completadoAl DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([empleadoId, moduloId])
 }
@@ -494,142 +497,164 @@ model ConceptoNomina {
   codigo      String  @unique // KM, DESCARGA, VIAJE, ETC
   nombre      String
   descripcion String?
-  
-  tarifas     TarifaNomina[]
-  active      Boolean @default(true)
+
+  tarifas TarifaNomina[]
+  active  Boolean        @default(true)
 }
 
 model TarifaNomina {
-  id              Int      @id @default(autoincrement())
-  
-  conceptoId      Int
-  concepto        ConceptoNomina @relation(fields: [conceptoId], references: [id])
+  id Int @id @default(autoincrement())
+
+  conceptoId Int
+  concepto   ConceptoNomina @relation(fields: [conceptoId], references: [id])
 
   // Scope: Global (null, null), Por Rol (rol, null), Por Empleado (null, empleado)
-  rol             String?  // RolEmpleado as string logic
-  empleadoId      Int?
-  empleado        Empleado? @relation(fields: [empleadoId], references: [id])
+  rol        String? // RolEmpleado as string logic
+  empleadoId Int?
+  empleado   Empleado? @relation(fields: [empleadoId], references: [id])
 
-  valor           Float    // Precio unitario o importe fijo
-  
-  fechaInicio     DateTime @default(now())
-  fechaFin        DateTime?
-  
-  activo          Boolean  @default(true)
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  valor Float // Precio unitario o importe fijo
+
+  fechaInicio DateTime  @default(now())
+  fechaFin    DateTime?
+
+  activo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model NominaMes {
-  id              Int      @id @default(autoincrement())
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id])
-  
-  year            Int
-  month           Int
-  
-  estado          String   @default("BORRADOR") // BORRADOR, CERRADA, ENVIADA
-  
-  totalBruto      Float    @default(0)
-  totalVariables  Float    @default(0)
-  
-  lineas          NominaLinea[]
-  
-  cerradaPorId    Int?
-  fechaCierre     DateTime?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  year  Int
+  month Int
+
+  estado String @default("BORRADOR") // BORRADOR, CERRADA, ENVIADA
+
+  totalBruto     Float @default(0)
+  totalVariables Float @default(0)
+
+  lineas NominaLinea[]
+
+  cerradaPorId Int?
+  fechaCierre  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([empleadoId, year, month])
 }
 
 model NominaLinea {
-  id              Int      @id @default(autoincrement())
-  nominaId        Int
-  nomina          NominaMes @relation(fields: [nominaId], references: [id], onDelete: Cascade)
-  
-  conceptoCodigo  String
-  conceptoNombre  String
-  
-  cantidad        Float    @default(0) // Unidades (km, descargas...)
-  rate            Float    @default(0) // Precio aplicado
-  importe         Float    @default(0) // cantidad * rate (o fijo)
-  
-  orden           Int      @default(0)
-  
-  override        Boolean  @default(false)
-  notas           String?
-  updatedBy       Int?     // User ID who modified it manually
-  
-  createdAt       DateTime @default(now())
+  id       Int       @id @default(autoincrement())
+  nominaId Int
+  nomina   NominaMes @relation(fields: [nominaId], references: [id], onDelete: Cascade)
+
+  conceptoCodigo String
+  conceptoNombre String
+
+  cantidad Float @default(0) // Unidades (km, descargas...)
+  rate     Float @default(0) // Precio aplicado
+  importe  Float @default(0) // cantidad * rate (o fijo)
+
+  orden Int @default(0)
+
+  override  Boolean @default(false)
+  notas     String?
+  updatedBy Int? // User ID who modified it manually
+
+  createdAt DateTime @default(now())
 }
 
 model ComercialLitros {
-  id              Int      @id @default(autoincrement())
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id])
-  
-  year            Int
-  month           Int
-  
-  litros          Float    @default(0)
-  
-  notas           String?
-  
-  updatedBy       Int?
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id         Int      @id @default(autoincrement())
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  year  Int
+  month Int
+
+  litros Float @default(0)
+
+  notas String?
+
+  updatedBy Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([empleadoId, year, month])
 }
 
 model EnvioGestoria {
-  id              Int      @id @default(autoincrement())
-  year            Int
-  month           Int
-  
-  fechaEnvio      DateTime @default(now())
-  usuarioId       Int
-  
+  id    Int @id @default(autoincrement())
+  year  Int
+  month Int
+
+  fechaEnvio DateTime @default(now())
+  usuarioId  Int
+
   urlPdfConsolidado String?
-  status          String   @default("OK")
+  status            String  @default("OK")
 }
 
 // PERFIL PROFESIONAL (Conductores / Taller)
 model PerfilProfesional {
-  id              Int      @id @default(autoincrement())
-  
-  empleadoId      Int      @unique
-  empleado        Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
-  
+  id Int @id @default(autoincrement())
+
+  empleadoId Int      @unique
+  empleado   Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+
   // Documento Identidad (El número se coge de Empleado.dni)
-  dniCaducidad    DateTime
-  
+  dniCaducidad DateTime
+
   // Conducción
   carnetTipo      String
   carnetCaducidad DateTime
-  
+
   // ADR
-  tieneAdr        Boolean  @default(false)
-  adrCaducidad    DateTime? // Obligatorio si tieneAdr = true
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  tieneAdr     Boolean   @default(false)
+  adrCaducidad DateTime? // Obligatorio si tieneAdr = true
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model AlertaDocumento {
-  id              Int      @id @default(autoincrement())
-  
-  empleadoId      Int
-  empleado        Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
-  
-  documento       String   // "DNI", "CARNET", "ADR"
-  fechaCaducidad  DateTime
-  diasRestantes   Int
-  
-  fechaEnvio      DateTime @default(now())
-  destinatarios   String   // JSON o lista de roles/emails que recibieron la alerta
+  id Int @id @default(autoincrement())
+
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id], onDelete: Cascade)
+
+  documento      String // "DNI", "CARNET", "ADR"
+  fechaCaducidad DateTime
+  diasRestantes  Int
+
+  fechaEnvio    DateTime @default(now())
+  destinatarios String // JSON o lista de roles/emails que recibieron la alerta
+}
+
+// DOCUMENT CLOUD (Fase 10)
+model Documento {
+  id             Int       @id @default(autoincrement())
+  nombre         String
+  tipo           String // "CONTRATO", "NOMINA", "SEGURO", "ITV", "OTRO"
+  url            String
+  mimeType       String?
+  fechaCaducidad DateTime?
+
+  empleadoId Int?
+  empleado   Empleado? @relation(fields: [empleadoId], references: [id])
+
+  camionId Int?
+  camion   Camion? @relation(fields: [camionId], references: [id])
+
+  subidoPorId Int
+  subidoPor   Empleado @relation("SubidoPor", fields: [subidoPorId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

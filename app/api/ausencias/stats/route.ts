@@ -71,6 +71,9 @@ export async function GET(request: Request) {
                     return acc + diffDays;
                 }, 0);
 
+            // Calculate all pending requests count (Vacations + Sick Leave + Permissions)
+            const numSolicitudesPendientes = empAusencias.filter(a => a.estado === 'PENDIENTE').length;
+
             return {
                 empleadoId: emp.id,
                 nombre: emp.nombre,
@@ -82,6 +85,7 @@ export async function GET(request: Request) {
                 diasDisfrutados,
                 diasRestantes: (emp.diasVacaciones || 30) + (emp.diasExtras || 0) - diasDisfrutados,
                 diasSolicitados,
+                numSolicitudesPendientes,
                 ausencias: empAusencias,
                 compensaciones: emp.compensaciones
             };

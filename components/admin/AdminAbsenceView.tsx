@@ -26,8 +26,8 @@ export default function AdminAbsenceView() {
                 const data = await res.json();
                 // Sort: Pending first, then by name
                 data.sort((a: any, b: any) => {
-                    if (a.diasSolicitados > 0 && b.diasSolicitados === 0) return -1;
-                    if (a.diasSolicitados === 0 && b.diasSolicitados > 0) return 1;
+                    if (a.numSolicitudesPendientes > 0 && b.numSolicitudesPendientes === 0) return -1;
+                    if (a.numSolicitudesPendientes === 0 && b.numSolicitudesPendientes > 0) return 1;
                     return a.nombre.localeCompare(b.nombre);
                 });
                 setEmployees(data);
@@ -67,7 +67,7 @@ export default function AdminAbsenceView() {
     if (loading) return <div className="p-4 text-center text-gray-500">Cargando datos de personal...</div>;
 
     const filteredEmployees = showOnlyPending
-        ? employees.filter(e => e.diasSolicitados > 0)
+        ? employees.filter(e => e.numSolicitudesPendientes > 0)
         : employees;
 
     return (
@@ -107,7 +107,7 @@ export default function AdminAbsenceView() {
                     {filteredEmployees.map(emp => (
                         <Card
                             key={emp.empleadoId}
-                            className={`cursor-pointer hover:shadow-md transition-all border-l-4 ${emp.diasSolicitados > 0 ? 'border-l-yellow-500 bg-yellow-50/30' : 'border-l-blue-500'}`}
+                            className={`cursor-pointer hover:shadow-md transition-all border-l-4 ${emp.numSolicitudesPendientes > 0 ? 'border-l-yellow-500 bg-yellow-50/30' : 'border-l-blue-500'}`}
                             onClick={() => setSelectedEmployee(emp)}
                         >
                             <CardContent className="p-4">
@@ -121,9 +121,9 @@ export default function AdminAbsenceView() {
                                             <p className="text-xs text-gray-500 uppercase">{emp.rol}</p>
                                         </div>
                                     </div>
-                                    {emp.diasSolicitados > 0 && (
+                                    {emp.numSolicitudesPendientes > 0 && (
                                         <span className="bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded-full font-bold flex items-center gap-1">
-                                            <Clock className="w-3 h-3" /> {emp.diasSolicitados} Pendientes
+                                            <Clock className="w-3 h-3" /> {emp.numSolicitudesPendientes} Solicitud(es)
                                         </span>
                                     )}
                                 </div>

@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Trash2, Edit, Plus, User, Briefcase, Lock, MapPin, Phone, Mail, Award } from 'lucide-react';
+import { Trash2, Edit, Plus, User, Briefcase, Lock, Phone, Mail, Award, FileText } from 'lucide-react';
+import DocumentManager from '@/components/documents/DocumentManager';
 
 // Enum simulation for dropdown
 const ROLES = [
@@ -19,7 +20,7 @@ export default function AdminEmpleados() {
     const [empleados, setEmpleados] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [currentTab, setCurrentTab] = useState<'PERSONAL' | 'LABORAL' | 'CUENTA'>('PERSONAL');
+    const [currentTab, setCurrentTab] = useState<'PERSONAL' | 'LABORAL' | 'CUENTA' | 'DOCUMENTOS'>('PERSONAL');
 
     // Form State
     const [editingId, setEditingId] = useState<number | null>(null);
@@ -297,24 +298,30 @@ export default function AdminEmpleados() {
                             </CardTitle>
 
                             {/* TABS */}
-                            <div className="flex gap-4 mt-4 text-sm font-bold border-b border-gray-100">
+                            <div className="flex gap-4 mt-4 text-sm font-bold border-b border-gray-100 overflow-x-auto">
                                 <button
                                     onClick={() => setCurrentTab('PERSONAL')}
-                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all ${currentTab === 'PERSONAL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${currentTab === 'PERSONAL' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                                 >
                                     <User className="w-4 h-4" /> Datos Personales
                                 </button>
                                 <button
                                     onClick={() => setCurrentTab('LABORAL')}
-                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all ${currentTab === 'LABORAL' ? 'border-orange-600 text-orange-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${currentTab === 'LABORAL' ? 'border-orange-600 text-orange-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                                 >
                                     <Briefcase className="w-4 h-4" /> Datos Laborales
                                 </button>
                                 <button
                                     onClick={() => setCurrentTab('CUENTA')}
-                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all ${currentTab === 'CUENTA' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${currentTab === 'CUENTA' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
                                 >
-                                    <Lock className="w-4 h-4" /> Cuenta y Acceso
+                                    <Lock className="w-4 h-4" /> Cuenta
+                                </button>
+                                <button
+                                    onClick={() => setCurrentTab('DOCUMENTOS')}
+                                    className={`pb-2 flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${currentTab === 'DOCUMENTOS' ? 'border-green-600 text-green-600' : 'border-transparent text-gray-400 hover:text-gray-600'}`}
+                                >
+                                    <FileText className="w-4 h-4" /> Documentación
                                 </button>
                             </div>
                         </CardHeader>
@@ -476,6 +483,20 @@ export default function AdminEmpleados() {
                                             />
                                             {editingId && <p className="text-xs text-gray-400">Si escribes aquí, se cambiará la contraseña.</p>}
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* TAB: DOCUMENTOS */}
+                                {currentTab === 'DOCUMENTOS' && (
+                                    <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
+                                        {editingId ? (
+                                            <DocumentManager entityId={editingId} entityType="EMPLEADO" />
+                                        ) : (
+                                            <div className="p-8 text-center bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                                                <p className="text-gray-500 font-bold">Primero debes guardar el empleado.</p>
+                                                <p className="text-sm text-gray-400">Una vez creado, podrás adjuntar contratos, nóminas y otros documentos.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
