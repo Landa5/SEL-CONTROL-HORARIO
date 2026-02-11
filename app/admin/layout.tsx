@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Users, Truck, Calendar, LayoutDashboard, LogOut, AlertCircle, BookOpen, FileText, TrendingUp, Menu, X } from 'lucide-react';
@@ -9,20 +9,30 @@ import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
+interface Session {
+    user: {
+        name: string;
+        email: string;
+    };
+    rol: string;
+}
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const [session, setSession] = (React as any).useState(null);
+    const [session, setSession] = useState<Session | null>(null);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-    (React as any).useEffect(() => {
+    useEffect(() => {
         const fetchSession = async () => {
-            const res = await fetch('/api/auth/session');
-            if (res.ok) setSession(await res.json());
+            try {
+                const res = await fetch('/api/auth/session');
+                if (res.ok) setSession(await res.json());
+            } catch (e) {
+                console.error("Error fetching session", e);
+            }
         };
         fetchSession();
     }, []);
-
-    const [mobileMenuOpen, setMobileMenuOpen] = (React as any).useState(false);
 
     const isOficina = session?.rol === 'OFICINA';
     const isAdmin = session?.rol === 'ADMIN';
@@ -35,7 +45,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
                 { href: '/admin/empleados', label: 'Empleados', icon: Users },
                 { href: '/admin/camiones', label: 'Camiones', icon: Truck },
-                { href: '/admin/tareas', label: 'Tareas y Taller', icon: AlertCircle },
+                { href: '/admin/tareas', label: 'CRM y Tareas', icon: AlertCircle }, // Renamed to "CRM y Tareas" for visibility
                 { href: '/admin/jornadas', label: 'Informes de Días', icon: FileText },
                 { href: '/admin/nominas', label: 'Nóminas', icon: TrendingUp },
                 { href: '/admin/formacion', label: 'Formación Interna', icon: BookOpen },

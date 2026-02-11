@@ -10,6 +10,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
     const [loading, setLoading] = useState(false);
     const [projects, setProjects] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
+    const [camiones, setCamiones] = useState<any[]>([]);
 
     // Form State
     const [titulo, setTitulo] = useState('');
@@ -18,19 +19,22 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
     const [prioridad, setPrioridad] = useState('MEDIA');
     const [fechaLimite, setFechaLimite] = useState('');
     const [activoTipo, setActivoTipo] = useState('OTRO');
+    const [matricula, setMatricula] = useState('');
     const [proyectoId, setProyectoId] = useState('');
     const [asignadoAId, setAsignadoAId] = useState('');
 
     // Fetch data when dialog opens
     const fetchData = async () => {
         try {
-            const [resProjects, resEmployees] = await Promise.all([
+            const [resProjects, resEmployees, resCamiones] = await Promise.all([
                 fetch('/api/proyectos'),
-                fetch('/api/empleados?activo=true')
+                fetch('/api/empleados?activo=true'),
+                fetch('/api/camiones')
             ]);
 
             if (resProjects.ok) setProjects(await resProjects.json());
             if (resEmployees.ok) setEmployees(await resEmployees.json());
+            if (resCamiones.ok) setCamiones(await resCamiones.json());
         } catch (error) {
             console.error('Error loading data', error);
         }
@@ -38,7 +42,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
 
     const handleOpenChange = (newOpen: boolean) => {
         setOpen(newOpen);
-        if (newOpen && projects.length === 0) {
+        if (newOpen) {
             fetchData();
         }
     };
@@ -46,6 +50,12 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+
+        if (activoTipo === 'CAMION' && !matricula) {
+            alert('Debes seleccionar una matrícula para tareas de Camión');
+            setLoading(false);
+            return;
+        }
 
         try {
             const res = await fetch('/api/tareas', {
@@ -58,6 +68,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                     prioridad,
                     fechaLimite: fechaLimite || null,
                     activoTipo,
+                    matricula: activoTipo === 'CAMION' ? matricula : undefined,
                     proyectoId: proyectoId || undefined,
                     asignadoAId: asignadoAId || undefined
                 })
@@ -71,8 +82,12 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                 setDescripcion('');
                 setProyectoId('');
                 setAsignadoAId('');
+                setMatricula('');
+                setActivoTipo('OTRO');
+                setFechaLimite('');
             } else {
-                alert('Error al crear la tarea');
+                const err = await res.json();
+                alert(err.error || 'Error al crear la tarea');
             }
         } catch (error) {
             console.error(error);
@@ -88,7 +103,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                     <Plus className="w-4 h-4 mr-2" /> Nueva Tarea
                 </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                     <DialogTitle>Crear Nueva Tarea</DialogTitle>
                 </DialogHeader>
@@ -127,10 +142,10 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                         <div className="space-y-2">
                             <label className="text-sm font-medium">Activo / Contexto</label>
                             <select className="w-full p-2 border rounded-md" value={activoTipo} onChange={e => setActivoTipo(e.target.value)}>
+                                <option value="OTRO">Otro</option>
                                 <option value="CAMION">Camión</option>
                                 <option value="DEPOSITO_CLIENTE">Cliente</option>
                                 <option value="BASE">Base</option>
-                                <option value="OTRO">Otro</option>
                             </select>
                         </div>
                         <div className="space-y-2">
@@ -143,6 +158,23 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                             </select>
                         </div>
                     </div>
+
+                    {activoTipo === 'CAMION' && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                            <label className="text-sm font-medium">Matrícula</label>
+                            <select
+                                required
+                                className="w-full p-2 border rounded-md"
+                                value={matricula}
+                                onChange={e => setMatricula(e.target.value)}
+                            >
+                                <option value="">Seleccionar Camión...</option>
+                                {camiones.map(c => (
+                                    <option key={c.id} value={c.matricula}>{c.matricula} - {c.modelo}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium">Proyecto (Opcional)</label>
@@ -162,6 +194,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                             value={fechaLimite}
                             onChange={e => setFechaLimite(e.target.value)}
                         />
+                        <p className="text-xs text-gray-400">Si se deja vacío, irá al Backlog.</p>
                     </div>
 
                     <div className="space-y-2">

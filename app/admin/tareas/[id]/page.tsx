@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import { TareaEstado, TareaPrioridad, TareaTipo } from '@prisma/client';
 import { toast } from 'sonner';
+import TaskCRM from '@/components/tareas/TaskCRM';
 
 interface TareaDetalle {
     id: number;
@@ -35,6 +36,7 @@ interface TareaDetalle {
         titulo: string;
         estado: TareaEstado;
     }[];
+    historial: any[];
 }
 
 export default function AdminTaskDetailPage() {
@@ -173,14 +175,8 @@ export default function AdminTaskDetailPage() {
                         )}
                     </div>
 
-                    {/* Activity/History would go here */}
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 opacity-60">
-                        <h3 className="text-lg font-semibold mb-4 flex items-center text-gray-800">
-                            <MessageSquare className="w-5 h-5 mr-2 text-indigo-500" />
-                            Actividad y Comentarios
-                        </h3>
-                        <p className="text-sm text-gray-500 italic">Próximamente: Historial de cambios y comentarios</p>
-                    </div>
+                    {/* Activity/History - CRM Component */}
+                    <TaskCRM task={task} onUpdate={fetchTask} />
                 </div>
 
                 {/* Sidebar */}
