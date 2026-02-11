@@ -56,6 +56,7 @@ export default function MonthlyReportPage() {
                         onChange={(e) => setMonth(parseInt(e.target.value))}
                         className="p-2 border rounded font-bold"
                     >
+                        <option value={0}>AÑO COMPLETO</option>
                         {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
                             <option key={m} value={m}>{format(new Date(2000, m - 1, 1), 'MMMM', { locale: es }).toUpperCase()}</option>
                         ))}

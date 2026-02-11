@@ -8,8 +8,13 @@ export async function GET(request: Request) {
         const year = parseInt(searchParams.get('year') || new Date().getFullYear().toString());
         const month = parseInt(searchParams.get('month') || (new Date().getMonth() + 1).toString());
 
-        const startDate = new Date(year, month - 1, 1);
-        const endDate = endOfMonth(startDate);
+        const startDate = month === 0
+            ? new Date(year, 0, 1)
+            : new Date(year, month - 1, 1);
+
+        const endDate = month === 0
+            ? new Date(year, 11, 31, 23, 59, 59)
+            : endOfMonth(startDate);
 
         // Fetch Jornadas within month
         const jornadas = await prisma.jornadaLaboral.findMany({
