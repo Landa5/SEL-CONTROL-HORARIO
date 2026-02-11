@@ -417,6 +417,7 @@ export default function AdminEmpleados() {
                                                             <option value="C+E">C+E</option>
                                                             <option value="C">C</option>
                                                             <option value="C1">C1</option>
+                                                            <option value="B">B</option>
                                                         </select>
                                                     </div>
                                                     <Input
@@ -438,13 +439,14 @@ export default function AdminEmpleados() {
                                                         <span className="font-bold text-gray-700">Tiene ADR</span>
                                                     </label>
 
-                                                    <Input
-                                                        label="Caducidad ADR"
-                                                        type="date"
-                                                        value={formData.adrCaducidad}
-                                                        onChange={e => handleInputChange('adrCaducidad', e.target.value)}
-                                                    />
-
+                                                    {formData.tieneAdr && (
+                                                        <Input
+                                                            label="Caducidad ADR"
+                                                            type="date"
+                                                            value={formData.adrCaducidad}
+                                                            onChange={e => handleInputChange('adrCaducidad', e.target.value)}
+                                                        />
+                                                    )}
                                                 </div>
                                             </div>
                                         )}
@@ -511,7 +513,8 @@ export default function AdminEmpleados() {
                         </CardContent>
                     </Card>
                 </div>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }
