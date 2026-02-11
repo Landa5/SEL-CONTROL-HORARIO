@@ -138,7 +138,7 @@ export default function MonthlyReportPage() {
                         <CardHeader className="pb-2">
                             <CardTitle className="text-sm font-bold text-slate-600 uppercase flex justify-between">
                                 {roleStat.rol}
-                                <span className="text-slate-400 text-xs">{roleStat.totalHoras}h totales</span>
+                                <span className="text-slate-400 text-xs">{Math.round(roleStat.totalHoras)}h totales</span>
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
