@@ -667,6 +667,12 @@ model ClienteAlquiler {
   id        Int      @id @default(autoincrement())
   nombre    String
   telefono  String
+  email     String?
+  nif       String?
+  direccion String?
+  poblacion String?
+  provincia String?
+  codigoPostal String?
   
   alquileres AlquilerPlaza[]
   

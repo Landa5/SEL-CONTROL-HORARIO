@@ -15,10 +15,19 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { nombre, telefono } = body;
+        const { nombre, telefono, email, nif, direccion, poblacion, provincia, codigoPostal } = body;
 
         const client = await prisma.clienteAlquiler.create({
-            data: { nombre, telefono }
+            data: {
+                nombre,
+                telefono,
+                email,
+                nif,
+                direccion,
+                poblacion,
+                provincia,
+                codigoPostal
+            }
         });
         return NextResponse.json(client);
     } catch (error) {

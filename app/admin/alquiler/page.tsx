@@ -17,6 +17,12 @@ interface Cliente {
     id: number;
     nombre: string;
     telefono: string;
+    email?: string;
+    nif?: string;
+    direccion?: string;
+    poblacion?: string;
+    provincia?: string;
+    codigoPostal?: string;
 }
 
 interface Alquiler {
@@ -50,8 +56,16 @@ export default function AlquilerPage() {
     const [precioMensual, setPrecioMensual] = useState('');
 
     // New Client Form
-    const [newClientName, setNewClientName] = useState('');
-    const [newClientPhone, setNewClientPhone] = useState('');
+    const [newClientData, setNewClientData] = useState({
+        nombre: '',
+        telefono: '',
+        email: '',
+        nif: '',
+        direccion: '',
+        poblacion: '',
+        provincia: '',
+        codigoPostal: ''
+    });
     const [isNewClientMode, setIsNewClientMode] = useState(false);
 
     // Report State
@@ -80,30 +94,28 @@ export default function AlquilerPage() {
     };
 
     const handleCreateClient = async () => {
-        if (!newClientName || !newClientPhone) return;
-        const newClient = await createClient(newClientName, newClientPhone);
+        if (!newClientData.nombre || !newClientData.telefono) return;
+        const newClient = await createClient();
         if (newClient) {
             setIsNewClientMode(false);
-            setNewClientName('');
-            setNewClientPhone('');
+            setNewClientData({ nombre: '', telefono: '', email: '', nif: '', direccion: '', poblacion: '', provincia: '', codigoPostal: '' });
         }
     };
 
     const handleStandaloneCreateClient = async () => {
-        const newClient = await createClient(newClientName, newClientPhone);
+        const newClient = await createClient();
         if (newClient) {
             setIsClientModalOpen(false);
-            setNewClientName('');
-            setNewClientPhone('');
+            setNewClientData({ nombre: '', telefono: '', email: '', nif: '', direccion: '', poblacion: '', provincia: '', codigoPostal: '' });
         }
     };
 
-    const createClient = async (nombre: string, telefono: string) => {
+    const createClient = async () => {
         try {
             const res = await fetch('/api/admin/alquiler/clientes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre, telefono })
+                body: JSON.stringify(newClientData)
             });
             if (res.ok) {
                 const newClient = await res.json();
@@ -284,17 +296,69 @@ export default function AlquilerPage() {
                                     <label className="text-sm font-medium">Nombre Completo</label>
                                     <Input
                                         placeholder="Nombre del cliente"
-                                        value={newClientName}
-                                        onChange={(e) => setNewClientName(e.target.value)}
+                                        value={newClientData.nombre}
+                                        onChange={(e) => setNewClientData({ ...newClientData, nombre: e.target.value })}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Teléfono</label>
+                                        <Input
+                                            placeholder="Teléfono"
+                                            value={newClientData.telefono}
+                                            onChange={(e) => setNewClientData({ ...newClientData, telefono: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Email</label>
+                                        <Input
+                                            placeholder="Email"
+                                            value={newClientData.email}
+                                            onChange={(e) => setNewClientData({ ...newClientData, email: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">NIF / CIF</label>
+                                    <Input
+                                        placeholder="DNI / CIF"
+                                        value={newClientData.nif}
+                                        onChange={(e) => setNewClientData({ ...newClientData, nif: e.target.value })}
                                     />
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium">Teléfono</label>
+                                    <label className="text-sm font-medium">Dirección Fiscal</label>
                                     <Input
-                                        placeholder="Teléfono de contacto"
-                                        value={newClientPhone}
-                                        onChange={(e) => setNewClientPhone(e.target.value)}
+                                        placeholder="Dirección Completa"
+                                        value={newClientData.direccion}
+                                        onChange={(e) => setNewClientData({ ...newClientData, direccion: e.target.value })}
                                     />
+                                </div>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">C. Postal</label>
+                                        <Input
+                                            placeholder="CP"
+                                            value={newClientData.codigoPostal}
+                                            onChange={(e) => setNewClientData({ ...newClientData, codigoPostal: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Población</label>
+                                        <Input
+                                            placeholder="Población"
+                                            value={newClientData.poblacion}
+                                            onChange={(e) => setNewClientData({ ...newClientData, poblacion: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Provincia</label>
+                                        <Input
+                                            placeholder="Provincia"
+                                            value={newClientData.provincia}
+                                            onChange={(e) => setNewClientData({ ...newClientData, provincia: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <DialogFooter>
@@ -408,14 +472,21 @@ export default function AlquilerPage() {
                                     <p className="text-xs font-bold text-gray-500 uppercase">Nuevo Cliente</p>
                                     <Input
                                         placeholder="Nombre Completo"
-                                        value={newClientName}
-                                        onChange={(e) => setNewClientName(e.target.value)}
+                                        value={newClientData.nombre}
+                                        onChange={(e) => setNewClientData({ ...newClientData, nombre: e.target.value })}
                                     />
-                                    <Input
-                                        placeholder="Teléfono"
-                                        value={newClientPhone}
-                                        onChange={(e) => setNewClientPhone(e.target.value)}
-                                    />
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <Input
+                                            placeholder="Teléfono"
+                                            value={newClientData.telefono}
+                                            onChange={(e) => setNewClientData({ ...newClientData, telefono: e.target.value })}
+                                        />
+                                        <Input
+                                            placeholder="NIF / CIF"
+                                            value={newClientData.nif}
+                                            onChange={(e) => setNewClientData({ ...newClientData, nif: e.target.value })}
+                                        />
+                                    </div>
                                     <div className="flex gap-2 justify-end">
                                         <Button variant="ghost" size="sm" onClick={() => setIsNewClientMode(false)}>Cancelar</Button>
                                         <Button size="sm" onClick={handleCreateClient}>Guardar Cliente</Button>
