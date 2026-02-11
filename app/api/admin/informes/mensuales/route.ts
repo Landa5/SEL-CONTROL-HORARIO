@@ -23,7 +23,7 @@ export async function GET(request: Request) {
                 totalHoras: { not: null }
             },
             include: {
-                empleado: { select: { id: true, nombre: true, apellidos: true } },
+                empleado: { select: { id: true, nombre: true, apellidos: true, rol: true } },
                 usosCamion: { select: { kmRecorridos: true, litrosRepostados: true, descargasCount: true, viajesCount: true } }
             }
         });
@@ -53,12 +53,17 @@ export async function GET(request: Request) {
         let countRepostajes = 0; // Days refueling happened
 
         const employeeStats: Record<number, any> = {};
+        const roleStats: Record<string, any> = {};
 
         jornadas.forEach(jor => {
             const empId = jor.empleadoId;
+            const role = jor.empleado.rol || 'SIN_ROL';
+
+            // Init Employee Stats
             if (!employeeStats[empId]) {
                 employeeStats[empId] = {
                     empleado: `${jor.empleado.nombre} ${jor.empleado.apellidos || ''}`,
+                    rol: role,
                     horas: 0,
                     km: 0,
                     litros: 0,
@@ -68,10 +73,31 @@ export async function GET(request: Request) {
                 };
             }
 
+            // Init Role Stats
+            if (!roleStats[role]) {
+                roleStats[role] = {
+                    rol: role,
+                    horas: 0,
+                    km: 0,
+                    litros: 0,
+                    viajes: 0,
+                    descargas: 0,
+                    diasTrabajados: 0,
+                    countJornadas: 0
+                };
+            }
+
             const horas = jor.totalHoras || 0;
             totalHoras += horas;
+
+            // Employee Accumulation
             employeeStats[empId].horas += horas;
             employeeStats[empId].diasTrabajados += 1;
+
+            // Role Accumulation
+            roleStats[role].horas += horas;
+            roleStats[role].countJornadas += 1;
+            roleStats[role].diasTrabajados += 1; // Same as countJornadas here but keeping for consistency
 
             let jornadaKm = 0;
             let jornadaLitros = 0;
@@ -100,27 +126,49 @@ export async function GET(request: Request) {
             if (hasTruckUsage) countUsosCamion++;
             if (hasRefuel) countRepostajes++;
 
+            // Update Employee
             employeeStats[empId].km += jornadaKm;
             employeeStats[empId].litros += jornadaLitros;
             employeeStats[empId].viajes += jornadaViajes;
             employeeStats[empId].descargas += jornadaDescargas;
+
+            // Update Role
+            roleStats[role].km += jornadaKm;
+            roleStats[role].litros += jornadaLitros;
+            roleStats[role].viajes += jornadaViajes;
+            roleStats[role].descargas += jornadaDescargas;
         });
 
-        // Correct countUsosCamion logic:
-        // Actually countJornadas is basically working days.
-        // countUsosCamion helps separate if we want average per truck Use.
+        // --- AVERAGES CALCULATIONS ---
 
+        // 1. Global Averages
         const averages = {
             horasPorJornada: countJornadas > 0 ? (totalHoras / countJornadas) : 0,
-            kmPorJornada: countJornadas > 0 ? (totalKm / countJornadas) : 0, // Per working day regardless if truck used
-            kmPorSalida: countUsosCamion > 0 ? (totalKm / countUsosCamion) : 0, // Only when truck used
+            kmPorJornada: countJornadas > 0 ? (totalKm / countJornadas) : 0,
+            kmPorSalida: countUsosCamion > 0 ? (totalKm / countUsosCamion) : 0,
             litrosPorJornada: countJornadas > 0 ? (totalLitros / countJornadas) : 0,
-            consumoMedio: totalKm > 0 ? ((totalLitros / totalKm) * 100) : 0, // L/100km (Fleet average)
+            consumoMedio: totalKm > 0 ? ((totalLitros / totalKm) * 100) : 0,
             descargasPorDia: countJornadas > 0 ? (totalDescargas / countJornadas) : 0,
             viajesPorDia: countJornadas > 0 ? (totalViajes / countJornadas) : 0,
         };
 
-        const ranking = Object.values(employeeStats).sort((a: any, b: any) => b.horas - a.horas);
+        // 2. Per-Role Averages
+        const averagesByRole = Object.values(roleStats).map((r: any) => ({
+            rol: r.rol,
+            horasPorDia: r.countJornadas > 0 ? (r.horas / r.countJornadas) : 0,
+            kmPorDia: r.countJornadas > 0 ? (r.km / r.countJornadas) : 0,
+            consumoMedio: r.km > 0 ? ((r.litros / r.km) * 100) : 0,
+            totalHoras: r.horas,
+            totalKm: r.km
+        }));
+
+        // 3. Enrich Employee Stats with Averages
+        const ranking = Object.values(employeeStats).map((e: any) => ({
+            ...e,
+            mediaHorasDia: e.diasTrabajados > 0 ? (e.horas / e.diasTrabajados) : 0,
+            mediaKmDia: e.diasTrabajados > 0 ? (e.km / e.diasTrabajados) : 0,
+            consumoMedio: e.km > 0 ? ((e.litros / e.km) * 100) : 0
+        })).sort((a: any, b: any) => b.horas - a.horas);
 
         return NextResponse.json({
             meta: { year, month },
@@ -133,7 +181,8 @@ export async function GET(request: Request) {
                 countJornadas,
                 countAusencias: ausencias.length
             },
-            averages, // "Medias" demanded by user
+            averages,
+            averagesByRole,
             ranking
         });
 

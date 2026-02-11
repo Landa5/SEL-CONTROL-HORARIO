@@ -41,7 +41,7 @@ export default function MonthlyReportPage() {
 
     if (loading && !stats) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
-    const { totals, averages, ranking } = stats || {};
+    const { totals, averages, averagesByRole, ranking } = stats || {};
 
     return (
         <div className="space-y-8 pb-12">
@@ -130,6 +130,33 @@ export default function MonthlyReportPage() {
                 </div>
             </div>
 
+            {/* ROLE AVERAGES */}
+            <h2 className="text-lg font-black text-gray-800 uppercase tracking-widest border-b pb-2 mt-8">Productividad por Puesto/Rol</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {averagesByRole?.map((roleStat: any, idx: number) => (
+                    <Card key={idx} className="bg-slate-50 border-slate-200">
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-sm font-bold text-slate-600 uppercase flex justify-between">
+                                {roleStat.rol}
+                                <span className="text-slate-400 text-xs">{roleStat.totalHoras}h totales</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 gap-4 text-center">
+                                <div>
+                                    <p className="text-xs text-slate-400 uppercase">Horas / Día</p>
+                                    <p className="text-xl font-black text-slate-800">{roleStat.horasPorDia.toFixed(1)} h</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-slate-400 uppercase">KM / Día</p>
+                                    <p className="text-xl font-black text-slate-800">{Math.round(roleStat.kmPorDia)} km</p>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                ))}
+            </div>
+
             {/* EMPLOYEE RANKING */}
             <h2 className="text-lg font-black text-gray-800 uppercase tracking-widest border-b pb-2 mt-8">Desglose por Empleado</h2>
             <Card>
@@ -142,6 +169,8 @@ export default function MonthlyReportPage() {
                                 <th className="p-4 font-bold text-gray-600 text-center">Total Horas</th>
                                 <th className="p-4 font-bold text-gray-600 text-center">Media Horas/Día</th>
                                 <th className="p-4 font-bold text-gray-600 text-center">Total KM</th>
+                                <th className="p-4 font-bold text-gray-600 text-center">Media KM/Día</th>
+                                <th className="p-4 font-bold text-gray-600 text-center">Consumo (L/100)</th>
                                 <th className="p-4 font-bold text-gray-600 text-center">Viajes</th>
                                 <th className="p-4 font-bold text-gray-600 text-center">Descargas</th>
                             </tr>
@@ -149,11 +178,16 @@ export default function MonthlyReportPage() {
                         <tbody>
                             {ranking?.map((emp: any, idx: number) => (
                                 <tr key={idx} className="border-b last:border-0 hover:bg-gray-50">
-                                    <td className="p-4 font-bold text-gray-900">{emp.empleado}</td>
+                                    <td className="p-4">
+                                        <p className="font-bold text-gray-900">{emp.empleado}</p>
+                                        <p className="text-[10px] uppercase font-bold text-gray-400">{emp.rol}</p>
+                                    </td>
                                     <td className="p-4 text-center">{emp.diasTrabajados}</td>
                                     <td className="p-4 text-center font-bold text-blue-700">{formatDuration(emp.horas)}</td>
-                                    <td className="p-4 text-center text-gray-500">{(emp.horas / (emp.diasTrabajados || 1)).toFixed(1)} h</td>
+                                    <td className="p-4 text-center text-gray-500">{(emp.mediaHorasDia || 0).toFixed(1)} h</td>
                                     <td className="p-4 text-center font-mono">{emp.km}</td>
+                                    <td className="p-4 text-center text-gray-500">{Math.round(emp.mediaKmDia || 0)}</td>
+                                    <td className="p-4 text-center font-bold text-purple-700">{(emp.consumoMedio || 0).toFixed(1)} L</td>
                                     <td className="p-4 text-center">{emp.viajes}</td>
                                     <td className="p-4 text-center">{emp.descargas}</td>
                                 </tr>
