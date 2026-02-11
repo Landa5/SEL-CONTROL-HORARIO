@@ -130,24 +130,28 @@ export default function AdminDashboard() {
                         label="Fichajes Activos"
                         icon={Users}
                         color="blue"
+                        href="/admin/jornadas?estado=TRABAJANDO"
                     />
                     <StatCard
                         value={section2.activeTrucks}
                         label="Camiones Activos"
                         icon={Truck}
                         color="indigo"
+                        href="/admin/camiones?estado=ACTIVO"
                     />
                     <StatCard
                         value={section2.incidentsToday}
                         label="Incidencias Hoy"
                         icon={AlertTriangle}
                         color={section2.incidentsToday > 0 ? 'red' : 'gray'}
+                        href="/admin/tareas?tab=incidencias"
                     />
                     <StatCard
                         value={section2.absentToday}
                         label="Personal Ausente"
                         icon={Briefcase}
                         color="orange"
+                        href="/admin/ausencias?estado=APROBADA"
                     />
                 </div>
             </section>
@@ -161,10 +165,10 @@ export default function AdminDashboard() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                     {/* KPIs Grid */}
                     <div className="lg:col-span-8 grid grid-cols-2 md:grid-cols-4 gap-4">
-                        <KpiCard label="Horas Totales" value={section3.totalMonthlyHours.toLocaleString()} sub="H" />
-                        <KpiCard label="Productividad" value={section3.productivity} sub="H/Emp" highlight />
-                        <KpiCard label="KM Recorridos" value={section3.totalMonthlyKm.toLocaleString()} sub="KM" />
-                        <KpiCard label="Coste Estimado" value={section3.estimatedLaborCost.toLocaleString()} sub="€" />
+                        <KpiCard label="Horas Totales" value={section3.totalMonthlyHours.toLocaleString()} sub="H" href="/admin/jornadas" />
+                        <KpiCard label="Productividad" value={section3.productivity} sub="H/Emp" highlight href="/admin/jornadas" />
+                        <KpiCard label="KM Recorridos" value={section3.totalMonthlyKm.toLocaleString()} sub="KM" href="/admin/camiones" />
+                        <KpiCard label="Coste Estimado" value={section3.estimatedLaborCost.toLocaleString()} sub="€" href="/admin/nominas" />
                     </div>
 
                     {/* AI SUMMARY */}
@@ -233,7 +237,8 @@ export default function AdminDashboard() {
 
 // --- SUBCOMPONENTS ---
 
-function StatCard({ value, label, icon: Icon, color }: any) {
+function StatCard({ value, label, icon: Icon, color, href }: any) {
+    const router = useRouter();
     const colorClasses: any = {
         blue: 'text-blue-600',
         indigo: 'text-indigo-600',
@@ -242,8 +247,15 @@ function StatCard({ value, label, icon: Icon, color }: any) {
         gray: 'text-gray-600'
     };
 
+    const handleClick = () => {
+        if (href) router.push(href);
+    }
+
     return (
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
+        <div
+            onClick={handleClick}
+            className={`bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between ${href ? 'cursor-pointer hover:shadow-md transition-all active:scale-[0.98]' : ''}`}
+        >
             <div>
                 <p className="text-3xl font-black text-gray-900">{value}</p>
                 <p className="text-xs font-bold text-gray-400 uppercase mt-1">{label}</p>
@@ -255,9 +267,17 @@ function StatCard({ value, label, icon: Icon, color }: any) {
     );
 }
 
-function KpiCard({ label, value, sub, highlight }: any) {
+function KpiCard({ label, value, sub, highlight, href }: any) {
+    const router = useRouter();
+    const handleClick = () => {
+        if (href) router.push(href);
+    }
+
     return (
-        <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center h-full">
+        <div
+            onClick={handleClick}
+            className={`bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col justify-center h-full ${href ? 'cursor-pointer hover:shadow-md transition-all active:scale-[0.98]' : ''}`}
+        >
             <p className="text-xs font-bold text-gray-400 uppercase mb-2">{label}</p>
             <p className={`text-2xl font-black ${highlight ? 'text-indigo-600' : 'text-gray-900'}`}>
                 {value} <span className="text-sm text-gray-400 font-normal">{sub}</span>

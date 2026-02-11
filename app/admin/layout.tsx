@@ -101,17 +101,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/tareas', label: 'Taller y Mantenimiento', icon: Wrench },
                 { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
-                { href: '#', label: 'Informes Operativos', icon: FileText }, // Placeholder
+                { href: '/admin/construccion?modulo=Informes Operativos', label: 'Informes Operativos', icon: FileText },
             ]
         },
         {
             type: 'group',
             label: 'Control y Auditoría',
             items: [
-                { href: '#', label: 'Informes Mensuales', icon: BarChart2 }, // Placeholder
-                { href: '#', label: 'Exportaciones Gestoría', icon: Download }, // Placeholder
-                { href: '#', label: 'Registro Jornada Legal', icon: FileCheck }, // Placeholder
-                { href: '/admin/auditoria', label: 'Auditoría Interna', icon: ShieldCheck },
+                { href: '/admin/construccion?modulo=Informes Mensuales', label: 'Informes Mensuales', icon: BarChart2 },
+                { href: '/admin/construccion?modulo=Exportaciones Gestoría', label: 'Exportaciones Gestoría', icon: Download },
+                { href: '/admin/construccion?modulo=Registro Jornada Legal', label: 'Registro Jornada Legal', icon: FileCheck },
+                { href: '/admin/construccion?modulo=Auditoría Interna', label: 'Auditoría Interna', icon: ShieldCheck },
             ]
         },
         {
@@ -119,9 +119,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             label: 'Configuración',
             items: [
                 { href: '/admin/fiestas', label: 'Fiestas Locales', icon: PartyPopper },
-                { href: '#', label: 'Parámetros Productividad', icon: Settings }, // Placeholder
-                { href: '#', label: 'Tarifas Incentivos', icon: Coins }, // Placeholder
-                { href: '#', label: 'Roles y Permisos', icon: UserCog }, // Placeholder
+                { href: '/admin/construccion?modulo=Parámetros Productividad', label: 'Parámetros Productividad', icon: Settings },
+                { href: '/admin/construccion?modulo=Tarifas Incentivos', label: 'Tarifas Incentivos', icon: Coins },
+                { href: '/admin/construccion?modulo=Roles y Permisos', label: 'Roles y Permisos', icon: UserCog },
             ]
         }
     ];
@@ -135,13 +135,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="flex min-h-screen bg-gray-100">
             {/* Sidebar Desktop */}
             <aside className="w-64 bg-slate-900 text-white flex flex-col hidden md:flex h-screen sticky top-0">
-                <div className="p-6 border-b border-slate-800 bg-slate-900 text-center shrink-0">
-                    <div className="flex justify-center mb-2">
-                        <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center font-black text-xl italic tracking-tighter">
-                            SEL
-                        </div>
-                    </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{roleLabel}</p>
+                <div className="p-6 border-b border-slate-800 bg-white text-center shrink-0">
+                    <img src="/logo.jpg" alt="SEL Logo" className="h-16 w-auto mx-auto object-contain" />
+                    <p className="text-[10px] text-slate-900 font-bold uppercase tracking-widest mt-2">{roleLabel}</p>
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">

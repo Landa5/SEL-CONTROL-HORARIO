@@ -11,10 +11,20 @@ import { Plus, Filter, RefreshCcw } from 'lucide-react';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/Dialog';
 import CreateTaskDialog from './CreateTaskDialog';
 
+import { useSearchParams } from 'next/navigation';
+
 export default function TaskBoard() {
+    const searchParams = useSearchParams();
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState('HOY');
+
+    useEffect(() => {
+        const tab = searchParams.get('tab');
+        if (tab === 'incidencias') {
+            setView('INCIDENCIAS');
+        }
+    }, [searchParams]);
 
     const fetchTasks = async () => {
         setLoading(true);
@@ -135,12 +145,13 @@ export default function TaskBoard() {
             </div>
 
             {/* Views */}
-            <Tabs defaultValue="HOY" className="w-full flex-1 flex flex-col" onValueChange={setView}>
-                <TabsList className="grid w-full grid-cols-6 lg:w-[800px] mb-6">
-                    <TabsTrigger value="HOY">Hoy/Atrasadas ({getTodayTasks().length})</TabsTrigger>
-                    <TabsTrigger value="EN_CURSO">En Curso ({getInProgressTasks().length})</TabsTrigger>
-                    <TabsTrigger value="FUTURAS">Futuras ({getFutureTasks().length})</TabsTrigger>
-                    <TabsTrigger value="BLOQUEADAS">Bloqueadas ({getBlockedTasks().length})</TabsTrigger>
+            <Tabs value={view} className="w-full flex-1 flex flex-col" onValueChange={setView}>
+                <TabsList className="grid w-full grid-cols-7 lg:w-[900px] mb-6">
+                    <TabsTrigger value="HOY">Hoy</TabsTrigger>
+                    <TabsTrigger value="INCIDENCIAS">Incidencias</TabsTrigger>
+                    <TabsTrigger value="EN_CURSO">En Curso</TabsTrigger>
+                    <TabsTrigger value="FUTURAS">Futuras</TabsTrigger>
+                    <TabsTrigger value="BLOQUEADAS">Bloqueadas</TabsTrigger>
                     <TabsTrigger value="BACKLOG">Backlog</TabsTrigger>
                     <TabsTrigger value="PROYECTO">Proyectos</TabsTrigger>
                 </TabsList>
@@ -155,6 +166,16 @@ export default function TaskBoard() {
                                     <p>🎉 ¡Todo al día! No hay tareas urgentes.</p>
                                 </div>
                             )}
+                        </div>
+                    </TabsContent>
+
+                    <TabsContent value="INCIDENCIAS" className="mt-0">
+                        <div className="mb-4 bg-red-50 p-4 rounded-lg border border-red-100 flex items-center gap-2 text-red-700">
+                            <Filter className="w-5 h-5" />
+                            <span className="font-bold">Mostrando solo Incidencias Operativas</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {tasks.filter(t => t.tipo === 'OPERATIVA' && t.estado !== 'COMPLETADA' && t.estado !== 'CANCELADA').map(t => <TaskCard key={t.id} task={t} />)}
                         </div>
                     </TabsContent>
 
