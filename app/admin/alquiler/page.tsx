@@ -41,6 +41,7 @@ export default function AlquilerPage() {
     const [loading, setLoading] = useState(true);
     const [selectedPlaza, setSelectedPlaza] = useState<Plaza | null>(null);
     const [isRentModalOpen, setIsRentModalOpen] = useState(false);
+    const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
     // Form States
     const [selectedClientId, setSelectedClientId] = useState<string>('');
@@ -80,23 +81,40 @@ export default function AlquilerPage() {
 
     const handleCreateClient = async () => {
         if (!newClientName || !newClientPhone) return;
+        const newClient = await createClient(newClientName, newClientPhone);
+        if (newClient) {
+            setIsNewClientMode(false);
+            setNewClientName('');
+            setNewClientPhone('');
+        }
+    };
+
+    const handleStandaloneCreateClient = async () => {
+        const newClient = await createClient(newClientName, newClientPhone);
+        if (newClient) {
+            setIsClientModalOpen(false);
+            setNewClientName('');
+            setNewClientPhone('');
+        }
+    };
+
+    const createClient = async (nombre: string, telefono: string) => {
         try {
             const res = await fetch('/api/admin/alquiler/clientes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ nombre: newClientName, telefono: newClientPhone })
+                body: JSON.stringify({ nombre, telefono })
             });
             if (res.ok) {
                 const newClient = await res.json();
                 setClientes([...clientes, newClient]);
                 setSelectedClientId(newClient.id.toString());
-                setIsNewClientMode(false);
-                setNewClientName('');
-                setNewClientPhone('');
+                return newClient;
             }
         } catch (error) {
             console.error('Error creating client', error);
         }
+        return null;
     };
 
     const handleRent = async () => {
@@ -232,8 +250,11 @@ export default function AlquilerPage() {
                 {/* CLIENTES */}
                 <TabsContent value="clientes">
                     <Card>
-                        <CardHeader>
+                        <CardHeader className="flex flex-row items-center justify-between">
                             <CardTitle>Listado de Clientes</CardTitle>
+                            <Button onClick={() => setIsClientModalOpen(true)}>
+                                <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
+                            </Button>
                         </CardHeader>
                         <CardContent>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -251,6 +272,37 @@ export default function AlquilerPage() {
                             </div>
                         </CardContent>
                     </Card>
+
+                    <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Nuevo Cliente</DialogTitle>
+                                <DialogDescription>Añadir un nuevo cliente a la base de datos.</DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Nombre Completo</label>
+                                    <Input
+                                        placeholder="Nombre del cliente"
+                                        value={newClientName}
+                                        onChange={(e) => setNewClientName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Teléfono</label>
+                                    <Input
+                                        placeholder="Teléfono de contacto"
+                                        value={newClientPhone}
+                                        onChange={(e) => setNewClientPhone(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsClientModalOpen(false)}>Cancelar</Button>
+                                <Button onClick={handleStandaloneCreateClient} className="bg-blue-600 hover:bg-blue-700">Guardar Cliente</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </TabsContent>
 
                 {/* INFORMES */}
