@@ -10,6 +10,8 @@ import { es } from 'date-fns/locale';
 
 import TimelineView from '@/components/jornadas/TimelineView';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import EditUsoCamionDialog from '@/components/jornadas/EditUsoCamionDialog';
+import { Pencil } from 'lucide-react';
 
 function JornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
@@ -44,6 +46,40 @@ function JornadasContent() {
     const sortedDates = Object.keys(groupedJornadas).sort((a, b) => b.localeCompare(a));
 
     const [selectedJornada, setSelectedJornada] = useState<any>(null);
+    const [editingUso, setEditingUso] = useState<any>(null);
+
+    const handleSaveUso = async (id: number, data: any) => {
+        try {
+            const res = await fetch(`/api/usos-camion/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+
+            if (res.ok) {
+                // Refresh data
+                await fetchJornadas();
+                // Update selectedJornada if open
+                if (selectedJornada) {
+                    // Re-fetch only the selected jornada logic or just update local state?
+                    // Fetching all is easiest to ensure consistency.
+                    // We need to re-find the selectedJornada from the new list.
+                    // However, fetchJornadas updates 'jornadas' state asynchronously.
+                    // We can optimize by updating local state first.
+                    // Let's rely on re-fetching.
+                    const updatedRes = await fetch(`/api/jornadas?admin=true&${searchParams.toString()}`);
+                    if (updatedRes.ok) {
+                        const newJornadas = await updatedRes.json();
+                        setJornadas(newJornadas);
+                        const updatedSelected = newJornadas.find((j: any) => j.id === selectedJornada.id);
+                        if (updatedSelected) setSelectedJornada(updatedSelected);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error("Error updating usage:", error);
+        }
+    };
 
     const exportCSV = () => {
         const headers = ['ID', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado', 'KM Totales', 'Total Descargas', 'Total Viajes', 'Total Repostajes'];
@@ -285,6 +321,14 @@ function JornadasContent() {
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-lg font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded">{uso.camion?.matricula} {uso.camion?.modelo ? `(${uso.camion.modelo})` : ''}</span>
                                                             <span className="text-xs text-gray-400 font-mono">#{uso.id}</span>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                onClick={() => setEditingUso(uso)}
+                                                                className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
+                                                            >
+                                                                <Pencil className="w-3 h-3" />
+                                                            </Button>
                                                         </div>
                                                         <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
                                                             <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded">{format(new Date(uso.horaInicio), 'HH:mm')}</span>
@@ -343,6 +387,13 @@ function JornadasContent() {
                     </div>
                 </div>
             )}
+
+            <EditUsoCamionDialog
+                open={!!editingUso}
+                onOpenChange={(open) => !open && setEditingUso(null)}
+                usage={editingUso}
+                onSave={handleSaveUso}
+            />
         </div>
     );
 }
