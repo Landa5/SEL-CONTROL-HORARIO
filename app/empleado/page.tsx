@@ -18,6 +18,7 @@ import {
     DollarSign,
     FileText,
     CheckCircle,
+    ChevronRight,
     ChevronLeft,
     Droplet,
     User
