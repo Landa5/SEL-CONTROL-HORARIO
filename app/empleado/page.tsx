@@ -18,9 +18,9 @@ import {
     DollarSign,
     FileText,
     CheckCircle,
-    ChevronRight,
     ChevronLeft,
-    Droplet
+    Droplet,
+    User
 } from 'lucide-react';
 import EmployeeAbsenceView from '@/components/empleado/EmployeeAbsenceView';
 import EmployeeAbsenceSummary from '@/components/empleado/EmployeeAbsenceSummary';
