@@ -7,9 +7,10 @@ import { es } from 'date-fns/locale';
 import Link from 'next/link';
 
 interface FleetAlert {
-    truckId: number;
-    matricula: string;
-    type: string;
+    id: number;
+    entityName: string; // Matricula or Employee Name
+    entityType: 'TRUCK' | 'EMPLOYEE';
+    alertType: string; // ITV, ADR, DNI, etc.
     date: string | Date;
     isExpired: boolean;
 }
@@ -31,7 +32,7 @@ export default function FleetAlertsWidget({ alerts, hrefPrefix = '/admin' }: Fle
         <Card className="border-red-100 shadow-md overflow-hidden">
             <CardHeader className="bg-red-50 py-3 border-b border-red-100">
                 <CardTitle className="text-sm font-black text-red-700 flex items-center gap-2 uppercase tracking-tight">
-                    <ShieldAlert className="w-4 h-4" /> Alertas de Flota (Vencimientos)
+                    <ShieldAlert className="w-4 h-4" /> Alertas de Vencimientos
                 </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
@@ -39,18 +40,18 @@ export default function FleetAlertsWidget({ alerts, hrefPrefix = '/admin' }: Fle
                     {sortedAlerts.map((alert, i) => (
                         <Link
                             key={i}
-                            href={`${hrefPrefix}/camiones`}
+                            href={alert.entityType === 'TRUCK' ? `${hrefPrefix}/camiones` : `${hrefPrefix}/empleados`}
                             className="block p-4 hover:bg-gray-50 transition-colors group"
                         >
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
                                     <div className={`p-2 rounded-lg ${alert.isExpired ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
-                                        <Truck className="w-4 h-4" />
+                                        {alert.entityType === 'TRUCK' ? <Truck className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
                                     </div>
                                     <div>
-                                        <p className="text-sm font-black text-gray-900 leading-none group-hover:text-blue-600 transition-colors">{alert.matricula}</p>
+                                        <p className="text-sm font-black text-gray-900 leading-none group-hover:text-blue-600 transition-colors">{alert.entityName}</p>
                                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-1">
-                                            {alert.type} • {alert.isExpired ? 'CADUCADO' : 'Próximo vencimiento'}
+                                            {alert.alertType} • {alert.isExpired ? 'CADUCADO' : 'Próximo vencimiento'}
                                         </p>
                                     </div>
                                 </div>

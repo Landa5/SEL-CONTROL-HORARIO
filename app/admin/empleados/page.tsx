@@ -421,24 +421,23 @@ export default function AdminEmpleados() {
                                                 </div>
 
                                                 <div className="space-y-4">
-                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                    <label className="flex items-center gap-2 cursor-pointer opacity-50 pointer-events-none">
                                                         <input
                                                             type="checkbox"
-                                                            checked={formData.tieneAdr}
-                                                            onChange={e => handleInputChange('tieneAdr', e.target.checked)}
-                                                            className="w-4 h-4 text-orange-600 rounded"
+                                                            checked={true}
+                                                            readOnly
+                                                            className="w-4 h-4 text-orange-600 rounded bg-gray-100"
                                                         />
-                                                        <span className="font-bold text-gray-700">Tiene ADR (Mercancías Peligrosas)</span>
+                                                        <span className="font-bold text-gray-500">Tiene ADR (Obligatorio)</span>
                                                     </label>
 
-                                                    {formData.tieneAdr && (
-                                                        <Input
-                                                            label="Caducidad ADR"
-                                                            type="date"
-                                                            value={formData.adrCaducidad}
-                                                            onChange={e => handleInputChange('adrCaducidad', e.target.value)}
-                                                        />
-                                                    )}
+                                                    <Input
+                                                        label="Caducidad ADR"
+                                                        type="date"
+                                                        value={formData.adrCaducidad}
+                                                        onChange={e => handleInputChange('adrCaducidad', e.target.value)}
+                                                    />
+
                                                 </div>
                                             </div>
                                         )}

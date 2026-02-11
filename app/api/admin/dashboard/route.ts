@@ -69,6 +69,7 @@ export async function GET(request: Request) {
         const expirationThreshold = new Date();
         expirationThreshold.setDate(expirationThreshold.getDate() + 40);
 
+        // 1. TRUCKS
         const expiringTrucks = await prisma.camion.findMany({
             where: {
                 activo: true,
@@ -89,15 +90,15 @@ export async function GET(request: Request) {
             }
         });
 
-        // Filter and format the expirations that are actually upcoming/past
-        const upcomingExpirations = expiringTrucks.flatMap(truck => {
+        const truckAlerts = expiringTrucks.flatMap(truck => {
             const alerts: any[] = [];
             const check = (date: Date | null, type: string) => {
                 if (date && date <= expirationThreshold) {
                     alerts.push({
-                        truckId: truck.id,
-                        matricula: truck.matricula,
-                        type,
+                        id: truck.id,
+                        entityName: truck.matricula,
+                        entityType: 'TRUCK',
+                        alertType: type,
                         date,
                         isExpired: date < new Date()
                     });
@@ -109,6 +110,56 @@ export async function GET(request: Request) {
             check(truck.adrVencimiento, 'ADR');
             return alerts;
         });
+
+        // 2. EMPLOYEES (DNI, CARNET, ADR)
+        const expiringEmployees = await prisma.empleado.findMany({
+            where: {
+                activo: true,
+                perfilProfesional: {
+                    OR: [
+                        { dniCaducidad: { lte: expirationThreshold } },
+                        { carnetCaducidad: { lte: expirationThreshold } },
+                        { adrCaducidad: { lte: expirationThreshold } }
+                    ]
+                }
+            },
+            select: {
+                id: true,
+                nombre: true,
+                apellidos: true,
+                perfilProfesional: true
+            }
+        });
+
+        const employeeAlerts = expiringEmployees.flatMap(emp => {
+            const alerts: any[] = [];
+            const p = emp.perfilProfesional;
+            if (!p) return [];
+
+            const name = `${emp.nombre} ${emp.apellidos || ''}`.trim();
+
+            const check = (date: Date | null, type: string) => {
+                if (date && date <= expirationThreshold) {
+                    alerts.push({
+                        id: emp.id,
+                        entityName: name,
+                        entityType: 'EMPLOYEE',
+                        alertType: type,
+                        date,
+                        isExpired: date < new Date()
+                    });
+                }
+            };
+
+            check(p.dniCaducidad, 'DNI');
+            check(p.carnetCaducidad, `Carnet ${p.carnetTipo || ''}`);
+            check(p.adrCaducidad, 'ADR');
+            return alerts;
+        });
+
+        const upcomingExpirations = [...truckAlerts, ...employeeAlerts].sort((a, b) =>
+            new Date(a.date).getTime() - new Date(b.date).getTime()
+        );
 
         return NextResponse.json({
             activeEmployees,

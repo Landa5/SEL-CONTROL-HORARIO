@@ -68,9 +68,41 @@ export default function EmpleadoDashboard() {
         dniCaducidad: '',
         carnetTipo: '',
         carnetCaducidad: '',
-        tieneAdr: false,
+        tieneAdr: true,
         adrCaducidad: ''
     });
+
+    const [myAlerts, setMyAlerts] = useState<any[]>([]);
+
+    useEffect(() => {
+        if (profileData?.perfilProfesional) {
+            checkMyAlerts(profileData.perfilProfesional);
+        }
+    }, [profileData]);
+
+    const checkMyAlerts = (perf: any) => {
+        const newAlerts = [];
+        const now = new Date();
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() + 40);
+
+        const check = (dateStr: string | null, label: string) => {
+            if (!dateStr) return;
+            const d = new Date(dateStr);
+            if (d <= threshold) {
+                newAlerts.push({
+                    label,
+                    date: d,
+                    expired: d < now
+                });
+            }
+        };
+
+        check(perf.dniCaducidad, 'DNI');
+        check(perf.carnetCaducidad, 'Carnet Conducir');
+        check(perf.adrCaducidad, 'ADR');
+        setMyAlerts(newAlerts);
+    };
 
     useEffect(() => {
         const loadSession = async () => {
@@ -810,6 +842,29 @@ export default function EmpleadoDashboard() {
                                 }
                             }} className="space-y-6">
 
+
+                                {/* MY ALERTS SECTION */}
+                                {myAlerts.length > 0 && (
+                                    <div className="mb-6 space-y-2">
+                                        {myAlerts.map((alert, i) => (
+                                            <div key={i} className={`p-4 rounded-xl border flex items-center gap-4 ${alert.expired ? 'bg-red-50 border-red-200 text-red-800' : 'bg-orange-50 border-orange-200 text-orange-800'}`}>
+                                                <AlertTriangle className="w-6 h-6 shrink-0" />
+                                                <div className="flex-1">
+                                                    <p className="font-bold flex justify-between">
+                                                        <span>TU {alert.label} {alert.expired ? 'HA CADUCADO' : 'VA A CADUCAR'}</span>
+                                                        <span>{format(alert.date, 'dd/MM/yyyy')}</span>
+                                                    </p>
+                                                    <p className="text-sm">Por favor ve a "Mi Perfil" y actualiza la fecha si ya has renovado.</p>
+                                                </div>
+                                                <Button size="sm" onClick={() => setActiveSection('profile')} className={alert.expired ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-600 hover:bg-orange-700'}>
+                                                    Renovar
+                                                </Button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* TOP SECTION: URGENT ALERTS OR CURRENT STATUS */}
                                 {/* PERSONAL INFO */}
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-gray-50 rounded-xl">
                                     <div className="md:col-span-2">
@@ -894,25 +949,23 @@ export default function EmpleadoDashboard() {
                                         </div>
 
                                         <div className="space-y-4 pt-2 border-t border-orange-200">
-                                            <label className="flex items-center gap-2 cursor-pointer">
+                                            <div className="flex items-center gap-2 opacity-50 pointer-events-none">
                                                 <input
                                                     type="checkbox"
-                                                    checked={profileForm.tieneAdr}
-                                                    onChange={e => setProfileForm({ ...profileForm, tieneAdr: e.target.checked })}
+                                                    checked={true}
+                                                    readOnly
                                                     className="w-4 h-4 text-orange-600 rounded"
                                                 />
-                                                <span className="font-bold text-gray-700">Tengo ADR (Mercancías Peligrosas)</span>
-                                            </label>
+                                                <span className="font-bold text-gray-700">Tengo ADR (Obligatorio)</span>
+                                            </div>
 
-                                            {profileForm.tieneAdr && (
-                                                <Input
-                                                    label="Caducidad ADR"
-                                                    type="date"
-                                                    value={profileForm.adrCaducidad}
-                                                    onChange={e => setProfileForm({ ...profileForm, adrCaducidad: e.target.value })}
-                                                    required
-                                                />
-                                            )}
+                                            <Input
+                                                label="Caducidad ADR"
+                                                type="date"
+                                                value={profileForm.adrCaducidad}
+                                                onChange={e => setProfileForm({ ...profileForm, adrCaducidad: e.target.value })}
+                                                required
+                                            />
                                         </div>
                                     </div>
                                 )}
