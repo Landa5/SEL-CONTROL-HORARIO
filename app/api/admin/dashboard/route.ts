@@ -193,8 +193,4 @@ export async function GET(request: Request) {
     }
 }
 
-    } catch (error) {
-    console.error('GET /api/admin/dashboard error:', error);
-    return NextResponse.json({ error: 'Error interno' }, { status: 500 });
-}
-}
+
