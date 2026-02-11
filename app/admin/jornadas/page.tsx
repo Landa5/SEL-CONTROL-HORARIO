@@ -323,11 +323,12 @@ function JornadasContent() {
                                                             <span className="text-xs text-gray-400 font-mono">#{uso.id}</span>
                                                             <Button
                                                                 size="sm"
-                                                                variant="ghost"
+                                                                variant="outline"
                                                                 onClick={() => setEditingUso(uso)}
-                                                                className="h-6 w-6 p-0 text-gray-400 hover:text-blue-600"
+                                                                className="h-8 w-8 p-0 text-blue-600 border-blue-200 hover:bg-blue-50"
+                                                                title="Editar kilómetros y datos"
                                                             >
-                                                                <Pencil className="w-3 h-3" />
+                                                                <Pencil className="w-4 h-4" />
                                                             </Button>
                                                         </div>
                                                         <div className="flex items-center gap-2 mt-1 text-sm text-gray-600">
