@@ -4,7 +4,32 @@ import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { Users, Truck, Calendar, LayoutDashboard, LogOut, AlertCircle, BookOpen, FileText, TrendingUp, Menu, X } from 'lucide-react';
+import {
+    LayoutDashboard,
+    Users,
+    Calendar,
+    Clock,
+    BookOpen,
+    Euro,
+    Truck,
+    Wrench,
+    AlertTriangle,
+    Map,
+    FileText,
+    BarChart2,
+    Download,
+    FileCheck,
+    ShieldCheck,
+    PartyPopper,
+    Settings,
+    Coins,
+    UserCog,
+    LogOut,
+    Menu,
+    X,
+    ChevronDown,
+    ChevronRight
+} from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -22,6 +47,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const [session, setSession] = useState<Session | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+    // State for collapsible groups
+    const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
+        'Personas (RRHH)': true,
+        'Flota y Operaciones': true
+    });
+
     useEffect(() => {
         const fetchSession = async () => {
             try {
@@ -34,30 +65,65 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         fetchSession();
     }, []);
 
+    const toggleGroup = (group: string) => {
+        setOpenGroups(prev => ({ ...prev, [group]: !prev[group] }));
+    };
+
     const isOficina = session?.rol === 'OFICINA';
     const isAdmin = session?.rol === 'ADMIN';
     const roleLabel = isOficina ? 'Gestión de Oficina' : (isAdmin ? 'Panel de Administración' : 'Logística SEL');
     const shortRole = isOficina ? 'Oficina' : (isAdmin ? 'Admin' : 'SEL');
 
-    const navItems = [
+    // Mapped Structure
+    const navStructure = [
         {
-            group: 'General', items: [
-                { href: '/admin/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+            type: 'single',
+            href: '/admin/dashboard',
+            label: 'Dashboard',
+            icon: LayoutDashboard
+        },
+        {
+            type: 'group',
+            label: 'Personas (RRHH)',
+            items: [
                 { href: '/admin/empleados', label: 'Empleados', icon: Users },
-                { href: '/admin/camiones', label: 'Camiones', icon: Truck },
-                { href: '/admin/tareas', label: 'CRM y Tareas', icon: AlertCircle }, // Renamed to "CRM y Tareas" for visibility
-                { href: '/admin/jornadas', label: 'Informes de Días', icon: FileText },
-                { href: '/admin/nominas', label: 'Nóminas', icon: TrendingUp },
-                { href: '/admin/formacion', label: 'Formación Interna', icon: BookOpen },
+                { href: '/admin/ausencias', label: 'Ausencias y Vacaciones', icon: Calendar },
+                { href: '/admin/jornadas', label: 'Jornada / Fichajes', icon: Clock },
+                { href: '/admin/formacion', label: 'Formación', icon: BookOpen },
+                { href: '/admin/nominas', label: 'Nóminas', icon: Euro },
             ]
         },
         {
-            group: 'Ausencias y Festivos', items: [
-                { href: '/admin/ausencias', label: 'Ausencias y Vacaciones', icon: Calendar },
-                { href: '/admin/fiestas', label: 'Fiestas Locales', icon: Calendar },
-                { href: '/admin/fiestas/reporte', label: 'Reporte Festivos', icon: LayoutDashboard },
+            type: 'group',
+            label: 'Flota y Operaciones',
+            items: [
+                { href: '/admin/camiones', label: 'Camiones', icon: Truck },
+                { href: '/admin/tareas', label: 'Taller y Mantenimiento', icon: Wrench },
+                { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
+                { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
+                { href: '#', label: 'Informes Operativos', icon: FileText }, // Placeholder
             ]
         },
+        {
+            type: 'group',
+            label: 'Control y Auditoría',
+            items: [
+                { href: '#', label: 'Informes Mensuales', icon: BarChart2 }, // Placeholder
+                { href: '#', label: 'Exportaciones Gestoría', icon: Download }, // Placeholder
+                { href: '#', label: 'Registro Jornada Legal', icon: FileCheck }, // Placeholder
+                { href: '/admin/auditoria', label: 'Auditoría Interna', icon: ShieldCheck },
+            ]
+        },
+        {
+            type: 'group',
+            label: 'Configuración',
+            items: [
+                { href: '/admin/fiestas', label: 'Fiestas Locales', icon: PartyPopper },
+                { href: '#', label: 'Parámetros Productividad', icon: Settings }, // Placeholder
+                { href: '#', label: 'Tarifas Incentivos', icon: Coins }, // Placeholder
+                { href: '#', label: 'Roles y Permisos', icon: UserCog }, // Placeholder
+            ]
+        }
     ];
 
     const handleLogout = async () => {
@@ -67,36 +133,67 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
     return (
         <div className="flex min-h-screen bg-gray-100">
-            {/* Sidebar */}
-            <aside className="w-64 bg-blue-900 text-white flex flex-col hidden md:flex">
-                <div className="p-6 border-b border-blue-800 bg-white text-center">
-                    <img src="/logo.jpg" alt="SEL Logo" className="h-16 w-auto mx-auto object-contain" />
-                    <p className="text-[10px] text-blue-900 font-black mt-2 uppercase tracking-tighter">{roleLabel}</p>
-                </div>
-                <nav className="flex-1 p-4 space-y-6 overflow-y-auto">
-                    {navItems.map((group, idx) => (
-                        <div key={idx} className="space-y-2">
-                            <h3 className="px-3 text-[10px] font-bold text-blue-300 uppercase tracking-widest">
-                                {group.group}
-                            </h3>
-                            <div className="space-y-1">
-                                {group.items.map((item) => {
-                                    const Icon = item.icon;
-                                    const isActive = pathname.startsWith(item.href);
-                                    return (
-                                        <Link key={item.href} href={item.href}>
-                                            <div className={`flex items-center gap-3 p-2.5 rounded transition-colors text-sm ${isActive ? 'bg-blue-700 text-white font-bold' : 'text-blue-100 hover:bg-blue-800'}`}>
-                                                <Icon className="w-4 h-4 opacity-80" />
-                                                {item.label}
-                                            </div>
-                                        </Link>
-                                    );
-                                })}
-                            </div>
+            {/* Sidebar Desktop */}
+            <aside className="w-64 bg-slate-900 text-white flex flex-col hidden md:flex h-screen sticky top-0">
+                <div className="p-6 border-b border-slate-800 bg-slate-900 text-center shrink-0">
+                    <div className="flex justify-center mb-2">
+                        <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center font-black text-xl italic tracking-tighter">
+                            SEL
                         </div>
-                    ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{roleLabel}</p>
+                </div>
+
+                <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
+                    {navStructure.map((item: any, idx) => {
+                        if (item.type === 'single') {
+                            const isActive = pathname === item.href;
+                            const Icon = item.icon;
+                            return (
+                                <Link key={idx} href={item.href}>
+                                    <div className={`flex items-center gap-3 p-3 rounded-lg transition-all mb-4 ${isActive ? 'bg-blue-600 text-white font-bold shadow-lg' : 'text-slate-300 hover:bg-slate-800 hover:text-white'}`}>
+                                        <Icon className="w-5 h-5" />
+                                        <span className="text-sm">{item.label}</span>
+                                    </div>
+                                </Link>
+                            );
+                        } else {
+                            const isOpen = openGroups[item.label];
+                            const containsActive = item.items.some((sub: any) => pathname.startsWith(sub.href) && sub.href !== '#');
+
+                            return (
+                                <div key={idx} className="mb-2">
+                                    <button
+                                        onClick={() => toggleGroup(item.label)}
+                                        className={`w-full flex items-center justify-between p-2 rounded-lg transition-colors ${containsActive ? 'text-blue-400' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+                                    >
+                                        <span className="text-xs font-bold uppercase tracking-wider">{item.label}</span>
+                                        {isOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                                    </button>
+
+                                    {isOpen && (
+                                        <div className="mt-1 space-y-0.5 ml-2 border-l border-slate-700 pl-2">
+                                            {item.items.map((sub: any, sIdx: number) => {
+                                                const SubIcon = sub.icon;
+                                                const isSubActive = pathname === sub.href;
+                                                return (
+                                                    <Link key={sIdx} href={sub.href}>
+                                                        <div className={`flex items-center gap-3 p-2 rounded-md text-sm transition-colors ${isSubActive ? 'bg-blue-900/50 text-blue-300 font-medium' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'}`}>
+                                                            <SubIcon className="w-4 h-4 opacity-70" />
+                                                            <span>{sub.label}</span>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        }
+                    })}
                 </nav>
-                <div className="p-4 border-t border-blue-800 space-y-4">
+
+                <div className="p-4 border-t border-slate-800 shrink-0">
                     <QuickIncidentReport />
                 </div>
             </aside>
@@ -137,44 +234,42 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
                 {/* Mobile Menu Overlay */}
                 {mobileMenuOpen && (
-                    <div className="fixed inset-0 z-10 bg-blue-900 text-white pt-16 md:hidden overflow-y-auto animate-in fade-in slide-in-from-left-10 duration-200">
+                    <div className="fixed inset-0 z-50 bg-slate-900 text-white pt-16 md:hidden overflow-y-auto animate-in fade-in slide-in-from-left-10 duration-200">
                         <div className="p-6">
                             <div className="mb-8 text-center">
-                                <p className="text-[10px] text-blue-300 font-black uppercase tracking-tighter">ESTÁS EN</p>
-                                <h2 className="text-xl font-bold uppercase tracking-widest">{roleLabel}</h2>
+                                <p className="text-[10px] text-slate-400 font-black uppercase tracking-tighter">ESTÁS EN</p>
+                                <h2 className="text-xl font-bold uppercase tracking-widest text-white">{roleLabel}</h2>
                             </div>
-                            <nav className="space-y-8">
-                                {navItems.map((group, idx) => (
-                                    <div key={idx} className="space-y-3">
-                                        <h3 className="px-3 text-xs font-bold text-blue-300 uppercase tracking-widest border-b border-blue-800 pb-2">
-                                            {group.group}
-                                        </h3>
-                                        <div className="space-y-2">
-                                            {group.items.map((item) => {
-                                                const Icon = item.icon;
-                                                const isActive = pathname.startsWith(item.href);
-                                                return (
-                                                    <Link
-                                                        key={item.href}
-                                                        href={item.href}
-                                                        onClick={() => setMobileMenuOpen(false)}
-                                                    >
-                                                        <div className={`flex items-center gap-4 p-4 rounded-xl transition-all ${isActive ? 'bg-blue-700 text-white font-bold shadow-lg' : 'text-blue-100 hover:bg-blue-800'}`}>
-                                                            <div className={`p-2 rounded-lg ${isActive ? 'bg-blue-600' : 'bg-blue-800'}`}>
-                                                                <Icon className="w-5 h-5" />
+                            <nav className="space-y-6">
+                                {navStructure.map((item: any, idx) => (
+                                    <div key={idx}>
+                                        {item.type === 'single' ? (
+                                            <Link href={item.href} onClick={() => setMobileMenuOpen(false)}>
+                                                <div className="flex items-center gap-4 p-4 rounded-xl bg-blue-600 text-white font-bold shadow-lg">
+                                                    <item.icon className="w-6 h-6" />
+                                                    <span className="text-lg">{item.label}</span>
+                                                </div>
+                                            </Link>
+                                        ) : (
+                                            <div className="space-y-3">
+                                                <h3 className="px-2 text-xs font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800 pb-2">
+                                                    {item.label}
+                                                </h3>
+                                                <div className="space-y-2 pl-2">
+                                                    {item.items.map((sub: any, sIdx: number) => (
+                                                        <Link key={sIdx} href={sub.href} onClick={() => setMobileMenuOpen(false)}>
+                                                            <div className="flex items-center gap-4 p-3 rounded-lg text-slate-300 hover:bg-slate-800">
+                                                                <sub.icon className="w-5 h-5 opacity-70" />
+                                                                <span className="text-base">{sub.label}</span>
                                                             </div>
-                                                            <span className="text-lg">{item.label}</span>
-                                                        </div>
-                                                    </Link>
-                                                );
-                                            })}
-                                        </div>
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </nav>
-                            <div className="mt-8 pt-8 border-t border-blue-800">
-                                <QuickIncidentReport />
-                            </div>
                         </div>
                     </div>
                 )}

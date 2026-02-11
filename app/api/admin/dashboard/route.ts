@@ -14,13 +14,15 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
         }
 
-        // DATES
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-        // SECTION 1: CRITICAL STATUS
-        // 1.1 Urgent Tasks (High Priority & Open)
+        // ==========================================
+        // SECTION 1: CRITICAL GLOBAL (Action required)
+        // ==========================================
+
+        // 1.1 Critical Tasks (High Priority or averias)
         const criticalTasks = await prisma.tarea.findMany({
             where: {
                 estado: { notIn: ['COMPLETADA', 'CANCELADA'] },
@@ -30,63 +32,21 @@ export async function GET(request: Request) {
             take: 5
         });
 
-        // 1.2 Pending Urgent Absences (Starting soon or already started and pending)
-        const criticalAbsences = await prisma.ausencia.findMany({
+        // 1.2 Urgent Absences (Pending & starting soon)
+        const urgentAbsences = await prisma.ausencia.findMany({
             where: {
                 estado: 'PENDIENTE',
-                fechaInicio: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) } // Next 7 days
+                fechaInicio: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) }
             },
             include: { empleado: { select: { nombre: true, apellidos: true } } },
             take: 5
         });
 
-        // 1.3 Critical Expirations (< 7 days) logic below...
-
-        // SECTION 2: OPERATIONS TODAY
-        const activeEmployees = await prisma.empleado.count({ where: { activo: true } });
-        const workingNow = await prisma.jornadaLaboral.count({ where: { estado: 'TRABAJANDO' } });
-        const driversOnRoute = await prisma.jornadaLaboral.count({
-            where: {
-                estado: 'TRABAJANDO',
-                empleado: { rol: 'CONDUCTOR' }
-            }
-        });
-        const incidentsToday = await prisma.tarea.count({
-            where: { createdAt: { gte: startOfToday } }
-        });
-
-        // SECTION 3: MONTHLY PERFORMANCE
-        const monthlyHoursAgg = await prisma.jornadaLaboral.aggregate({
-            where: { fecha: { gte: startOfMonth }, estado: 'CERRADA' },
-            _sum: { totalHoras: true }
-        });
-        const totalMonthlyHours = monthlyHoursAgg._sum.totalHoras || 0;
-
-        const monthlyKmAgg = await prisma.usoCamion.aggregate({
-            where: { horaInicio: { gte: startOfMonth } },
-            _sum: { kmRecorridos: true }
-        });
-        const totalMonthlyKm = monthlyKmAgg._sum.kmRecorridos || 0;
-
-        // KPI Calculations
-        const productivity = activeEmployees > 0 ? (totalMonthlyHours / activeEmployees) : 0; // Hours/Emp
-        const estimatedLaborCost = totalMonthlyHours * 15; // Placeholder val
-
-        // Absenteeism (Days of absence this month)
-        const absencesThisMonth = await prisma.ausencia.count({ // Simplified count of records
-            where: {
-                fechaInicio: { gte: startOfMonth }
-            }
-        });
-        const absenteeismPct = activeEmployees > 0 ? ((absencesThisMonth / (activeEmployees * 20)) * 100) : 0; // Approx
-
-        // SECTION 4: RISK & COMPLIANCE (Expirations)
+        // 1.3 Expirations (< 15 days)
         const expirationThreshold = new Date();
-        expirationThreshold.setDate(expirationThreshold.getDate() + 40); // 40 days lookahead for Risks
-        const criticalThreshold = new Date();
-        criticalThreshold.setDate(criticalThreshold.getDate() + 7); // 7 days for Critical
+        expirationThreshold.setDate(expirationThreshold.getDate() + 15);
 
-        // Trucks
+        // Fetch Trucks Expirations
         const expiringTrucks = await prisma.camion.findMany({
             where: {
                 activo: true,
@@ -100,7 +60,7 @@ export async function GET(request: Request) {
             select: { id: true, matricula: true, itvVencimiento: true, seguroVencimiento: true, tacografoVencimiento: true, adrVencimiento: true }
         });
 
-        // Employees
+        // Fetch Employees Expirations
         const expiringEmployees = await prisma.empleado.findMany({
             where: {
                 activo: true,
@@ -115,65 +75,133 @@ export async function GET(request: Request) {
             select: { id: true, nombre: true, apellidos: true, perfilProfesional: true }
         });
 
-        // Process Expirations into Critical vs Risk
-        const criticalExpirations: any[] = [];
-        const riskExpirations: any[] = [];
+        const criticalAlerts: any[] = [];
 
-        const processAlert = (date: Date | null, type: string, entity: string, id: number, entityType: string) => {
+        // Helper to push alerts
+        const pushAlert = (date: Date | null, type: string, text: string, id: number, entity: 'TRUCK' | 'EMPLOYEE') => {
             if (!date) return;
-            const isExpired = date < now;
-            const isCritical = date <= criticalThreshold;
-
-            const alert = {
-                id,
-                entityName: entity,
-                entityType,
-                alertType: type,
-                date,
-                isExpired,
-                daysRemaining: Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
-            };
-
-            if (isCritical || isExpired) {
-                criticalExpirations.push(alert);
-            } else {
-                riskExpirations.push(alert);
+            // Only push if < 15 days
+            if (date <= expirationThreshold) {
+                const days = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                criticalAlerts.push({
+                    id,
+                    type: 'VENCIMIENTO',
+                    message: `${type} ${days < 0 ? 'CADUCADO' : `vence en ${days} días`}`,
+                    entity: text,
+                    entityType: entity,
+                    severity: days < 0 ? 'CRITICAL' : 'WARNING'
+                });
             }
         };
 
         expiringTrucks.forEach(t => {
-            processAlert(t.itvVencimiento, 'ITV', t.matricula, t.id, 'TRUCK');
-            processAlert(t.seguroVencimiento, 'Seguro', t.matricula, t.id, 'TRUCK');
-            processAlert(t.tacografoVencimiento, 'Tacógrafo', t.matricula, t.id, 'TRUCK');
-            processAlert(t.adrVencimiento, 'ADR', t.matricula, t.id, 'TRUCK');
+            pushAlert(t.itvVencimiento, 'ITV', t.matricula, t.id, 'TRUCK');
+            pushAlert(t.seguroVencimiento, 'Seguro', t.matricula, t.id, 'TRUCK');
+            pushAlert(t.tacografoVencimiento, 'Tacógrafo', t.matricula, t.id, 'TRUCK');
+            pushAlert(t.adrVencimiento, 'ADR', t.matricula, t.id, 'TRUCK');
         });
 
         expiringEmployees.forEach(e => {
-            const p = e.perfilProfesional;
-            if (p) {
-                const name = `${e.nombre} ${e.apellidos || ''}`.trim();
-                processAlert(p.dniCaducidad, 'DNI', name, e.id, 'EMPLOYEE');
-                processAlert(p.carnetCaducidad, 'Carnet', name, e.id, 'EMPLOYEE');
-                processAlert(p.adrCaducidad, 'ADR', name, e.id, 'EMPLOYEE');
+            if (e.perfilProfesional) {
+                const name = `${e.nombre} ${e.apellidos || ''}`;
+                pushAlert(e.perfilProfesional.dniCaducidad, 'DNI', name, e.id, 'EMPLOYEE');
+                pushAlert(e.perfilProfesional.carnetCaducidad, 'Carnet', name, e.id, 'EMPLOYEE');
+                pushAlert(e.perfilProfesional.adrCaducidad, 'ADR', name, e.id, 'EMPLOYEE');
             }
         });
 
-        // Sort
-        criticalExpirations.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-        riskExpirations.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // ==========================================
+        // SECTION 2: OPERATION TODAY
+        // ==========================================
+        const workingNow = await prisma.jornadaLaboral.count({ where: { estado: 'TRABAJANDO' } });
 
+        // Active "Uses" of trucks today (implies trucks on route)
+        const activeTrucks = await prisma.usoCamion.count({
+            where: {
+                horaFin: null, // Still active
+                horaInicio: { gte: startOfToday }
+            }
+        });
+
+        const incidentsToday = await prisma.tarea.count({
+            where: { createdAt: { gte: startOfToday }, tipo: 'OPERATIVA' }
+        });
+
+        const absentToday = await prisma.ausencia.count({
+            where: {
+                fechaInicio: { lte: now },
+                fechaFin: { gte: now },
+                estado: 'APROBADA'
+            }
+        });
+
+        // ==========================================
+        // SECTION 3: MONTHLY PERFORMANCE
+        // ==========================================
+        const monthlyHoursAgg = await prisma.jornadaLaboral.aggregate({
+            where: { fecha: { gte: startOfMonth }, estado: 'CERRADA' },
+            _sum: { totalHoras: true }
+        });
+        const totalMonthlyHours = monthlyHoursAgg._sum.totalHoras || 0;
+
+        const monthlyKmAgg = await prisma.usoCamion.aggregate({
+            where: { horaInicio: { gte: startOfMonth } },
+            _sum: { kmRecorridos: true }
+        });
+        const totalMonthlyKm = monthlyKmAgg._sum.kmRecorridos || 0;
+
+        const activeEmployeesCount = await prisma.empleado.count({ where: { activo: true } });
+
+        // Fake calculation for "Coste Laboral Estimado" (Simplification)
+        const estimatedLaborCost = totalMonthlyHours * 14.5; // Example hourly rate avg
+
+        const productivity = activeEmployeesCount > 0 ? (totalMonthlyHours / activeEmployeesCount) : 0;
+
+        // Absenteeism calculation
+        const absencesThisMonth = await prisma.ausencia.count({
+            where: { fechaInicio: { gte: startOfMonth } }
+        });
+        const absenteeismPct = activeEmployeesCount > 0 ? ((absencesThisMonth / (activeEmployeesCount * 22)) * 100) : 0;
+
+
+        // ==========================================
+        // SECTION 4: CONTROL & COMPLIANCE
+        // ==========================================
+
+        // RRHH: Contracts/Docs expiring soon (using Documento model from Phase 10)
+        const rrhhDocsPending = await prisma.documento.count({
+            where: {
+                tipo: 'CONTRATO',
+                fechaCaducidad: { lte: expirationThreshold } // reusing 15 days threshold
+            }
+        });
+
+        // Flota: Maintenance Next
+        const nextMaintenances = await prisma.mantenimientoProximo.count({
+            where: { estado: 'PROGRAMADO' }
+        });
+
+        // Admin: Payrolls Drafting
+        const pendingPayrolls = await prisma.nominaMes.count({
+            where: { estado: 'BORRADOR' }
+        });
+
+
+        // ==========================================
+        // BUILD RESPONSE
+        // ==========================================
         return NextResponse.json({
             section1: {
                 criticalTasks,
-                criticalAbsences,
-                criticalExpirations,
-                isStable: criticalTasks.length === 0 && criticalAbsences.length === 0 && criticalExpirations.length === 0
+                urgentAbsences,
+                criticalAlerts, // Combined expirations
+                isStable: criticalTasks.length === 0 && urgentAbsences.length === 0 && criticalAlerts.length === 0
             },
             section2: {
                 workingNow,
-                driversOnRoute,
-                activeTrucks: await prisma.camion.count({ where: { activo: true } }),
-                incidentsToday
+                activeTrucks,
+                incidentsToday,
+                absentToday
             },
             section3: {
                 totalMonthlyHours,
@@ -183,7 +211,18 @@ export async function GET(request: Request) {
                 absenteeismPct: parseFloat(absenteeismPct.toFixed(1))
             },
             section4: {
-                riskExpirations
+                rrhh: {
+                    docsExpiring: rrhhDocsPending,
+                    trainingPending: 0 // Placeholder
+                },
+                flota: {
+                    maintenanceNext: nextMaintenances,
+                    docsExpiring: expiringTrucks.length // Reuse count
+                },
+                admin: {
+                    payrollsPending: pendingPayrolls,
+                    accountingIssues: 0 // Placeholder
+                }
             }
         });
 
