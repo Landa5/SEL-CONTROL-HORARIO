@@ -2,7 +2,21 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 
-export async function GET() {
+export async function GET(request: Request) {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+
+    if (id) {
+        const empleado = await prisma.empleado.findUnique({
+            where: { id: parseInt(id) },
+            include: { perfilProfesional: true }
+        });
+        if (!empleado) return NextResponse.json({ error: 'Empleado no encontrado' }, { status: 404 });
+
+        const { password, ...safe } = empleado;
+        return NextResponse.json(safe);
+    }
+
     const empleados = await prisma.empleado.findMany({
         orderBy: { nombre: 'asc' },
         include: { perfilProfesional: true }

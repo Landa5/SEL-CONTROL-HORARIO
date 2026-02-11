@@ -41,7 +41,7 @@ export default function EmpleadoDashboard() {
     const [monthlyDetails, setMonthlyDetails] = useState<any[]>([]);
 
     // View control
-    const [activeSection, setActiveSection] = useState<'summary' | 'jornada' | 'vehiculo' | 'vacaciones' | 'taller' | 'formacion' | 'payroll'>('summary');
+    const [activeSection, setActiveSection] = useState<'summary' | 'jornada' | 'vehiculo' | 'vacaciones' | 'taller' | 'formacion' | 'profile'>('summary');
 
     // Form states
     const [observaciones, setObservaciones] = useState('');
@@ -55,6 +55,21 @@ export default function EmpleadoDashboard() {
     const [conflictData, setConflictData] = useState<any>(null);
     const [showConflictModal, setShowConflictModal] = useState(false);
     const [conflictPhoto, setConflictPhoto] = useState<string>('');
+
+    // Profile State
+    const [profileData, setProfileData] = useState<any>(null);
+    const [profileForm, setProfileForm] = useState<any>({
+        email: '',
+        telefono: '',
+        direccion: '',
+        password: '',
+        // Docs
+        dniCaducidad: '',
+        carnetTipo: '',
+        carnetCaducidad: '',
+        tieneAdr: false,
+        adrCaducidad: ''
+    });
 
     useEffect(() => {
         const loadSession = async () => {
@@ -115,6 +130,35 @@ export default function EmpleadoDashboard() {
     useEffect(() => {
         if (selectedCamion) fetchUltimoKm(selectedCamion);
     }, [selectedCamion]);
+
+    useEffect(() => {
+        if (activeSection === 'profile' && session?.id) {
+            fetchProfile();
+        }
+    }, [activeSection, session]);
+
+    const fetchProfile = async () => {
+        try {
+            const res = await fetch(`/api/empleados?id=${session.id}`);
+            if (res.ok) {
+                const data = await res.json();
+                setProfileData(data);
+                setProfileForm({
+                    email: data.email || '',
+                    telefono: data.telefono || '',
+                    direccion: data.direccion || '',
+                    password: '',
+                    dniCaducidad: data.perfilProfesional?.dniCaducidad ? new Date(data.perfilProfesional.dniCaducidad).toISOString().split('T')[0] : '',
+                    carnetTipo: data.perfilProfesional?.carnetTipo || '',
+                    carnetCaducidad: data.perfilProfesional?.carnetCaducidad ? new Date(data.perfilProfesional.carnetCaducidad).toISOString().split('T')[0] : '',
+                    tieneAdr: data.perfilProfesional?.tieneAdr || false,
+                    adrCaducidad: data.perfilProfesional?.adrCaducidad ? new Date(data.perfilProfesional.adrCaducidad).toISOString().split('T')[0] : ''
+                });
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    };
 
     const fetchUltimoKm = async (camionId: string) => {
         const res = await fetch(`/api/turnos/ultimo-km?camionId=${camionId}`);
@@ -303,7 +347,7 @@ export default function EmpleadoDashboard() {
         { id: 'vacaciones', label: 'Vacaciones/Bajas', icon: Calendar },
         { id: 'taller', label: 'Reportar Avería', icon: AlertTriangle, badgeCount: tareas.length },
         { id: 'formacion', label: 'Formación', icon: BookOpen },
-        { id: 'payroll', label: 'Mi Nómina', icon: DollarSign },
+        { id: 'profile', label: 'Mi Perfil', icon: User },
         ...(session?.rol === 'ADMIN' ? [{ id: 'admin-back', label: 'Panel Admon', icon: LayoutDashboard }] : []),
         ...(session?.rol === 'OFICINA' ? [{ id: 'office-back', label: 'Panel Oficina', icon: LayoutDashboard }] : []),
     ];
@@ -716,37 +760,168 @@ export default function EmpleadoDashboard() {
                 </div>
             )}
 
-            {activeSection === 'payroll' && (
-                <div className="space-y-6 animate-in slide-in-from-right-4 fade-in duration-300">
-                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                        <DollarSign className="w-6 h-6 text-green-600" />
-                        Mis Variables y Nómina
-                    </h2>
 
-                    <Card>
+            {activeSection === 'profile' && (
+                <div className="max-w-4xl mx-auto animate-in slide-in-from-right-4 fade-in duration-300">
+                    <Card className="mb-6">
                         <CardHeader>
-                            <CardTitle>Historial de Nóminas</CardTitle>
+                            <CardTitle className="flex items-center gap-2">
+                                <User className="w-6 h-6 text-blue-600" /> Mi Perfil y Documentación
+                            </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-2">
-                                {monthlyStats.map((stat: any) => (
-                                    <div key={stat.month} className="p-4 border rounded hover:bg-gray-50 flex justify-between items-center transition-colors">
-                                        <div>
-                                            <p className="font-bold capitalize">{format(new Date(stat.month + '-01'), 'MMMM yyyy', { locale: es })}</p>
-                                            <p className="text-sm text-gray-500">{stat.jornadasCount} días registrados</p>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
+                                if (!session?.id) return;
+
+                                const payload: any = {
+                                    id: session.id,
+                                    // Preserve original read-only fields
+                                    nombre: profileData?.nombre,
+                                    apellidos: profileData?.apellidos,
+                                    dni: profileData?.dni,
+                                    rol: session.rol,
+                                    // Update editable fields
+                                    email: profileForm.email,
+                                    telefono: profileForm.telefono,
+                                    direccion: profileForm.direccion,
+                                    // Docs
+                                    dniCaducidad: profileForm.dniCaducidad,
+                                    carnetTipo: profileForm.carnetTipo,
+                                    carnetCaducidad: profileForm.carnetCaducidad,
+                                    tieneAdr: profileForm.tieneAdr,
+                                    adrCaducidad: profileForm.adrCaducidad
+                                };
+
+                                if (profileForm.password) payload.password = profileForm.password;
+
+                                const res = await fetch('/api/empleados', {
+                                    method: 'PUT',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify(payload)
+                                });
+
+                                if (res.ok) {
+                                    alert('Perfil actualizado correctamente');
+                                    setProfileForm(prev => ({ ...prev, password: '' })); // Clear password
+                                } else {
+                                    alert('Error al actualizar perfil');
+                                }
+                            }} className="space-y-6">
+
+                                {/* PERSONAL INFO */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-gray-50 rounded-xl">
+                                    <div className="md:col-span-2">
+                                        <h3 className="font-bold text-gray-700 mb-2">Datos Personales</h3>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-bold text-gray-500">Nombre Completo</label>
+                                        <Input value={`${profileData?.nombre || ''} ${profileData?.apellidos || ''}`} disabled className="bg-gray-200" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-bold text-gray-500">DNI</label>
+                                        <Input value={profileData?.dni || ''} disabled className="bg-gray-200" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-bold text-gray-700">Email</label>
+                                        <Input value={profileForm.email} onChange={e => setProfileForm({ ...profileForm, email: e.target.value })} type="email" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-sm font-bold text-gray-700">Teléfono</label>
+                                        <Input value={profileForm.telefono} onChange={e => setProfileForm({ ...profileForm, telefono: e.target.value })} />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <label className="text-sm font-bold text-gray-700">Dirección</label>
+                                        <Input value={profileForm.direccion} onChange={e => setProfileForm({ ...profileForm, direccion: e.target.value })} />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <label className="text-sm font-bold text-yellow-600">Cambiar Contraseña (Opcional)</label>
+                                        <Input
+                                            type="password"
+                                            placeholder="Dejar vacío para mantener la actual"
+                                            value={profileForm.password}
+                                            onChange={e => setProfileForm({ ...profileForm, password: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* PROFESSIONAL INFO (Drivers/Mechanics) */}
+                                {isConductor && (
+                                    <div className="space-y-6 p-4 bg-orange-50 rounded-xl border border-orange-100">
+                                        <div className="flex items-center gap-2 text-orange-800">
+                                            <div className="p-2 bg-orange-200 rounded-lg">
+                                                <Truck className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold">Documentación Profesional</h3>
+                                                <p className="text-xs">Mantén actualizada la fecha de caducidad de tus carnets.</p>
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            {/* Note: We need to fetch the actual payroll status/total, which comes from NominaMes, not computed monthlyStats */
-                                             /* Since we don't have it here, we might need to fetch it or just redirect to a detail page. */
-                                             /* Ideally, we should fetch payroll data. */}
-                                            <Button variant="outline" size="sm" onClick={() => router.push(`/empleado/nomina/${stat.month.split('-')[0]}/${stat.month.split('-')[1]}`)}>
-                                                Ver Detalle
-                                            </Button>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <Input
+                                                label="Caducidad DNI"
+                                                type="date"
+                                                value={profileForm.dniCaducidad}
+                                                onChange={e => setProfileForm({ ...profileForm, dniCaducidad: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-1">Tipo de Carnet</label>
+                                                <select
+                                                    value={profileForm.carnetTipo}
+                                                    onChange={e => setProfileForm({ ...profileForm, carnetTipo: e.target.value })}
+                                                    className="w-full p-2 border border-gray-300 rounded-lg bg-white"
+                                                    required
+                                                >
+                                                    <option value="">Selecciona...</option>
+                                                    <option value="C+E">C+E</option>
+                                                    <option value="C">C</option>
+                                                    <option value="C1">C1</option>
+                                                </select>
+                                            </div>
+                                            <Input
+                                                label="Caducidad Carnet"
+                                                type="date"
+                                                value={profileForm.carnetCaducidad}
+                                                onChange={e => setProfileForm({ ...profileForm, carnetCaducidad: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+
+                                        <div className="space-y-4 pt-2 border-t border-orange-200">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={profileForm.tieneAdr}
+                                                    onChange={e => setProfileForm({ ...profileForm, tieneAdr: e.target.checked })}
+                                                    className="w-4 h-4 text-orange-600 rounded"
+                                                />
+                                                <span className="font-bold text-gray-700">Tengo ADR (Mercancías Peligrosas)</span>
+                                            </label>
+
+                                            {profileForm.tieneAdr && (
+                                                <Input
+                                                    label="Caducidad ADR"
+                                                    type="date"
+                                                    value={profileForm.adrCaducidad}
+                                                    onChange={e => setProfileForm({ ...profileForm, adrCaducidad: e.target.value })}
+                                                    required
+                                                />
+                                            )}
                                         </div>
                                     </div>
-                                ))}
-                                {monthlyStats.length === 0 && <p className="text-gray-500">No hay registros.</p>}
-                            </div>
+                                )}
+
+                                <div className="flex justify-end pt-4">
+                                    <Button type="submit" size="lg" className="bg-blue-600 hover:bg-blue-700 font-bold shadow-lg">
+                                        Guardar Cambios
+                                    </Button>
+                                </div>
+                            </form>
                         </CardContent>
                     </Card>
                 </div>
