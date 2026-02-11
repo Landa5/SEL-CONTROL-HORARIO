@@ -32,7 +32,8 @@ export default function EditUsoCamionDialog({
         kmFinal: 0,
         descargasCount: 0,
         viajesCount: 0,
-        litrosRepostados: 0
+        litrosRepostados: 0,
+        fotoKmInicial: ''
     });
 
     useEffect(() => {
@@ -42,7 +43,8 @@ export default function EditUsoCamionDialog({
                 kmFinal: usage.kmFinal || 0,
                 descargasCount: usage.descargasCount || usage.descargas?.length || 0,
                 viajesCount: usage.viajesCount || 0,
-                litrosRepostados: usage.litrosRepostados || 0
+                litrosRepostados: usage.litrosRepostados || 0,
+                fotoKmInicial: usage.fotoKmInicial || ''
             });
         }
     }, [usage]);
@@ -115,6 +117,22 @@ export default function EditUsoCamionDialog({
                                 onChange={(e) => setFormData({ ...formData, litrosRepostados: Number(e.target.value) })}
                             />
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Link Foto KM (Evidencia)</label>
+                        <Input
+                            type="text"
+                            placeholder="https://..."
+                            value={formData.fotoKmInicial}
+                            onChange={(e) => setFormData({ ...formData, fotoKmInicial: e.target.value })}
+                        />
+                        {formData.fotoKmInicial && (
+                            <div className="mt-2">
+                                <p className="text-xs text-gray-400 mb-1">Vista previa:</p>
+                                <img src={formData.fotoKmInicial} alt="Preview" className="h-20 rounded border object-cover" />
+                            </div>
+                        )}
                     </div>
 
                     <DialogFooter>

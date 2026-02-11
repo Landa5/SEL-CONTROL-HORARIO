@@ -18,7 +18,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         }
 
         const body = await request.json();
-        const { kmInicial, kmFinal, descargasCount, viajesCount, litrosRepostados } = body;
+        const { kmInicial, kmFinal, descargasCount, viajesCount, litrosRepostados, fotoKmInicial } = body;
 
         const updated = await prisma.usoCamion.update({
             where: { id: parseInt(id) },
@@ -28,7 +28,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
                 kmRecorridos: kmFinal && kmInicial ? (kmFinal - kmInicial) : 0,
                 descargasCount,
                 viajesCount,
-                litrosRepostados
+                litrosRepostados,
+                fotoKmInicial
             }
         });
 
