@@ -381,6 +381,67 @@ export default function AdminEmpleados() {
                                                 onChange={e => handleInputChange('observaciones', e.target.value)}
                                             />
                                         </div>
+
+                                        {/* DOCUMENTACIÓN / PERFIL PROFESIONAL */}
+                                        {(formData.rol === 'CONDUCTOR' || formData.rol === 'MECANICO') && (
+                                            <div className="pt-4 border-t border-gray-100 space-y-4 bg-orange-50 p-4 rounded-xl">
+                                                <h4 className="font-bold text-orange-800 flex items-center gap-2">
+                                                    <Award className="w-4 h-4" /> Documentación Profesional
+                                                </h4>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <Input
+                                                        label="Caducidad DNI (Obligatorio)"
+                                                        type="date"
+                                                        value={formData.dniCaducidad}
+                                                        onChange={e => handleInputChange('dniCaducidad', e.target.value)}
+                                                    />
+                                                </div>
+
+                                                <div className="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-sm font-bold text-gray-700 mb-1">Tipo de Carnet</label>
+                                                        <select
+                                                            value={formData.carnetTipo}
+                                                            onChange={e => handleInputChange('carnetTipo', e.target.value)}
+                                                            className="w-full p-2 border border-gray-300 rounded-lg bg-white"
+                                                        >
+                                                            <option value="">Selecciona...</option>
+                                                            <option value="C+E">C+E</option>
+                                                            <option value="C">C</option>
+                                                            <option value="C1">C1</option>
+                                                        </select>
+                                                    </div>
+                                                    <Input
+                                                        label="Caducidad Carnet"
+                                                        type="date"
+                                                        value={formData.carnetCaducidad}
+                                                        onChange={e => handleInputChange('carnetCaducidad', e.target.value)}
+                                                    />
+                                                </div>
+
+                                                <div className="space-y-4">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={formData.tieneAdr}
+                                                            onChange={e => handleInputChange('tieneAdr', e.target.checked)}
+                                                            className="w-4 h-4 text-orange-600 rounded"
+                                                        />
+                                                        <span className="font-bold text-gray-700">Tiene ADR (Mercancías Peligrosas)</span>
+                                                    </label>
+
+                                                    {formData.tieneAdr && (
+                                                        <Input
+                                                            label="Caducidad ADR"
+                                                            type="date"
+                                                            value={formData.adrCaducidad}
+                                                            onChange={e => handleInputChange('adrCaducidad', e.target.value)}
+                                                        />
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
