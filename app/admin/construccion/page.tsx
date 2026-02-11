@@ -4,8 +4,9 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Construction, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default function ConstructionPage() {
+function ConstructionContent() {
     const searchParams = useSearchParams();
     const modulo = searchParams.get('modulo') || 'Módulo';
 
@@ -29,5 +30,13 @@ export default function ConstructionPage() {
                 </Link>
             </div>
         </div>
+    );
+}
+
+export default function ConstructionPage() {
+    return (
+        <Suspense fallback={<div className="p-12 text-center text-gray-400">Cargando...</div>}>
+            <ConstructionContent />
+        </Suspense>
     );
 }

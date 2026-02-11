@@ -428,14 +428,14 @@ export default function AdminEmpleados() {
                                                 </div>
 
                                                 <div className="space-y-4">
-                                                    <label className="flex items-center gap-2 cursor-pointer opacity-50 pointer-events-none">
+                                                    <label className="flex items-center gap-2 cursor-pointer">
                                                         <input
                                                             type="checkbox"
-                                                            checked={true}
-                                                            readOnly
-                                                            className="w-4 h-4 text-orange-600 rounded bg-gray-100"
+                                                            checked={formData.tieneAdr}
+                                                            onChange={e => handleInputChange('tieneAdr', e.target.checked)}
+                                                            className="w-4 h-4 text-orange-600 rounded focus:ring-orange-500"
                                                         />
-                                                        <span className="font-bold text-gray-500">Tiene ADR (Obligatorio)</span>
+                                                        <span className="font-bold text-gray-700">Tiene ADR</span>
                                                     </label>
 
                                                     <Input

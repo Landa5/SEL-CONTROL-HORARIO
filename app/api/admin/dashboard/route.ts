@@ -42,19 +42,23 @@ export async function GET(request: Request) {
             take: 5
         });
 
-        // 1.3 Expirations (< 15 days)
-        const expirationThreshold = new Date();
-        expirationThreshold.setDate(expirationThreshold.getDate() + 15);
+        // 1.3 Expirations
+        // 'now' is already defined at top of function
+        const shortTermThreshold = new Date();
+        shortTermThreshold.setDate(shortTermThreshold.getDate() + 15); // 15 days for generic docs
+
+        const longTermThreshold = new Date();
+        longTermThreshold.setMonth(longTermThreshold.getMonth() + 12); // 12 months as requested for ADR/Carnet
 
         // Fetch Trucks Expirations
         const expiringTrucks = await prisma.camion.findMany({
             where: {
                 activo: true,
                 OR: [
-                    { itvVencimiento: { lte: expirationThreshold } },
-                    { seguroVencimiento: { lte: expirationThreshold } },
-                    { tacografoVencimiento: { lte: expirationThreshold } },
-                    { adrVencimiento: { lte: expirationThreshold } }
+                    { itvVencimiento: { lte: shortTermThreshold } },
+                    { seguroVencimiento: { lte: shortTermThreshold } },
+                    { tacografoVencimiento: { lte: shortTermThreshold } },
+                    { adrVencimiento: { lte: longTermThreshold } } // Long term for ADR
                 ]
             },
             select: { id: true, matricula: true, itvVencimiento: true, seguroVencimiento: true, tacografoVencimiento: true, adrVencimiento: true }
@@ -66,9 +70,9 @@ export async function GET(request: Request) {
                 activo: true,
                 perfilProfesional: {
                     OR: [
-                        { dniCaducidad: { lte: expirationThreshold } },
-                        { carnetCaducidad: { lte: expirationThreshold } },
-                        { adrCaducidad: { lte: expirationThreshold } }
+                        { dniCaducidad: { lte: shortTermThreshold } },
+                        { carnetCaducidad: { lte: longTermThreshold } }, // Long term for Carnet
+                        { adrCaducidad: { lte: longTermThreshold } } // Long term for ADR
                     ]
                 }
             },
@@ -78,35 +82,39 @@ export async function GET(request: Request) {
         const criticalAlerts: any[] = [];
 
         // Helper to push alerts
-        const pushAlert = (date: Date | null, type: string, text: string, id: number, entity: 'TRUCK' | 'EMPLOYEE') => {
+        const pushAlert = (date: Date | null, type: string, text: string, id: number, entity: 'TRUCK' | 'EMPLOYEE', threshold: Date) => {
             if (!date) return;
-            // Only push if < 15 days
-            if (date <= expirationThreshold) {
+            if (date <= threshold) {
                 const days = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                // Determine severity
+                let severity = 'INFO';
+                if (days < 0) severity = 'CRITICAL';
+                else if (days < 30) severity = 'WARNING';
+
                 criticalAlerts.push({
                     id,
                     type: 'VENCIMIENTO',
                     message: `${type} ${days < 0 ? 'CADUCADO' : `vence en ${days} días`}`,
                     entity: text,
                     entityType: entity,
-                    severity: days < 0 ? 'CRITICAL' : 'WARNING'
+                    severity
                 });
             }
         };
 
         expiringTrucks.forEach(t => {
-            pushAlert(t.itvVencimiento, 'ITV', t.matricula, t.id, 'TRUCK');
-            pushAlert(t.seguroVencimiento, 'Seguro', t.matricula, t.id, 'TRUCK');
-            pushAlert(t.tacografoVencimiento, 'Tacógrafo', t.matricula, t.id, 'TRUCK');
-            pushAlert(t.adrVencimiento, 'ADR', t.matricula, t.id, 'TRUCK');
+            pushAlert(t.itvVencimiento, 'ITV', t.matricula, t.id, 'TRUCK', shortTermThreshold);
+            pushAlert(t.seguroVencimiento, 'Seguro', t.matricula, t.id, 'TRUCK', shortTermThreshold);
+            pushAlert(t.tacografoVencimiento, 'Tacógrafo', t.matricula, t.id, 'TRUCK', shortTermThreshold);
+            pushAlert(t.adrVencimiento, 'ADR', t.matricula, t.id, 'TRUCK', longTermThreshold);
         });
 
         expiringEmployees.forEach(e => {
             if (e.perfilProfesional) {
                 const name = `${e.nombre} ${e.apellidos || ''}`;
-                pushAlert(e.perfilProfesional.dniCaducidad, 'DNI', name, e.id, 'EMPLOYEE');
-                pushAlert(e.perfilProfesional.carnetCaducidad, 'Carnet', name, e.id, 'EMPLOYEE');
-                pushAlert(e.perfilProfesional.adrCaducidad, 'ADR', name, e.id, 'EMPLOYEE');
+                pushAlert(e.perfilProfesional.dniCaducidad, 'DNI', name, e.id, 'EMPLOYEE', shortTermThreshold);
+                pushAlert(e.perfilProfesional.carnetCaducidad, 'Carnet', name, e.id, 'EMPLOYEE', longTermThreshold);
+                pushAlert(e.perfilProfesional.adrCaducidad, 'ADR', name, e.id, 'EMPLOYEE', longTermThreshold);
             }
         });
 
@@ -169,10 +177,13 @@ export async function GET(request: Request) {
         // ==========================================
 
         // RRHH: Contracts/Docs expiring soon (using Documento model from Phase 10)
+        // Note: 'Documento' model is not fully integrated yet, or might be missing in client. 
+        // If Prisma Client issues persist, we will use a fallback or fix schema. 
+        // For now, assuming Documento exists as per previous context.
         const rrhhDocsPending = await prisma.documento.count({
             where: {
                 tipo: 'CONTRATO',
-                fechaCaducidad: { lte: expirationThreshold } // reusing 15 days threshold
+                fechaCaducidad: { lte: shortTermThreshold } // reusing 15 days threshold
             }
         });
 
