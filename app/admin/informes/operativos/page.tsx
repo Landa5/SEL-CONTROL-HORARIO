@@ -135,7 +135,7 @@ export default function OperationalReportsPage() {
                                 <YAxis dataKey="matricula" type="category" width={80} style={{ fontSize: '12px', fontWeight: 'bold' }} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(val: number) => [`${val} L/100km`, 'Consumo']}
+                                    formatter={(val: any) => [`${val} L/100km`, 'Consumo']}
                                 />
                                 <Bar dataKey="consumoMedio" fill="#f97316" radius={[0, 4, 4, 0]} barSize={20} />
                             </BarChart>
@@ -156,7 +156,7 @@ export default function OperationalReportsPage() {
                                 <YAxis dataKey="matricula" type="category" width={80} style={{ fontSize: '12px', fontWeight: 'bold' }} />
                                 <Tooltip
                                     contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    formatter={(val: number) => [`${val} km`, 'Distancia']}
+                                    formatter={(val: any) => [`${val} km`, 'Distancia']}
                                 />
                                 <Bar dataKey="kmTotales" fill="#3b82f6" radius={[0, 4, 4, 0]} barSize={20} />
                             </BarChart>
