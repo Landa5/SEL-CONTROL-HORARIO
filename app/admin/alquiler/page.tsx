@@ -12,6 +12,7 @@ import {
 import { Car, User, Calendar, Euro, Plus, FileText, CheckCircle, XCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { generateRentalContract } from '@/lib/contractGenerator';
 
 interface Cliente {
     id: number;
@@ -229,14 +230,30 @@ export default function AlquilerPage() {
                                                     <span>Desde: {format(new Date(activeRental!.fechaInicio), 'dd/MM/yyyy')}</span>
                                                     <span className="font-bold text-gray-900">{activeRental!.precioMensual}€/mes</span>
                                                 </div>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    className="w-full text-red-600 hover:bg-red-100 hover:text-red-800 mt-2"
-                                                    onClick={() => handleEndRental(activeRental!.id)}
-                                                >
-                                                    Finalizar Alquiler
-                                                </Button>
+                                                <div className="flex gap-2 mt-2">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="flex-1 text-red-600 hover:bg-red-100 hover:text-red-800"
+                                                        onClick={() => handleEndRental(activeRental!.id)}
+                                                    >
+                                                        Finalizar
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="flex-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                                                        onClick={() => generateRentalContract({
+                                                            plazaNumero: plaza.numero,
+                                                            cliente: activeRental!.cliente,
+                                                            matricula: activeRental!.matricula,
+                                                            precioMensual: activeRental!.precioMensual,
+                                                            fechaInicio: activeRental!.fechaInicio
+                                                        })}
+                                                    >
+                                                        <FileText className="w-4 h-4 mr-2" /> Contrato
+                                                    </Button>
+                                                </div>
                                             </div>
                                         ) : (
                                             <div className="text-center py-6">
