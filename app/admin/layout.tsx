@@ -108,7 +108,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             type: 'group',
             label: 'Control y Auditoría',
             items: [
-                { href: '/admin/construccion?modulo=Informes Mensuales', label: 'Informes Mensuales', icon: BarChart2 },
+                { href: '/admin/informes/mensuales', label: 'Informes Mensuales', icon: BarChart2 },
                 { href: '/admin/construccion?modulo=Exportaciones Gestoría', label: 'Exportaciones Gestoría', icon: Download },
                 { href: '/admin/construccion?modulo=Registro Jornada Legal', label: 'Registro Jornada Legal', icon: FileCheck },
                 { href: '/admin/construccion?modulo=Auditoría Interna', label: 'Auditoría Interna', icon: ShieldCheck },
