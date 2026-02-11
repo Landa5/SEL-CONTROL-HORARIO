@@ -9,6 +9,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
     const [open, setOpen] = useState(false);
     const [loading, setLoading] = useState(false);
     const [projects, setProjects] = useState<any[]>([]);
+    const [employees, setEmployees] = useState<any[]>([]);
 
     // Form State
     const [titulo, setTitulo] = useState('');
@@ -18,24 +19,27 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
     const [fechaLimite, setFechaLimite] = useState('');
     const [activoTipo, setActivoTipo] = useState('OTRO');
     const [proyectoId, setProyectoId] = useState('');
+    const [asignadoAId, setAsignadoAId] = useState('');
 
-    // Fetch projects when dialog opens
-    const fetchProjects = async () => {
+    // Fetch data when dialog opens
+    const fetchData = async () => {
         try {
-            const res = await fetch('/api/proyectos');
-            if (res.ok) {
-                const data = await res.json();
-                setProjects(data);
-            }
+            const [resProjects, resEmployees] = await Promise.all([
+                fetch('/api/proyectos'),
+                fetch('/api/empleados?activo=true')
+            ]);
+
+            if (resProjects.ok) setProjects(await resProjects.json());
+            if (resEmployees.ok) setEmployees(await resEmployees.json());
         } catch (error) {
-            console.error('Error loading projects', error);
+            console.error('Error loading data', error);
         }
     };
 
     const handleOpenChange = (newOpen: boolean) => {
         setOpen(newOpen);
         if (newOpen && projects.length === 0) {
-            fetchProjects();
+            fetchData();
         }
     };
 
@@ -54,7 +58,8 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                     prioridad,
                     fechaLimite: fechaLimite || null,
                     activoTipo,
-                    proyectoId: proyectoId || undefined
+                    proyectoId: proyectoId || undefined,
+                    asignadoAId: asignadoAId || undefined
                 })
             });
 
@@ -65,6 +70,7 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                 setTitulo('');
                 setDescripcion('');
                 setProyectoId('');
+                setAsignadoAId('');
             } else {
                 alert('Error al crear la tarea');
             }
@@ -128,14 +134,24 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                             </select>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium">Proyecto (Opcional)</label>
-                            <select className="w-full p-2 border rounded-md" value={proyectoId} onChange={e => setProyectoId(e.target.value)}>
-                                <option value="">Sin Proyecto</option>
-                                {projects.map(p => (
-                                    <option key={p.id} value={p.id}>{p.nombre}</option>
+                            <label className="text-sm font-medium">Asignar a (Opcional)</label>
+                            <select className="w-full p-2 border rounded-md" value={asignadoAId} onChange={e => setAsignadoAId(e.target.value)}>
+                                <option value="">Sin Asignar</option>
+                                {employees.map(e => (
+                                    <option key={e.id} value={e.id}>{e.nombre} {e.apellidos}</option>
                                 ))}
                             </select>
                         </div>
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Proyecto (Opcional)</label>
+                        <select className="w-full p-2 border rounded-md" value={proyectoId} onChange={e => setProyectoId(e.target.value)}>
+                            <option value="">Sin Proyecto</option>
+                            {projects.map(p => (
+                                <option key={p.id} value={p.id}>{p.nombre}</option>
+                            ))}
+                        </select>
                     </div>
 
                     <div className="space-y-2">

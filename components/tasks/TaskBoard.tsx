@@ -40,12 +40,19 @@ export default function TaskBoard() {
         return tasks.filter(t => {
             if (t.estado === 'COMPLETADA' || t.estado === 'CANCELADA') return false;
             // Includes tasks with deadline today OR overdue
+            if (t.estado === 'COMPLETADA' || t.estado === 'CANCELADA') return false;
+            // SHOW: Tasks with Deadline <= Today OR No Deadline (if high priority? no, those are backlog)
+            // Let's stick to Deadline <= EndOfToday
             if (!t.fechaLimite) return false;
             const d = new Date(t.fechaLimite);
-            // Check if same day or past
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            return d < new Date() || isToday(d);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0); // Start of today
+
+            // If deadline is before tomorrow (so today or past)
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+
+            return d < tomorrow; // Past + Today
         }).sort((a, b) => {
             // Sort by Priority (ALTA=0, MEDIA=1, BAJA=2 ideally, but enum is string)
             // Let's rely on backend sort or simple mapping
@@ -96,6 +103,19 @@ export default function TaskBoard() {
         ));
     };
 
+    const getFutureTasks = () => {
+        return tasks.filter(t => {
+            if (t.estado === 'COMPLETADA' || t.estado === 'CANCELADA') return false;
+            if (!t.fechaLimite) return false;
+            const d = new Date(t.fechaLimite);
+            const now = new Date();
+            now.setHours(0, 0, 0, 0);
+            const tomorrow = new Date(now);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            return d >= tomorrow;
+        });
+    };
+
     return (
         <div className="h-full flex flex-col">
             {/* Header / Toolbar */}
@@ -103,7 +123,7 @@ export default function TaskBoard() {
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Gestión de Tareas</h1>
                     <p className="text-sm text-gray-500">
-                        {tasks.length} tareas totales • {getTodayTasks().length} para hoy
+                        {tasks.length} tareas totales • {getTodayTasks().length} atención inmediata
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -116,9 +136,10 @@ export default function TaskBoard() {
 
             {/* Views */}
             <Tabs defaultValue="HOY" className="w-full flex-1 flex flex-col" onValueChange={setView}>
-                <TabsList className="grid w-full grid-cols-5 lg:w-[600px] mb-6">
-                    <TabsTrigger value="HOY">Hoy ({getTodayTasks().length})</TabsTrigger>
+                <TabsList className="grid w-full grid-cols-6 lg:w-[800px] mb-6">
+                    <TabsTrigger value="HOY">Hoy/Atrasadas ({getTodayTasks().length})</TabsTrigger>
                     <TabsTrigger value="EN_CURSO">En Curso ({getInProgressTasks().length})</TabsTrigger>
+                    <TabsTrigger value="FUTURAS">Futuras ({getFutureTasks().length})</TabsTrigger>
                     <TabsTrigger value="BLOQUEADAS">Bloqueadas ({getBlockedTasks().length})</TabsTrigger>
                     <TabsTrigger value="BACKLOG">Backlog</TabsTrigger>
                     <TabsTrigger value="PROYECTO">Proyectos</TabsTrigger>
@@ -131,7 +152,7 @@ export default function TaskBoard() {
                             {getTodayTasks().map(t => <TaskCard key={t.id} task={t} />)}
                             {getTodayTasks().length === 0 && (
                                 <div className="col-span-full text-center py-20 text-gray-400">
-                                    <p>🎉 ¡Todo al día! No hay tareas urgentes para hoy.</p>
+                                    <p>🎉 ¡Todo al día! No hay tareas urgentes.</p>
                                 </div>
                             )}
                         </div>
@@ -139,6 +160,17 @@ export default function TaskBoard() {
 
                     <TabsContent value="EN_CURSO" className="mt-0">
                         {renderGroupedByAssignee(getInProgressTasks())}
+                    </TabsContent>
+
+                    <TabsContent value="FUTURAS" className="mt-0">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {getFutureTasks().map(t => <TaskCard key={t.id} task={t} />)}
+                            {getFutureTasks().length === 0 && (
+                                <div className="col-span-full text-center py-20 text-gray-400">
+                                    <p>No hay tareas planificadas a futuro.</p>
+                                </div>
+                            )}
+                        </div>
                     </TabsContent>
 
                     <TabsContent value="BLOQUEADAS" className="mt-0">

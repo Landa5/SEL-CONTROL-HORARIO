@@ -4,7 +4,7 @@ import Link from 'next/link';
 import React from 'react';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { Users, Truck, Calendar, LayoutDashboard, LogOut, AlertCircle, BookOpen, FileText, TrendingUp } from 'lucide-react';
+import { Users, Truck, Calendar, LayoutDashboard, LogOut, AlertCircle, BookOpen, FileText, TrendingUp, Menu, X } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -21,6 +21,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         };
         fetchSession();
     }, []);
+
+    const [mobileMenuOpen, setMobileMenuOpen] = (React as any).useState(false);
 
     const isOficina = session?.rol === 'OFICINA';
     const isAdmin = session?.rol === 'ADMIN';
@@ -92,9 +94,17 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             {/* Main Content Area */}
             <div className="flex-1 flex flex-col h-screen overflow-hidden">
                 {/* Top Header */}
-                <header className="h-16 bg-white border-b flex items-center justify-between px-8 shrink-0 shadow-sm z-10">
-                    <div>
-                        <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest sm:hidden">{shortRole}</h2>
+                <header className="h-16 bg-white border-b flex items-center justify-between px-4 md:px-8 shrink-0 shadow-sm z-20 relative">
+                    <div className="flex items-center gap-3">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            className="md:hidden"
+                            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                        >
+                            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                        </Button>
+                        <h2 className="text-sm font-black text-gray-400 uppercase tracking-widest md:hidden">{shortRole}</h2>
                     </div>
 
                     <div className="flex items-center gap-4">
@@ -115,7 +125,51 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                     </div>
                 </header>
 
-                <main className="flex-1 p-8 overflow-y-auto bg-gray-50/50">
+                {/* Mobile Menu Overlay */}
+                {mobileMenuOpen && (
+                    <div className="fixed inset-0 z-10 bg-blue-900 text-white pt-16 md:hidden overflow-y-auto animate-in fade-in slide-in-from-left-10 duration-200">
+                        <div className="p-6">
+                            <div className="mb-8 text-center">
+                                <p className="text-[10px] text-blue-300 font-black uppercase tracking-tighter">ESTÁS EN</p>
+                                <h2 className="text-xl font-bold uppercase tracking-widest">{roleLabel}</h2>
+                            </div>
+                            <nav className="space-y-8">
+                                {navItems.map((group, idx) => (
+                                    <div key={idx} className="space-y-3">
+                                        <h3 className="px-3 text-xs font-bold text-blue-300 uppercase tracking-widest border-b border-blue-800 pb-2">
+                                            {group.group}
+                                        </h3>
+                                        <div className="space-y-2">
+                                            {group.items.map((item) => {
+                                                const Icon = item.icon;
+                                                const isActive = pathname.startsWith(item.href);
+                                                return (
+                                                    <Link
+                                                        key={item.href}
+                                                        href={item.href}
+                                                        onClick={() => setMobileMenuOpen(false)}
+                                                    >
+                                                        <div className={`flex items-center gap-4 p-4 rounded-xl transition-all ${isActive ? 'bg-blue-700 text-white font-bold shadow-lg' : 'text-blue-100 hover:bg-blue-800'}`}>
+                                                            <div className={`p-2 rounded-lg ${isActive ? 'bg-blue-600' : 'bg-blue-800'}`}>
+                                                                <Icon className="w-5 h-5" />
+                                                            </div>
+                                                            <span className="text-lg">{item.label}</span>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
+                            </nav>
+                            <div className="mt-8 pt-8 border-t border-blue-800">
+                                <QuickIncidentReport />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <main className="flex-1 p-4 md:p-8 overflow-y-auto bg-gray-50/50">
                     <div className="max-w-7xl mx-auto">
                         {children}
                     </div>
