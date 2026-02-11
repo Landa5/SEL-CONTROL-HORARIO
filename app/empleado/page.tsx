@@ -81,7 +81,7 @@ export default function EmpleadoDashboard() {
     }, [profileData]);
 
     const checkMyAlerts = (perf: any) => {
-        const newAlerts = [];
+        const newAlerts: { label: string; date: Date; expired: boolean }[] = [];
         const now = new Date();
         const threshold = new Date();
         threshold.setDate(threshold.getDate() + 40);
