@@ -91,7 +91,7 @@ export default function TimelineView({ jornadas, date }: TimelineViewProps) {
 
                                             // Calculate offset minutes from start of day
                                             let startMinutes = differenceInMinutes(start, dayStart);
-                                            let durationMinutes = differenceInMinutes(end, start);
+                                            const durationMinutes = differenceInMinutes(end, start);
 
                                             if (startMinutes < 0) startMinutes = 0; // Started prev day
                                             // if duration extends beyond day... visual clip by container overflow-hidden
