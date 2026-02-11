@@ -804,7 +804,7 @@ export default function EmpleadoDashboard() {
 
                                 if (res.ok) {
                                     alert('Perfil actualizado correctamente');
-                                    setProfileForm(prev => ({ ...prev, password: '' })); // Clear password
+                                    setProfileForm((prev: any) => ({ ...prev, password: '' })); // Clear password
                                 } else {
                                     alert('Error al actualizar perfil');
                                 }
