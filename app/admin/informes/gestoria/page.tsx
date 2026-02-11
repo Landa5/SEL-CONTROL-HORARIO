@@ -211,7 +211,7 @@ export default function GestoriaPage() {
                             <li>Se incluyen <strong>Dietas, Productividad, Incentivos</strong> (según tarifas).</li>
                             <li><strong>Horas Presencia</strong>: Total de horas trabajadas.</li>
                             <li><strong>Horas Extra Administración</strong>: Solo en festivos.</li>
-                            <li><strong>Bajas Médicas</strong>: Solo > 3 días.</li>
+                            <li><strong>Bajas Médicas</strong>: Solo &gt; 3 días.</li>
                             <li>Ordenado por Rol.</li>
                         </ul>
                     </div>
