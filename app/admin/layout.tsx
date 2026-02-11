@@ -101,7 +101,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/tareas', label: 'Taller y Mantenimiento', icon: Wrench },
                 { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
-                { href: '/admin/construccion?modulo=Informes Operativos', label: 'Informes Operativos', icon: FileText },
+                { href: '/admin/informes/operativos', label: 'Informes Operativos', icon: FileText },
             ]
         },
         {
