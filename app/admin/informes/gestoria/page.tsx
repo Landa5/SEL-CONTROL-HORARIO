@@ -19,21 +19,40 @@ export default function GestoriaPage() {
         try {
             const res = await fetch(`/api/admin/informes/gestoria?year=${year}&month=${month}`);
             if (res.ok) {
-                const data = await res.json();
+                const responseData = await res.json();
+                const { data, totals } = responseData;
 
                 // Convert JSON to CSV with BOM for Excel UTF-8 support
-                const header = ['Empleado', 'DNI', 'Rol', 'Dias Trabajados', 'KM Totales', 'Horas Extra (Admin Festivo)', 'Días Baja > 3'];
+                const header = ['Empleado', 'DNI', 'Dias Trab.', 'H. Presencia', 'KM Totales', 'Dietas', 'Productividad', 'Incentivos', 'H. Extra (Fest.)', 'Días Baja > 3'];
+
                 const rows = data.map((d: any) => [
                     `"${d.nombre} ${d.apellidos}"`,
                     `"${d.dni}"`,
-                    d.rol,
                     d.diasTrabajados,
+                    Math.round(d.horasPresencia || 0),
                     d.totalKm,
+                    d.totalDietas || 0,
+                    d.totalProductividad || 0,
+                    d.totalIncentivos || 0,
                     d.horasExtrasFestivos,
                     d.diasBaja
                 ].join(','));
 
-                const csvContent = "\uFEFF" + [header.join(','), ...rows].join('\n'); // Add BOM
+                // Add Totals Row
+                const totalsRow = [
+                    'TOTALES',
+                    '',
+                    totals.diasTrabajados,
+                    Math.round(totals.horasPresencia),
+                    totals.totalKm,
+                    totals.totalDietas,
+                    totals.totalProductividad,
+                    totals.totalIncentivos,
+                    totals.horasExtrasFestivos,
+                    totals.diasBaja
+                ].join(',');
+
+                const csvContent = "\uFEFF" + [header.join(','), ...rows, totalsRow].join('\n'); // Add BOM
 
                 // Download
                 const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -57,8 +76,10 @@ export default function GestoriaPage() {
         try {
             const res = await fetch(`/api/admin/informes/gestoria?year=${year}&month=${month}`);
             if (res.ok) {
-                const data = await res.json();
-                const doc = new jsPDF();
+                const responseData = await res.json();
+                const { data, totals } = responseData;
+
+                const doc = new jsPDF('l'); // Landscape for more columns
 
                 // -- HEADER & LOGO --
                 // Load Logo
@@ -84,16 +105,37 @@ export default function GestoriaPage() {
                 doc.line(15, 30, pageWidth - 15, 30); // Horizontal Line
 
                 // -- DATA TABLE --
-                const tableColumn = ["Empleado", "DNI", "Rol", "Días Trab.", "Total KM", "H. Extra (Fest.)", "Baja (>3d)"];
+                const tableColumn = ["Empleado", "DNI", "Dias Trab.", "H. Pres.", "Total KM", "Dietas", "Prod.", "Incent.", "H. Extra", "Baja"];
                 const tableRows = data.map((d: any) => [
                     `${d.nombre} ${d.apellidos}`,
                     d.dni,
-                    d.rol,
                     d.diasTrabajados,
+                    Math.round(d.horasPresencia || 0),
                     d.totalKm,
+                    d.totalDietas || '-',
+                    d.totalProductividad || '-',
+                    d.totalIncentivos || '-',
                     d.horasExtrasFestivos || '-',
                     d.diasBaja || '-'
                 ]);
+
+                // Add Totals to Table Body (Styled distinctively)
+                tableRows.push([
+                    'TOTALES',
+                    '',
+                    totals.diasTrabajados,
+                    Math.round(totals.horasPresencia),
+                    totals.totalKm,
+                    totals.totalDietas,
+                    totals.totalProductividad,
+                    totals.totalIncentivos,
+                    totals.horasExtrasFestivos,
+                    totals.diasBaja
+                ]);
+
+                // Group by Role Logic (Visual separation)
+                // Since data is sorted by role, we could inject headers, but 'autoTable' handles data array.
+                // Simpler approach: Just render one big table sorted by role.
 
                 autoTable(doc, {
                     startY: 35,
@@ -103,8 +145,15 @@ export default function GestoriaPage() {
                     headStyles: { fillColor: [41, 128, 185], textColor: 255, fontSize: 8, fontStyle: 'bold', halign: 'center' },
                     bodyStyles: { fontSize: 8, cellPadding: 2, halign: 'center' },
                     columnStyles: {
-                        0: { halign: 'left', cellWidth: 40 }, // Nombre
+                        0: { halign: 'left', cellWidth: 50 }, // Nombre
                         1: { cellWidth: 25 }, // DNI
+                    },
+                    didParseCell: function (data) {
+                        // Bold the totals row
+                        if (data.row.index === tableRows.length - 1) {
+                            data.cell.styles.fontStyle = 'bold';
+                            data.cell.styles.fillColor = [220, 220, 220];
+                        }
                     },
                     alternateRowStyles: { fillColor: [245, 245, 245] }
                 });
@@ -159,10 +208,11 @@ export default function GestoriaPage() {
                     <div className="bg-blue-50 p-4 rounded text-sm text-blue-800 space-y-2">
                         <p className="font-bold">Reglas Aplicadas:</p>
                         <ul className="list-disc pl-4 space-y-1">
-                            <li>Se incluyen <strong>Dietas y Kilometraje</strong>.</li>
-                            <li><strong>Horas Extra Administración</strong>: Solo se cuentan si se trabaja en Festivo.</li>
-                            <li><strong>Bajas Médicas</strong>: Solo se incluyen si la duración es superior a 3 días.</li>
-                            <li><strong>Horas Totales</strong>: Excluidas del informe.</li>
+                            <li>Se incluyen <strong>Dietas, Productividad, Incentivos</strong> (según tarifas).</li>
+                            <li><strong>Horas Presencia</strong>: Total de horas trabajadas.</li>
+                            <li><strong>Horas Extra Administración</strong>: Solo en festivos.</li>
+                            <li><strong>Bajas Médicas</strong>: Solo > 3 días.</li>
+                            <li>Ordenado por Rol.</li>
                         </ul>
                     </div>
 

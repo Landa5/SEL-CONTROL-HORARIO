@@ -11,6 +11,36 @@ export async function GET(request: Request) {
         const startDate = new Date(year, month - 1, 1);
         const endDate = endOfMonth(startDate);
 
+        // Fetch Concepts and Tariffs
+        const conceptos = await prisma.conceptoNomina.findMany({
+            where: { active: true },
+            include: {
+                tarifas: {
+                    where: { activo: true },
+                    orderBy: { createdAt: 'desc' }
+                }
+            }
+        });
+
+        const getTarifa = (code: string, empId: number, role: string) => {
+            const concepto = conceptos.find(c => c.codigo === code);
+            if (!concepto) return 0;
+
+            // 1. Employee Specific
+            const empTarifa = concepto.tarifas.find(t => t.empleadoId === empId);
+            if (empTarifa) return empTarifa.valor;
+
+            // 2. Role Specific
+            const roleTarifa = concepto.tarifas.find(t => t.rol === role && !t.empleadoId);
+            if (roleTarifa) return roleTarifa.valor;
+
+            // 3. Global
+            const globalTarifa = concepto.tarifas.find(t => !t.rol && !t.empleadoId);
+            if (globalTarifa) return globalTarifa.valor;
+
+            return 0;
+        };
+
         // Fetch Employees
         const empleados = await prisma.empleado.findMany({
             where: { activo: true },
@@ -23,8 +53,7 @@ export async function GET(request: Request) {
                 fecha: { gte: startDate, lte: endDate }
             },
             include: {
-                usosCamion: { select: { kmRecorridos: true, litrosRepostados: true } }, // Assuming diets might be calculated based on sorties or KM
-                // We need to know if it was a Holiday (Festivo) for Administration Extra Hours
+                usosCamion: { select: { kmRecorridos: true, litrosRepostados: true } },
             }
         });
 
@@ -35,7 +64,7 @@ export async function GET(request: Request) {
                     { fechaInicio: { lte: endDate }, fechaFin: { gte: startDate } }
                 ],
                 estado: 'APROBADA',
-                tipo: 'BAJA_MEDICA' // Assuming this type exists or mapping 'ENFERMEDAD'
+                tipo: 'BAJA_MEDICA'
             }
         });
 
@@ -45,48 +74,46 @@ export async function GET(request: Request) {
         const reportData = empleados.map(emp => {
             const empJornadas = jornadas.filter(j => j.empleadoId === emp.id);
 
-            // 1. DIETAS & KILOMETRAJE
-            // Assuming you have logic for Diets. For now, let's sum KM.
-            // If Diets are per day worked or specific logic, adjust here.
             let totalKm = 0;
             let diasTrabajados = 0;
-            let festivosTrabajados = 0;
+            let totalHoras = 0;
 
             empJornadas.forEach(jor => {
                 const km = jor.usosCamion.reduce((acc, uso) => acc + (uso.kmRecorridos || 0), 0);
                 totalKm += km;
                 diasTrabajados++;
-
-                // Detect if Holiday (Festivo). Verification needed on how you store holidays.
-                // Assuming `jor.esFestivo` or checking against a Holidays table.
-                // For now, placeholder logic:
-                // if (jor.esFestivo) festivosTrabajados++;
+                totalHoras += (jor.totalHoras || 0);
             });
 
-            // 2. EXTRA HOURS (ADMIN ONLY ON HOLIDAYS)
+            // Financials
+            const dietasRate = getTarifa('DIETAS', emp.id, emp.rol);
+            const totalDietas = diasTrabajados * dietasRate;
+
+            const productividadFija = getTarifa('PRODUCTIVIDAD_FIJA', emp.id, emp.rol);
+            const totalProductividad = productividadFija; // Fixed monthly
+
+            const incentivosRate = getTarifa('INCENTIVOS', emp.id, emp.rol);
+            const totalIncentivos = incentivosRate; // Fixed monthly? Or per trip? Assuming fixed for now.
+
+            // EXTRA HOURS (ADMIN ONLY ON HOLIDAYS) - Simplified Logic
             let horasExtrasFestivos = 0;
             if (emp.rol === 'OFICINA' || emp.rol === 'ADMIN') {
-                // Logic: Sum hours worked on Holidays for Admin/Office
-                // horasExtrasFestivos = empJornadas.filter(j => j.esFestivo).reduce((acc, j) => acc + (j.totalHoras || 0), 0);
+                // Here we would check against holidays.
             }
 
-            // 3. BAJAS > 3 DAYS
-            // Filter absences for this employee that are Sick Leave (Baja) and overlap month
+            // BAJAS > 3 DAYS
             const baja = ausencias.find(a => a.empleadoId === emp.id);
             let diasBaja = 0;
             let esBajaLarga = false;
 
             if (baja) {
-                const start = baja.fechaInicio < startDate ? startDate : baja.fechaInicio;
-                const end = baja.fechaFin && baja.fechaFin < endDate ? baja.fechaFin : endDate;
-                const diffTime = Math.abs(end.getTime() - start.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
-
-                // Check if total duration of absence (not just in month) is > 3 days
                 const totalDuration = Math.ceil((Math.abs((baja.fechaFin || endDate).getTime() - baja.fechaInicio.getTime())) / (1000 * 3600 * 24)) + 1;
 
                 if (totalDuration > 3) {
-                    diasBaja = diffDays;
+                    const start = baja.fechaInicio < startDate ? startDate : baja.fechaInicio;
+                    const end = baja.fechaFin && baja.fechaFin < endDate ? baja.fechaFin : endDate;
+                    const diffTime = Math.abs(end.getTime() - start.getTime());
+                    diasBaja = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
                     esBajaLarga = true;
                 }
             }
@@ -98,14 +125,43 @@ export async function GET(request: Request) {
                 dni: emp.dni || '',
                 rol: emp.rol,
                 diasTrabajados,
+                horasPresencia: totalHoras, // New field
                 totalKm,
-                horasExtrasFestivos: horasExtrasFestivos > 0 ? horasExtrasFestivos : '', // Only show if positive
-                diasBaja: esBajaLarga ? diasBaja : '', // Only show if > 3 days
+                totalDietas, // New field
+                totalProductividad, // New field
+                totalIncentivos, // New field
+                horasExtrasFestivos: horasExtrasFestivos > 0 ? horasExtrasFestivos : '',
+                diasBaja: esBajaLarga ? diasBaja : '',
                 bajaLarga: esBajaLarga ? 'SI' : ''
             };
         });
 
-        return NextResponse.json(reportData);
+        // Sort by Role first, then Name
+        reportData.sort((a, b) => {
+            if (a.rol < b.rol) return -1;
+            if (a.rol > b.rol) return 1;
+            return a.nombre.localeCompare(b.nombre);
+        });
+
+        // Calculate Totals Row
+        const totals = {
+            id: 'TOTAL',
+            nombre: 'TOTAL',
+            apellidos: '',
+            dni: '',
+            rol: '',
+            diasTrabajados: reportData.reduce((acc, curr) => acc + (Number(curr.diasTrabajados) || 0), 0),
+            horasPresencia: reportData.reduce((acc, curr) => acc + (Number(curr.horasPresencia) || 0), 0),
+            totalKm: reportData.reduce((acc, curr) => acc + (Number(curr.totalKm) || 0), 0),
+            totalDietas: reportData.reduce((acc, curr) => acc + (Number(curr.totalDietas) || 0), 0),
+            totalProductividad: reportData.reduce((acc, curr) => acc + (Number(curr.totalProductividad) || 0), 0),
+            totalIncentivos: reportData.reduce((acc, curr) => acc + (Number(curr.totalIncentivos) || 0), 0),
+            horasExtrasFestivos: reportData.reduce((acc, curr) => acc + (Number(curr.horasExtrasFestivos) || 0), 0),
+            diasBaja: reportData.reduce((acc, curr) => acc + (Number(curr.diasBaja) || 0), 0),
+            bajaLarga: ''
+        };
+
+        return NextResponse.json({ data: reportData, totals });
 
     } catch (error) {
         console.error('Error exporting gestoria report:', error);
