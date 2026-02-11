@@ -658,3 +658,48 @@ model Documento {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// =======================
+// MÓDULO ALQUILER GARAJE
+// =======================
+
+model ClienteAlquiler {
+  id        Int      @id @default(autoincrement())
+  nombre    String
+  telefono  String
+  
+  alquileres AlquilerPlaza[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PlazaGaraje {
+  id          Int      @id @default(autoincrement())
+  numero      Int      @unique // 1 to 9
+  
+  alquileres  AlquilerPlaza[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AlquilerPlaza {
+  id            Int      @id @default(autoincrement())
+  
+  clienteId     Int
+  cliente       ClienteAlquiler @relation(fields: [clienteId], references: [id])
+  
+  plazaId       Int
+  plaza         PlazaGaraje @relation(fields: [plazaId], references: [id])
+  
+  matricula     String
+  fechaInicio   DateTime
+  fechaFin      DateTime?
+  precioMensual Float
+  
+  activo        Boolean @default(true)
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

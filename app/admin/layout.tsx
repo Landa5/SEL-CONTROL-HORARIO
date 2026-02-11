@@ -28,7 +28,8 @@ import {
     Menu,
     X,
     ChevronDown,
-    ChevronRight
+    ChevronRight,
+    Car
 } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
@@ -102,6 +103,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
                 { href: '/admin/informes/operativos', label: 'Informes Operativos', icon: FileText },
+            ]
+        },
+        {
+            type: 'group',
+            label: 'Alquiler Garaje',
+            items: [
+                { href: '/admin/alquiler', label: 'Gestión Plazas', icon: Car },
             ]
         },
         {
