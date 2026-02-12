@@ -92,6 +92,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/jornadas', label: 'Jornada / Fichajes', icon: Clock },
                 { href: '/admin/formacion', label: 'Formación', icon: BookOpen },
                 { href: '/admin/nominas', label: 'Nóminas', icon: Euro },
+                { href: '/admin/informes/operativos', label: 'Informe Operativo', icon: FileText },
             ]
         },
         {
@@ -102,7 +103,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/tareas', label: 'Taller y Mantenimiento', icon: Wrench },
                 { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
-                { href: '/admin/informes/operativos', label: 'Informes Operativos', icon: FileText },
+                { href: '/admin/informes/operativos', label: 'Informe Operativo', icon: FileText },
             ]
         },
         {
