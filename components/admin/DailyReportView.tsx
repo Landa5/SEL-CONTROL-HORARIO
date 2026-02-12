@@ -111,7 +111,7 @@ export default function DailyReportView() {
                             {conductores.map((c: any) => (
                                 <tr key={c.id} className="hover:bg-slate-50/50">
                                     <td className="px-6 py-3 font-bold text-gray-900">{c.nombre}</td>
-                                    <td className="px-6 py-3 text-mono text-gray-600">{c.horaEntrada} - {c.horaSalida}</td>
+                                    <td className="px-6 py-3 text-mono text-gray-600">{c.horaEntrada}{c.horaSalida ? ` - ${c.horaSalida}` : ''}</td>
                                     <td className="px-6 py-3 text-right font-mono">{c.conduccionHoras} h</td>
                                     <td className="px-6 py-3 text-right font-mono font-bold text-slate-800">{c.km}</td>
                                     <td className="px-6 py-3 text-right font-mono text-slate-500">{c.kmh}</td>
