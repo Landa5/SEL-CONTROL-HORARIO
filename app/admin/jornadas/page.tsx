@@ -19,11 +19,9 @@ function JornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
     const searchParams = useSearchParams();
     const currentTab = searchParams.get('tab') || 'list';
-    const [userRole, setUserRole] = useState<string | null>(null);
 
     useEffect(() => {
         fetchJornadas();
-        fetch('/api/auth/session').then(res => res.json()).then(data => setUserRole(data?.rol));
     }, [searchParams]);
 
     const fetchJornadas = async () => {
@@ -179,7 +177,6 @@ function JornadasContent() {
                                                     <th className="p-4 font-bold text-gray-600 text-center">Entrada</th>
                                                     <th className="p-4 font-bold text-gray-600 text-center">Salida</th>
                                                     <th className="p-4 font-bold text-gray-600 text-center">Total</th>
-                                                    {userRole === 'ADMIN' && <th className="p-4 font-bold text-gray-600 text-center">Descanso</th>}
                                                     <th className="p-4 font-bold text-gray-600 text-center text-indigo-600">KM</th>
                                                     <th className="p-4 font-bold text-gray-600 text-center">Descargas</th>
                                                     <th className="p-4 font-bold text-gray-600 text-center">Viajes</th>
@@ -195,24 +192,6 @@ function JornadasContent() {
                                                     const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
                                                     const totalRepostajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0) || 0;
 
-                                                    // Calculate Break Time (only if ADMIN)
-                                                    let breakTimeDisplay = null;
-                                                    if (userRole === 'ADMIN') {
-                                                        const empJornadas = groupedJornadas[date].filter((j: any) => j.empleado.id === jor.empleado.id).sort((a: any, b: any) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
-                                                        const idx = empJornadas.findIndex((j: any) => j.id === jor.id);
-                                                        if (idx > 0) {
-                                                            const prev = empJornadas[idx - 1];
-                                                            if (prev.horaSalida) {
-                                                                const diff = Math.round((new Date(jor.horaEntrada).getTime() - new Date(prev.horaSalida).getTime()) / 60000);
-                                                                if (diff > 0) {
-                                                                    const hours = Math.floor(diff / 60);
-                                                                    const mins = diff % 60;
-                                                                    breakTimeDisplay = `${hours}h ${mins}m`;
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-
                                                     return (
                                                         <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                                                             <td className="p-4">
@@ -220,12 +199,7 @@ function JornadasContent() {
                                                                     <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs uppercase">
                                                                         {jor.empleado?.nombre?.charAt(0) || '?'}
                                                                     </div>
-                                                                    <div>
-                                                                        <div className="font-bold text-gray-900">{jor.empleado?.nombre}</div>
-                                                                        {breakTimeDisplay && (
-                                                                            <div className="text-[10px] text-gray-400 font-mono md:hidden">Descanso: {breakTimeDisplay}</div>
-                                                                        )}
-                                                                    </div>
+                                                                    <span className="font-bold text-gray-900">{jor.empleado?.nombre}</span>
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 text-center font-mono text-gray-600">
@@ -237,17 +211,6 @@ function JornadasContent() {
                                                             <td className="p-4 font-bold text-blue-700 text-center">
                                                                 {formatDuration(jor.totalHoras)}
                                                             </td>
-                                                            {userRole === 'ADMIN' && (
-                                                                <td className="p-4 text-center">
-                                                                    {breakTimeDisplay ? (
-                                                                        <span className="bg-yellow-100 text-yellow-800 font-bold px-2 py-1 rounded text-xs whitespace-nowrap">
-                                                                            {breakTimeDisplay}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-gray-300">-</span>
-                                                                    )}
-                                                                </td>
-                                                            )}
                                                             <td className="p-4 text-center">
                                                                 <span className="font-black text-indigo-600">{totalKm} km</span>
                                                             </td>

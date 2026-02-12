@@ -114,43 +114,59 @@ export default function TimelinePeopleView({ jornadas, date }: TimelinePeopleVie
                                                                     {format(new Date(j.horaEntrada), 'HH:mm')} - {j.horaSalida ? format(new Date(j.horaSalida), 'HH:mm') : '...'}
                                                                 </span>
                                                             ))}
+                                                            {(() => {
+                                                                // Calculate Total Break Time
+                                                                const sorted = [...empJornadas].sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
+                                                                let totalBreak = 0;
+                                                                for (let i = 1; i < sorted.length; i++) {
+                                                                    const prevEnd = new Date(sorted[i - 1].horaSalida);
+                                                                    const currStart = new Date(sorted[i].horaEntrada);
+                                                                    if (sorted[i - 1].horaSalida) {
+                                                                        const gap = differenceInMinutes(currStart, prevEnd);
+                                                                        if (gap > 0) totalBreak += gap;
+                                                                    }
+                                                                }
+                                                                if (totalBreak > 0) {
+                                                                    const h = Math.floor(totalBreak / 60);
+                                                                    const m = totalBreak % 60;
+                                                                    return (
+                                                                        <span className="text-orange-600 font-bold mt-1 block">
+                                                                            Descanso: {h > 0 ? `${h}h ` : ''}{m}m
+                                                                        </span>
+                                                                    )
+                                                                }
+                                                                return null;
+                                                            })()}
                                                         </div>
                                                     </div>
                                                 </div>
 
                                                 {/* Timeline Lane */}
-                                                <div className="flex-1 relative h-8 bg-gray-100/30 rounded-full overflow-hidden z-10 mx-2">
+                                                <div className="flex-1 relative h-6 bg-gray-100/30 rounded-full overflow-hidden z-10">
                                                     {/* Render multiple bars for this employee */}
                                                     {(() => {
-                                                        // Sort by start time for GAPS calculation
-                                                        const sortedForGaps = [...empJornadas].sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
-
-                                                        // Sort by duration DESC for BARS rendering (so short nested shifts appear on top)
-                                                        const sortedForBars = [...empJornadas].sort((a, b) => {
-                                                            const durA = (a.horaSalida ? new Date(a.horaSalida).getTime() : Date.now()) - new Date(a.horaEntrada).getTime();
-                                                            const durB = (b.horaSalida ? new Date(b.horaSalida).getTime() : Date.now()) - new Date(b.horaEntrada).getTime();
-                                                            return durB - durA;
-                                                        });
-
+                                                        const sortedJornadas = [...empJornadas].sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
                                                         const dayStart = startOfDay(parseISO(date));
 
-                                                        // Generate BARS
-                                                        const barElements = sortedForBars.map(jor => {
+                                                        return sortedJornadas.flatMap((jor, index) => {
                                                             const start = new Date(jor.horaEntrada);
                                                             const end = jor.horaSalida ? new Date(jor.horaSalida) : new Date();
+
                                                             let startMinutes = differenceInMinutes(start, dayStart);
                                                             let durationMinutes = differenceInMinutes(end, start);
+
+                                                            // if (startMinutes < 0) startMinutes = 0;
 
                                                             const leftPercent = (startMinutes / (24 * 60)) * 100;
                                                             const widthPercent = (durationMinutes / (24 * 60)) * 100;
 
-                                                            return (
+                                                            const elements = [
                                                                 <TooltipProvider key={`jor-${jor.id}`}>
                                                                     <Tooltip delayDuration={0}>
                                                                         <TooltipTrigger asChild>
                                                                             <div
-                                                                                className={`absolute top-0 bottom-0 rounded-sm shadow-sm cursor-pointer transition-all border z-20 hover:z-30 hover:shadow-lg hover:brightness-110
-                                                                                    ${jor.horaSalida ? 'bg-green-500/90 border-green-600' : 'bg-blue-500/90 border-blue-600 animate-pulse'}
+                                                                                className={`absolute top-0 bottom-0 rounded-sm shadow-sm cursor-pointer transition-all border z-20
+                                                                                    ${jor.horaSalida ? 'bg-green-500/90 hover:bg-green-600 border-green-600' : 'bg-blue-500/90 hover:bg-blue-600 border-blue-600 animate-pulse'}
                                                                                 `}
                                                                                 style={{
                                                                                     left: `${leftPercent}%`,
@@ -169,41 +185,38 @@ export default function TimelinePeopleView({ jornadas, date }: TimelinePeopleVie
                                                                         </TooltipContent>
                                                                     </Tooltip>
                                                                 </TooltipProvider>
-                                                            );
-                                                        });
+                                                            ];
 
-                                                        // Generate GAPS
-                                                        const gapElements = sortedForGaps.flatMap((jor, index) => {
+                                                            // Calculate GAP with previous jornada
                                                             if (index > 0) {
-                                                                const prevJor = sortedForGaps[index - 1];
+                                                                const prevJor = sortedJornadas[index - 1];
                                                                 if (prevJor.horaSalida) {
                                                                     const prevEnd = new Date(prevJor.horaSalida);
-                                                                    const currentStart = new Date(jor.horaEntrada);
-                                                                    const gapMinutes = differenceInMinutes(currentStart, prevEnd);
+                                                                    const gapMinutes = differenceInMinutes(start, prevEnd);
 
                                                                     if (gapMinutes > 0) {
                                                                         const prevEndMinutes = differenceInMinutes(prevEnd, dayStart);
                                                                         const gapLeftPercent = (prevEndMinutes / (24 * 60)) * 100;
                                                                         const gapWidthPercent = (gapMinutes / (24 * 60)) * 100;
 
-                                                                        return (
+                                                                        elements.unshift(
                                                                             <TooltipProvider key={`gap-${index}`}>
                                                                                 <Tooltip delayDuration={0}>
                                                                                     <TooltipTrigger asChild>
                                                                                         <div
-                                                                                            className="absolute top-2 bottom-2 bg-gray-200/50 hover:bg-gray-300 transition-colors cursor-help z-10 flex items-center justify-center rounded-sm"
+                                                                                            className="absolute top-1.5 bottom-1.5 bg-gray-200/50 hover:bg-gray-300 transition-colors cursor-help z-10 flex items-center justify-center"
                                                                                             style={{
                                                                                                 left: `${gapLeftPercent}%`,
                                                                                                 width: `${gapWidthPercent}%`
                                                                                             }}
                                                                                         >
-                                                                                            {gapWidthPercent > 2 && <span className="text-[9px] text-gray-500 font-bold select-none">-</span>}
+                                                                                            {gapWidthPercent > 2 && <span className="text-[8px] text-gray-500 font-bold">descanso</span>}
                                                                                         </div>
                                                                                     </TooltipTrigger>
                                                                                     <TooltipContent className="bg-gray-800 text-white border-0 z-50">
                                                                                         <div className="text-xs text-center">
                                                                                             <p className="font-bold text-gray-300 mb-1 uppercase tracking-wider">Tiempo Libre / Comida</p>
-                                                                                            <p className="font-mono">{format(prevEnd, 'HH:mm')} ➔ {format(currentStart, 'HH:mm')}</p>
+                                                                                            <p className="font-mono">{format(prevEnd, 'HH:mm')} ➔ {format(start, 'HH:mm')}</p>
                                                                                             <p className="font-black text-white text-lg mt-1">{Math.floor(gapMinutes / 60)}h {gapMinutes % 60}m</p>
                                                                                         </div>
                                                                                     </TooltipContent>
@@ -213,10 +226,8 @@ export default function TimelinePeopleView({ jornadas, date }: TimelinePeopleVie
                                                                     }
                                                                 }
                                                             }
-                                                            return [];
+                                                            return elements;
                                                         });
-
-                                                        return [...gapElements, ...barElements];
                                                     })()}
                                                 </div>
                                             </div>
