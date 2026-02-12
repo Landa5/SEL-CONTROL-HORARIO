@@ -72,6 +72,14 @@ export default function TaskCard({ task }: TaskCardProps) {
                         </span>
                     </div>
 
+                    {/* Creation Info */}
+                    <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                        <Clock className="w-3 h-3" />
+                        <span>{format(new Date(task.createdAt), "d MMM", { locale: es })}</span>
+                        <span>•</span>
+                        <span>{task.creadoPor?.nombre || 'Desconocido'}</span>
+                    </div>
+
                     {/* Due Date */}
                     {task.fechaLimite && (
                         <div className={`flex items-center gap-1.5 ${isOverdue ? 'text-red-600 font-bold' : ''}`}>

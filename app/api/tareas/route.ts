@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { TareaTipo, TareaPrioridad, TareaEstado } from '@prisma/client';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
     try {
         const session = await getSession();
