@@ -121,47 +121,91 @@ export default function TimelinePeopleView({ jornadas, date }: TimelinePeopleVie
                                                 {/* Timeline Lane */}
                                                 <div className="flex-1 relative h-6 bg-gray-100/30 rounded-full overflow-hidden z-10">
                                                     {/* Render multiple bars for this employee */}
-                                                    {empJornadas.map((jor: any) => {
-                                                        const start = new Date(jor.horaEntrada);
-                                                        const end = jor.horaSalida ? new Date(jor.horaSalida) : new Date();
-
+                                                    {(() => {
+                                                        const sortedJornadas = [...empJornadas].sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
                                                         const dayStart = startOfDay(parseISO(date));
 
-                                                        let startMinutes = differenceInMinutes(start, dayStart);
-                                                        let durationMinutes = differenceInMinutes(end, start);
+                                                        return sortedJornadas.flatMap((jor, index) => {
+                                                            const start = new Date(jor.horaEntrada);
+                                                            const end = jor.horaSalida ? new Date(jor.horaSalida) : new Date();
 
-                                                        if (startMinutes < 0) startMinutes = 0;
+                                                            let startMinutes = differenceInMinutes(start, dayStart);
+                                                            let durationMinutes = differenceInMinutes(end, start);
 
-                                                        const leftPercent = (startMinutes / (24 * 60)) * 100;
-                                                        const widthPercent = (durationMinutes / (24 * 60)) * 100;
+                                                            // if (startMinutes < 0) startMinutes = 0;
 
-                                                        return (
-                                                            <TooltipProvider key={jor.id}>
-                                                                <Tooltip delayDuration={0}>
-                                                                    <TooltipTrigger asChild>
-                                                                        <div
-                                                                            className={`absolute top-0 bottom-0 rounded-full shadow-sm cursor-pointer transition-all border
-                                                                                ${jor.horaSalida ? 'bg-green-500/90 hover:bg-green-600 border-green-600' : 'bg-blue-500/90 hover:bg-blue-600 border-blue-600 animate-pulse'}
-                                                                            `}
-                                                                            style={{
-                                                                                left: `${leftPercent}%`,
-                                                                                width: `${Math.max(widthPercent, 0.5)}%`
-                                                                            }}
-                                                                        >
-                                                                        </div>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent className="bg-slate-900 text-white border-0 z-50">
-                                                                        <div className="text-xs">
-                                                                            <p className="font-bold mb-1">{jor.empleado.nombre}</p>
-                                                                            <p className="text-[10px] uppercase text-gray-400 mb-1">{role}</p>
-                                                                            <p>{format(start, 'HH:mm')} - {jor.horaSalida ? format(end, 'HH:mm') : 'En curso'}</p>
-                                                                            <p className="opacity-70 mt-1">Total: {((durationMinutes / 60)).toFixed(2)}h</p>
-                                                                        </div>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                        );
-                                                    })}
+                                                            const leftPercent = (startMinutes / (24 * 60)) * 100;
+                                                            const widthPercent = (durationMinutes / (24 * 60)) * 100;
+
+                                                            const elements = [
+                                                                <TooltipProvider key={`jor-${jor.id}`}>
+                                                                    <Tooltip delayDuration={0}>
+                                                                        <TooltipTrigger asChild>
+                                                                            <div
+                                                                                className={`absolute top-0 bottom-0 rounded-sm shadow-sm cursor-pointer transition-all border z-20
+                                                                                    ${jor.horaSalida ? 'bg-green-500/90 hover:bg-green-600 border-green-600' : 'bg-blue-500/90 hover:bg-blue-600 border-blue-600 animate-pulse'}
+                                                                                `}
+                                                                                style={{
+                                                                                    left: `${leftPercent}%`,
+                                                                                    width: `${Math.max(widthPercent, 0.5)}%`
+                                                                                }}
+                                                                            >
+                                                                            </div>
+                                                                        </TooltipTrigger>
+                                                                        <TooltipContent className="bg-slate-900 text-white border-0 z-50">
+                                                                            <div className="text-xs">
+                                                                                <p className="font-bold mb-1">{jor.empleado.nombre}</p>
+                                                                                <p className="text-[10px] uppercase text-gray-400 mb-1">{role}</p>
+                                                                                <p>{format(start, 'HH:mm')} - {jor.horaSalida ? format(end, 'HH:mm') : 'En curso'}</p>
+                                                                                <p className="opacity-70 mt-1">Total: {((durationMinutes / 60)).toFixed(2)}h</p>
+                                                                            </div>
+                                                                        </TooltipContent>
+                                                                    </Tooltip>
+                                                                </TooltipProvider>
+                                                            ];
+
+                                                            // Calculate GAP with previous jornada
+                                                            if (index > 0) {
+                                                                const prevJor = sortedJornadas[index - 1];
+                                                                if (prevJor.horaSalida) {
+                                                                    const prevEnd = new Date(prevJor.horaSalida);
+                                                                    const gapMinutes = differenceInMinutes(start, prevEnd);
+
+                                                                    if (gapMinutes > 0) {
+                                                                        const prevEndMinutes = differenceInMinutes(prevEnd, dayStart);
+                                                                        const gapLeftPercent = (prevEndMinutes / (24 * 60)) * 100;
+                                                                        const gapWidthPercent = (gapMinutes / (24 * 60)) * 100;
+
+                                                                        elements.unshift(
+                                                                            <TooltipProvider key={`gap-${index}`}>
+                                                                                <Tooltip delayDuration={0}>
+                                                                                    <TooltipTrigger asChild>
+                                                                                        <div
+                                                                                            className="absolute top-1.5 bottom-1.5 bg-gray-200/50 hover:bg-gray-300 transition-colors cursor-help z-10 flex items-center justify-center"
+                                                                                            style={{
+                                                                                                left: `${gapLeftPercent}%`,
+                                                                                                width: `${gapWidthPercent}%`
+                                                                                            }}
+                                                                                        >
+                                                                                            {gapWidthPercent > 2 && <span className="text-[8px] text-gray-500 font-bold">descanso</span>}
+                                                                                        </div>
+                                                                                    </TooltipTrigger>
+                                                                                    <TooltipContent className="bg-gray-800 text-white border-0 z-50">
+                                                                                        <div className="text-xs text-center">
+                                                                                            <p className="font-bold text-gray-300 mb-1 uppercase tracking-wider">Tiempo Libre / Comida</p>
+                                                                                            <p className="font-mono">{format(prevEnd, 'HH:mm')} ➔ {format(start, 'HH:mm')}</p>
+                                                                                            <p className="font-black text-white text-lg mt-1">{Math.floor(gapMinutes / 60)}h {gapMinutes % 60}m</p>
+                                                                                        </div>
+                                                                                    </TooltipContent>
+                                                                                </Tooltip>
+                                                                            </TooltipProvider>
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }
+                                                            return elements;
+                                                        });
+                                                    })()}
                                                 </div>
                                             </div>
                                         ))}
