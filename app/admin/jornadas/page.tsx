@@ -64,6 +64,103 @@ function JornadasContent() {
     const [selectedJornada, setSelectedJornada] = useState<any>(null);
     const [editingUso, setEditingUso] = useState<any>(null);
 
+    // Sorting State
+    const [sortConfig, setSortConfig] = useState<{ key: string, direction: 'asc' | 'desc' }>({ key: 'rol', direction: 'asc' });
+
+    const handleSort = (key: string) => {
+        let direction: 'asc' | 'desc' = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') {
+            direction = 'desc';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortJornadas = (items: any[]) => {
+        const sortedItems = [...items];
+        sortedItems.sort((a, b) => {
+            let aValue: any = '';
+            let bValue: any = '';
+
+            // Helper to sum usage data
+            const sumUsage = (jor: any, field: string) =>
+                jor.usosCamion?.reduce((acc: number, t: any) => acc + (t[field] || 0), 0) || 0;
+
+            const sumKm = (jor: any) =>
+                jor.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0) || 0;
+
+            const sumDescargas = (jor: any) =>
+                jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0) || 0;
+
+
+            switch (sortConfig.key) {
+                case 'empleado':
+                    aValue = a.empleado?.nombre || '';
+                    bValue = b.empleado?.nombre || '';
+                    break;
+                case 'rol':
+                    // Custom Role Order
+                    const roleOrder = ['ADMIN', 'OFICINA', 'JEFE_TRAFICO', 'CONDUCTOR', 'MECANICO'];
+                    const roleA = a.empleado?.rol || 'OTROS';
+                    const roleB = b.empleado?.rol || 'OTROS';
+
+                    const idxA = roleOrder.indexOf(roleA);
+                    const idxB = roleOrder.indexOf(roleB);
+
+                    if (idxA !== idxB) {
+                        // If roles are different, sort by role index
+                        // direction logic is applied at the end usually, but for fixed role order 
+                        // we might want it always consistent or follow sort direction.
+                        // Let's follow sort direction for consistency.
+                        aValue = idxA === -1 ? 999 : idxA;
+                        bValue = idxB === -1 ? 999 : idxB;
+                    } else {
+                        // If roles SAME, sort by Name
+                        return a.empleado?.nombre.localeCompare(b.empleado?.nombre);
+                    }
+                    break;
+                case 'entrada':
+                    aValue = new Date(a.horaEntrada).getTime();
+                    bValue = new Date(b.horaEntrada).getTime();
+                    break;
+                case 'salida':
+                    aValue = a.horaSalida ? new Date(a.horaSalida).getTime() : 0;
+                    bValue = b.horaSalida ? new Date(b.horaSalida).getTime() : 0;
+                    break;
+                case 'total':
+                    aValue = a.totalHoras || 0;
+                    bValue = b.totalHoras || 0;
+                    break;
+                case 'km':
+                    aValue = sumKm(a);
+                    bValue = sumKm(b);
+                    break;
+                case 'descargas':
+                    aValue = sumDescargas(a);
+                    bValue = sumDescargas(b);
+                    break;
+                case 'viajes':
+                    aValue = sumUsage(a, 'viajesCount');
+                    bValue = sumUsage(b, 'viajesCount');
+                    break;
+                case 'repostajes':
+                    aValue = sumUsage(a, 'litrosRepostados');
+                    bValue = sumUsage(b, 'litrosRepostados');
+                    break;
+                case 'estado':
+                    aValue = a.estado || '';
+                    bValue = b.estado || '';
+                    break;
+                default:
+                    return 0;
+            }
+
+            if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+            if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+            return 0;
+        });
+        return sortedItems;
+    };
+
     const handleSaveUso = async (id: number, data: any) => {
         try {
             const res = await fetch(`/api/usos-camion/${id}`, {
@@ -131,6 +228,13 @@ function JornadasContent() {
         document.body.removeChild(link);
     };
 
+    // Helper for rendering Sort Arrow
+    const SortIcon = ({ column }: { column: string }) => {
+        if (sortConfig.key !== column) return <span className="text-gray-300 ml-1 text-[10px]">⇅</span>;
+        return <span className="text-blue-600 ml-1 text-[10px]">{sortConfig.direction === 'asc' ? '▲' : '▼'}</span>;
+    };
+
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center bg-white p-6 rounded-xl border shadow-sm">
@@ -187,20 +291,38 @@ function JornadasContent() {
                                         <table className="w-full text-left border-collapse text-sm">
                                             <thead>
                                                 <tr className="border-b bg-gray-50/50">
-                                                    <th className="p-4 font-bold text-gray-600">Empleado</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Entrada</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Salida</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Total</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center text-indigo-600">KM</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Descargas</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Viajes</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Repostajes</th>
-                                                    <th className="p-4 font-bold text-gray-600 text-center">Estado</th>
+                                                    <th className="p-4 font-bold text-gray-600 cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('rol')}>
+                                                        Empleado <SortIcon column="rol" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('entrada')}>
+                                                        Entrada <SortIcon column="entrada" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('salida')}>
+                                                        Salida <SortIcon column="salida" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('total')}>
+                                                        Total <SortIcon column="total" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center text-indigo-600 cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('km')}>
+                                                        KM <SortIcon column="km" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('descargas')}>
+                                                        Descargas <SortIcon column="descargas" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('viajes')}>
+                                                        Viajes <SortIcon column="viajes" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('repostajes')}>
+                                                        Repostajes <SortIcon column="repostajes" />
+                                                    </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('estado')}>
+                                                        Estado <SortIcon column="estado" />
+                                                    </th>
                                                     <th className="p-4 font-bold text-gray-600 text-center">Acciones</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {groupedJornadas[date].map((jor: any) => {
+                                                {sortJornadas(groupedJornadas[date]).map((jor: any) => {
                                                     const totalKm = jor.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0) || 0;
                                                     const totalDescargas = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0) || 0;
                                                     const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
@@ -210,10 +332,17 @@ function JornadasContent() {
                                                         <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xs uppercase">
+                                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase
+                                                                        ${jor.empleado?.rol === 'CONDUCTOR' ? 'bg-blue-100 text-blue-700' :
+                                                                            jor.empleado?.rol === 'MECANICO' ? 'bg-orange-100 text-orange-700' :
+                                                                                'bg-gray-100 text-gray-700'}
+                                                                    `}>
                                                                         {jor.empleado?.nombre?.charAt(0) || '?'}
                                                                     </div>
-                                                                    <span className="font-bold text-gray-900">{jor.empleado?.nombre}</span>
+                                                                    <div>
+                                                                        <div className="font-bold text-gray-900">{jor.empleado?.nombre}</div>
+                                                                        <div className="text-[10px] text-gray-400 font-bold tracking-wider">{jor.empleado?.rol || 'OTROS'}</div>
+                                                                    </div>
                                                                 </div>
                                                             </td>
                                                             <td className="p-4 text-center font-mono text-gray-600">
