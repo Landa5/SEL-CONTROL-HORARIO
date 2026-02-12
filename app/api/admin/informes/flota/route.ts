@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { startOfMonth, endOfMonth, parseISO, startOfDay, endOfDay } from 'date-fns';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const from = searchParams.get('from');
@@ -41,12 +43,18 @@ export async function GET(request: Request) {
                 };
             }
 
-            // Calcular KM si no está guardado explícitamente
-            // Nota: kmRecorridos es nullable en esquema, fallback a resta
-            let km = uso.kmRecorridos || 0;
+            // Calcular KM si no está guardado explícitamente o asegurar que no sea negativo
+            // Priorizamos kmRecorridos guardado, si no calculamos.
+            let km = uso.kmRecorridos !== null ? uso.kmRecorridos : 0;
+
+            // Fallback: si es 0 y tenemos datos para calcularlo (reparación de datos antiguos)
             if (km === 0 && uso.kmFinal && uso.kmInicial) {
-                km = uso.kmFinal - uso.kmInicial;
+                const diff = uso.kmFinal - uso.kmInicial;
+                km = diff > 0 ? diff : 0;
             }
+
+            // Safety check: nunca sumar negativos
+            if (km < 0) km = 0;
 
             truckStats[truckId].kmTotales += km;
             truckStats[truckId].litrosTotales += uso.litrosRepostados || 0;

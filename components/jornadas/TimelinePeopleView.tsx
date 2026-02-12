@@ -109,11 +109,6 @@ export default function TimelinePeopleView({ jornadas, date }: TimelinePeopleVie
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-gray-700 text-xs truncate w-28">{employee.nombre}</div>
                                                         <div className="text-[10px] text-gray-400 font-mono flex flex-col gap-0.5">
-                                                            {empJornadas.map((j: any) => (
-                                                                <span key={j.id} className="truncate">
-                                                                    {format(new Date(j.horaEntrada), 'HH:mm')} - {j.horaSalida ? format(new Date(j.horaSalida), 'HH:mm') : '...'}
-                                                                </span>
-                                                            ))}
                                                             {(() => {
                                                                 // Calculate Total Break Time
                                                                 const sorted = [...empJornadas].sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());

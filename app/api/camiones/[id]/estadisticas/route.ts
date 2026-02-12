@@ -58,7 +58,14 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
         const dailyMap = new Map<string, any>();
 
         usos.forEach(uso => {
-            const km = uso.kmRecorridos || 0;
+            // Robust KM calculation
+            let km = uso.kmRecorridos !== null ? uso.kmRecorridos : 0;
+
+            if (km === 0 && uso.kmFinal && uso.kmInicial) {
+                const diff = uso.kmFinal - uso.kmInicial;
+                km = diff > 0 ? diff : 0;
+            }
+            if (km < 0) km = 0;
             const litros = uso.litrosRepostados || 0;
 
             totalKm += km;

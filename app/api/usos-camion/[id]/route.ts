@@ -20,17 +20,31 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const body = await request.json();
         const { kmInicial, kmFinal, descargasCount, viajesCount, litrosRepostados, fotoKmInicial } = body;
 
+        // Fetch existing record to merge data if not all fields are provided in the update
+        const existingUso = await prisma.usoCamion.findUnique({
+            where: { id: parseInt(id) }
+        });
+
+        if (!existingUso) {
+            return NextResponse.json({ error: 'Uso no encontrado' }, { status: 404 });
+        }
+
         const dataToUpdate: any = {
-            kmInicial: parseInt(kmInicial),
-            descargasCount: parseInt(descargasCount) || 0,
-            viajesCount: parseInt(viajesCount) || 0,
-            litrosRepostados: parseFloat(litrosRepostados) || 0,
-            fotoKmInicial
+            kmInicial: body.kmInicial !== undefined ? parseInt(body.kmInicial) : existingUso.kmInicial,
+            descargasCount: body.descargasCount !== undefined ? parseInt(body.descargasCount) : existingUso.descargasCount,
+            viajesCount: body.viajesCount !== undefined ? parseInt(body.viajesCount) : existingUso.viajesCount,
+            litrosRepostados: body.litrosRepostados !== undefined ? parseFloat(body.litrosRepostados) : existingUso.litrosRepostados,
+            fotoKmInicial: body.fotoKmInicial !== undefined ? body.fotoKmInicial : existingUso.fotoKmInicial
         };
 
-        if (kmFinal !== undefined && kmFinal !== null && kmFinal !== '') {
-            dataToUpdate.kmFinal = parseInt(kmFinal);
-            dataToUpdate.kmRecorridos = (parseInt(kmFinal) - parseInt(kmInicial));
+        // Handle KM Final and Recorridos calculation
+        let newKmFinal = body.kmFinal !== undefined ? (body.kmFinal === '' ? null : parseInt(body.kmFinal)) : existingUso.kmFinal;
+
+        if (newKmFinal !== null && !isNaN(newKmFinal)) {
+            dataToUpdate.kmFinal = newKmFinal;
+            // Ensure we don't calculate negative distance
+            const dist = newKmFinal - dataToUpdate.kmInicial;
+            dataToUpdate.kmRecorridos = dist > 0 ? dist : 0;
         } else {
             dataToUpdate.kmFinal = null;
             dataToUpdate.kmRecorridos = 0;
