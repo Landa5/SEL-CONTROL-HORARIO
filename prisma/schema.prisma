@@ -652,6 +652,9 @@ model Documento {
   camionId Int?
   camion   Camion? @relation(fields: [camionId], references: [id])
 
+  clienteAlquilerId Int?
+  clienteAlquiler   ClienteAlquiler? @relation(fields: [clienteAlquilerId], references: [id])
+
   subidoPorId Int
   subidoPor   Empleado @relation("SubidoPor", fields: [subidoPorId], references: [id])
 
@@ -675,6 +678,7 @@ model ClienteAlquiler {
   codigoPostal String?
   
   alquileres AlquilerPlaza[]
+  documentos Documento[]
   
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

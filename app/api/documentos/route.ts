@@ -12,10 +12,12 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const empleadoId = searchParams.get('empleadoId');
     const camionId = searchParams.get('camionId');
+    const clienteId = searchParams.get('clienteId');
 
     const whereClause: any = {};
     if (empleadoId) whereClause.empleadoId = Number(empleadoId);
     if (camionId) whereClause.camionId = Number(camionId);
+    if (clienteId) whereClause.clienteAlquilerId = Number(clienteId);
 
     // Security: Drivers can only see their own docs (unless admin/office)
     if (session.rol === 'CONDUCTOR' && empleadoId && Number(empleadoId) !== Number(session.id)) {
@@ -25,7 +27,8 @@ export async function GET(request: Request) {
     try {
         const docs = await prisma.documento.findMany({
             where: whereClause,
-            orderBy: { createdAt: 'desc' }
+            orderBy: { createdAt: 'desc' },
+            include: { subidoPor: { select: { nombre: true } } }
         });
         return NextResponse.json(docs);
     } catch (error) {
@@ -47,6 +50,7 @@ export async function POST(request: Request) {
         const fechaCaducidadStr = formData.get('fechaCaducidad') as string;
         const empleadoId = formData.get('empleadoId') as string;
         const camionId = formData.get('camionId') as string;
+        const clienteId = formData.get('clienteId') as string;
 
         if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
 
@@ -76,6 +80,7 @@ export async function POST(request: Request) {
                 fechaCaducidad: fechaCaducidadStr ? new Date(fechaCaducidadStr) : null,
                 empleadoId: empleadoId ? Number(empleadoId) : null,
                 camionId: camionId ? Number(camionId) : null,
+                clienteAlquilerId: clienteId ? Number(clienteId) : null,
                 subidoPorId: Number(session.id)
             }
         });

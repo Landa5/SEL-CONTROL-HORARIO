@@ -36,7 +36,10 @@ export async function POST(request: Request) {
                 titulo: body.titulo,
                 descripcion: body.descripcion || '',
                 tipo: (body.tipo as TareaTipo) || TareaTipo.OPERATIVA,
-                estado: TareaEstado.BACKLOG, // Default state
+
+                // If deadline or assignee is set, it's not backlog anymore, it's pending/planned
+                estado: (body.fechaLimite || body.asignadoAId) ? TareaEstado.PENDIENTE : TareaEstado.BACKLOG,
+
                 prioridad: (body.prioridad as TareaPrioridad) || TareaPrioridad.MEDIA,
 
                 activoTipo: body.activoTipo,

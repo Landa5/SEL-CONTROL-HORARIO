@@ -9,7 +9,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
     DialogTrigger // Ensure this is exported or use a separate button to open
 } from '@/components/ui/Dialog';
-import { Car, User, Calendar, Euro, Plus, FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Car, User, Calendar, Euro, Plus, FileText, CheckCircle, XCircle, Upload, Trash2, File as FileIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { generateRentalContract } from '@/lib/contractGenerator';
@@ -42,6 +42,13 @@ interface Plaza {
     alquileres: Alquiler[];
 }
 
+interface Documento {
+    id: number;
+    nombre: string;
+    url: string;
+    createdAt: string;
+}
+
 export default function AlquilerPage() {
     const [plazas, setPlazas] = useState<Plaza[]>([]);
     const [clientes, setClientes] = useState<Cliente[]>([]);
@@ -49,6 +56,12 @@ export default function AlquilerPage() {
     const [selectedPlaza, setSelectedPlaza] = useState<Plaza | null>(null);
     const [isRentModalOpen, setIsRentModalOpen] = useState(false);
     const [isClientModalOpen, setIsClientModalOpen] = useState(false);
+
+    // Docs State
+    const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
+    const [currentDocs, setCurrentDocs] = useState<Documento[]>([]);
+    const [selectedClientForDocs, setSelectedClientForDocs] = useState<Cliente | null>(null);
+    const [uploading, setUploading] = useState(false);
 
     // Form States
     const [selectedClientId, setSelectedClientId] = useState<string>('');
@@ -189,6 +202,38 @@ export default function AlquilerPage() {
         }
     };
 
+    const openDocsModal = async (cliente: Cliente) => {
+        setSelectedClientForDocs(cliente);
+        setIsDocsModalOpen(true);
+        try {
+            const res = await fetch(`/api/documentos?clienteId=${cliente.id}`);
+            if (res.ok) setCurrentDocs(await res.json());
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files?.[0] || !selectedClientForDocs) return;
+        setUploading(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', e.target.files[0]);
+            formData.append('clienteId', selectedClientForDocs.id.toString());
+            formData.append('tipo', 'CONTRATO');
+
+            const res = await fetch('/api/documentos', { method: 'POST', body: formData });
+            if (res.ok) {
+                const updatedDocs = await fetch(`/api/documentos?clienteId=${selectedClientForDocs.id}`);
+                setCurrentDocs(await updatedDocs.json());
+            }
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setUploading(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-black text-gray-900 uppercase">Gestión de Alquiler de Garaje</h1>
@@ -252,6 +297,15 @@ export default function AlquilerPage() {
                                                         })}
                                                     >
                                                         <FileText className="w-4 h-4 mr-2" /> Contrato
+                                                    </Button>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="border-gray-300 text-gray-700 hover:bg-gray-100"
+                                                        onClick={() => openDocsModal(activeRental!.cliente)}
+                                                        title="Gestionar Documentos"
+                                                    >
+                                                        <Upload className="w-4 h-4" />
                                                     </Button>
                                                 </div>
                                             </div>
@@ -545,6 +599,52 @@ export default function AlquilerPage() {
                         <Button variant="outline" onClick={() => setIsRentModalOpen(false)}>Cancelar</Button>
                         <Button onClick={handleRent} className="bg-green-600 hover:bg-green-700">Confirmar Alquiler</Button>
                     </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* DOCS MODAL */}
+            <Dialog open={isDocsModalOpen} onOpenChange={setIsDocsModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Documentos de {selectedClientForDocs?.nombre}</DialogTitle>
+                        <DialogDescription>Gestionar contratos y documentación.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors">
+                            <input
+                                type="file"
+                                id="doc-upload"
+                                className="hidden"
+                                onChange={handleUpload}
+                                disabled={uploading}
+                            />
+                            <label htmlFor="doc-upload" className="cursor-pointer flex flex-col items-center justify-center">
+                                <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                                <span className="text-sm font-medium text-gray-600">
+                                    {uploading ? 'Subiendo...' : 'Click para subir Contrato firmado'}
+                                </span>
+                            </label>
+                        </div>
+
+                        <div className="space-y-2">
+                            <h4 className="text-sm font-bold uppercase text-gray-500">Documentos Existentes</h4>
+                            {currentDocs.length === 0 ? (
+                                <p className="text-sm text-gray-400 italic">No hay documentos subidos.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {currentDocs.map(doc => (
+                                        <li key={doc.id} className="flex items-center justify-between p-2 bg-gray-50 rounded border text-sm">
+                                            <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 hover:underline text-blue-600">
+                                                <FileIcon className="w-4 h-4" />
+                                                {doc.nombre}
+                                            </a>
+                                            <span className="text-xs text-gray-400">{format(new Date(doc.createdAt), 'dd/MM/yyyy')}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
