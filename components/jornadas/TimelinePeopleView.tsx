@@ -9,15 +9,31 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 interface TimelinePeopleViewProps {
     jornadas: any[];
     date: string;
+    employees?: any[]; // Optional for backward compatibility, but should be passed
 }
 
-export default function TimelinePeopleView({ jornadas, date }: TimelinePeopleViewProps) {
+export default function TimelinePeopleView({ jornadas, date, employees = [] }: TimelinePeopleViewProps) {
     // 1. Organize data by Role and then by Employee
     const roleGroups: Record<string, Record<string, { employee: any, jornadas: any[] }>> = {};
 
+    // Initialize with all employees if available
+    if (employees.length > 0) {
+        employees.forEach(emp => {
+            const role = emp.rol || 'OTROS';
+            const empId = emp.id;
+
+            if (!roleGroups[role]) roleGroups[role] = {};
+            roleGroups[role][empId] = {
+                employee: emp,
+                jornadas: []
+            };
+        });
+    }
+
+    // Map jornadas to employees (and add employees found in jornadas if not already present)
     jornadas.forEach(jor => {
         const role = jor.empleado.rol || 'OTROS';
-        const empId = jor.empleado.id; // Assuming employee has an ID
+        const empId = jor.empleado.id;
 
         if (!roleGroups[role]) roleGroups[role] = {};
         if (!roleGroups[role][empId]) {

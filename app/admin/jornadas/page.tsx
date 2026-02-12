@@ -17,12 +17,26 @@ import { Pencil } from 'lucide-react';
 
 function JornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
+    const [employees, setEmployees] = useState<any[]>([]);
     const searchParams = useSearchParams();
     const currentTab = searchParams.get('tab') || 'list';
 
     useEffect(() => {
         fetchJornadas();
+        fetchEmployees();
     }, [searchParams]);
+
+    const fetchEmployees = async () => {
+        try {
+            const res = await fetch('/api/empleados');
+            if (res.ok) {
+                const data = await res.json();
+                setEmployees(data.filter((e: any) => e.activo));
+            }
+        } catch (error) {
+            console.error("Error fetching employees:", error);
+        }
+    };
 
     const fetchJornadas = async () => {
         const params = new URLSearchParams(searchParams.toString());
@@ -266,7 +280,7 @@ function JornadasContent() {
                         <div className="text-center p-12 text-gray-400">No hay datos de personal para mostrar</div>
                     ) : (
                         sortedDates.map(date => (
-                            <TimelinePeopleView key={date} date={date} jornadas={groupedJornadas[date]} />
+                            <TimelinePeopleView key={date} date={date} jornadas={groupedJornadas[date]} employees={employees} />
                         ))
                     )}
                 </TabsContent>
