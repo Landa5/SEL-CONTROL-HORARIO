@@ -92,7 +92,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/jornadas', label: 'Jornada / Fichajes', icon: Clock },
                 { href: '/admin/formacion', label: 'Formación', icon: BookOpen },
                 { href: '/admin/nominas', label: 'Nóminas', icon: Euro },
-                { href: '/admin/informes/operativos', label: 'Informe Operativo', icon: FileText },
+                { href: '/admin/informes/operativos?tab=personnel', label: 'Informe Operativo RRHH', icon: FileText },
             ]
         },
         {

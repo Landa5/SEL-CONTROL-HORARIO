@@ -14,7 +14,7 @@ interface TimelinePeopleViewProps {
 
 export default function TimelinePeopleView({ jornadas, date, employees = [] }: TimelinePeopleViewProps) {
     // 1. GROUPING & NORMALIZATION (Strict Algorithm)
-    const employeeData: Record<number, {
+    const employeeData: Record<string, {
         employee: any,
         role: string,
         shifts: { start: Date, end: Date, original: any }[]
@@ -26,7 +26,8 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
     // A. Initialize with all employees if available to ensure everyone is shown even if no data
     if (employees.length > 0) {
         employees.forEach(emp => {
-            employeeData[emp.id] = {
+            const strId = String(emp.id);
+            employeeData[strId] = {
                 employee: emp,
                 role: getRole(emp),
                 shifts: []
@@ -36,7 +37,8 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
 
     // B. Merge with Jornadas Data
     jornadas.forEach(jor => {
-        const empId = jor.empleado.id;
+        if (!jor.empleado) return; // Safety check
+        const empId = String(jor.empleado.id);
 
         // Ensure employee entry exists
         if (!employeeData[empId]) {
@@ -74,7 +76,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
     const roleOrder = ['ADMIN', 'OFICINA', 'CONDUCTOR', 'MECANICO', 'EMPLEADO', 'SIN ROL'];
 
     // Group by Role
-    const groupedByRole: Record<string, typeof employeeData[number][]> = {};
+    const groupedByRole: Record<string, typeof employeeData[string][]> = {};
     const statsByRole: Record<string, number> = {};
 
     Object.values(employeeData).forEach(data => {
