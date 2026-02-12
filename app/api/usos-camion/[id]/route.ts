@@ -20,17 +20,25 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         const body = await request.json();
         const { kmInicial, kmFinal, descargasCount, viajesCount, litrosRepostados, fotoKmInicial } = body;
 
+        const dataToUpdate: any = {
+            kmInicial: parseInt(kmInicial),
+            descargasCount: parseInt(descargasCount) || 0,
+            viajesCount: parseInt(viajesCount) || 0,
+            litrosRepostados: parseFloat(litrosRepostados) || 0,
+            fotoKmInicial
+        };
+
+        if (kmFinal !== undefined && kmFinal !== null && kmFinal !== '') {
+            dataToUpdate.kmFinal = parseInt(kmFinal);
+            dataToUpdate.kmRecorridos = (parseInt(kmFinal) - parseInt(kmInicial));
+        } else {
+            dataToUpdate.kmFinal = null;
+            dataToUpdate.kmRecorridos = 0;
+        }
+
         const updated = await prisma.usoCamion.update({
             where: { id: parseInt(id) },
-            data: {
-                kmInicial,
-                kmFinal,
-                kmRecorridos: kmFinal && kmInicial ? (kmFinal - kmInicial) : 0,
-                descargasCount,
-                viajesCount,
-                litrosRepostados,
-                fotoKmInicial
-            }
+            data: dataToUpdate
         });
 
         return NextResponse.json(updated);
