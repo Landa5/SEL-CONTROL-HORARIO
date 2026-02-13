@@ -233,7 +233,7 @@ function JornadasContent() {
         document.body.removeChild(link);
     };
 
-    // Helper to calculate rest across the entire dataset
+    // Helper to calculate rest across the entire dataset (Focused on 13:00-16:00 Window)
     const calculateRestsForJornadas = (items: any[]) => {
         // 1. Flatten and Group by Employee + Date
         const grouped: Record<string, any[]> = {};
@@ -244,34 +244,46 @@ function JornadasContent() {
             grouped[key].push(j);
         });
 
-        // 2. Sort and Calculate Gaps
+        // 2. Calculate 13-16 Rest for each day
         const result: any[] = [];
         Object.values(grouped).forEach(dayShifts => {
+            // Sort by time
             dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
 
-            dayShifts.forEach((shift, idx) => {
-                let descansoPrevio = null; // Hours
-                const currentStart = new Date(shift.horaEntrada);
+            if (dayShifts.length === 0) return;
 
-                // If first shift, check gap from 8:00 AM
-                if (idx === 0) {
-                    const baseStart = new Date(currentStart);
-                    baseStart.setHours(8, 0, 0, 0); // Set to 08:00:00 of the same day
+            // Define the 13:00 - 16:00 window for this day
+            const dateStr = format(new Date(dayShifts[0].fecha), 'yyyy-MM-dd');
+            const lunchStart = new Date(`${dateStr}T13:00:00`);
+            const lunchEnd = new Date(`${dateStr}T16:00:00`);
 
-                    if (currentStart.getTime() > baseStart.getTime()) {
-                        const diffMs = currentStart.getTime() - baseStart.getTime();
-                        descansoPrevio = diffMs / (1000 * 60 * 60);
-                    }
+            // Calculate total working overlap with 13-16
+            let workedInLunchMs = 0;
+
+            dayShifts.forEach(shift => {
+                const s = new Date(shift.horaEntrada);
+                const e = shift.horaSalida ? new Date(shift.horaSalida) : new Date(); // If ongoing, assume working now
+
+                // Max(start, lunchStart)
+                const overlapStart = s > lunchStart ? s : lunchStart;
+                // Min(end, lunchEnd)
+                const overlapEnd = e < lunchEnd ? e : lunchEnd;
+
+                if (overlapStart < overlapEnd) {
+                    workedInLunchMs += (overlapEnd.getTime() - overlapStart.getTime());
                 }
-                // Subsequent shifts: Check gap from previous shift
-                else {
-                    const prev = dayShifts[idx - 1];
-                    if (prev.horaSalida) {
-                        const diffMs = currentStart.getTime() - new Date(prev.horaSalida).getTime();
-                        descansoPrevio = diffMs / (1000 * 60 * 60); // Convert to hours
-                    }
-                }
-                result.push({ ...shift, descansoPrevio });
+            });
+
+            // Total Lunch Window = 3 hours (180 mins)
+            // Rest = Window - Worked
+            const totalLunchWindowMs = 3 * 60 * 60 * 1000;
+            const restInLunchMs = Math.max(0, totalLunchWindowMs - workedInLunchMs);
+            const restInLunchHours = restInLunchMs / (1000 * 60 * 60);
+
+            // Assign this "Lunch Rest" to the shifts (only the first one needs to carry it for display, or all)
+            // We'll assign to all for simplicity in finding it
+            dayShifts.forEach(shift => {
+                result.push({ ...shift, descansoPrevio: restInLunchHours });
             });
         });
 
