@@ -53,6 +53,16 @@ function JornadasContent() {
         return `${hours}h ${minutes}m`;
     };
 
+    const safeFormatTime = (dateStr: string | Date) => {
+        try {
+            if (!dateStr) return '--:--';
+            const d = new Date(dateStr);
+            if (isNaN(d.getTime())) return '--:--';
+            return format(d, 'HH:mm');
+        } catch (e) { return '--:--'; }
+    };
+
+
     // Helper to calculate rest across the entire dataset (Focused on 13:00-16:00 Window)
     const calculateRest13to16 = (items: any[]) => {
         if (!items || items.length === 0) return [];
@@ -294,8 +304,8 @@ function JornadasContent() {
                 jor.id,
                 jor.empleado.nombre,
                 format(new Date(jor.fecha), 'yyyy-MM-dd'),
-                format(new Date(jor.horaEntrada), 'HH:mm'),
-                jor.horaSalida ? format(new Date(jor.horaSalida), 'HH:mm') : 'En curso',
+                safeFormatTime(jor.horaEntrada),
+                jor.horaSalida ? safeFormatTime(jor.horaSalida) : 'En curso',
                 formatDuration(jor.totalHoras),
                 jor.descansoPrevio ? formatDuration(jor.descansoPrevio) : '-',
                 jor.estado,
@@ -453,10 +463,10 @@ function JornadasContent() {
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-4 text-center font-mono text-gray-600">
-                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{format(new Date(jor.horaEntrada), 'HH:mm')}</span>
+                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{safeFormatTime(jor.horaEntrada)}</span>
                                                                 </td>
                                                                 <td className="p-4 text-center font-mono text-gray-500">
-                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{jor.horaSalida ? format(new Date(jor.horaSalida), 'HH:mm') : '--:--'}</span>
+                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{jor.horaSalida ? safeFormatTime(jor.horaSalida) : '--:--'}</span>
                                                                 </td>
                                                                 <td className="p-4 font-bold text-blue-700 text-center">
                                                                     {formatDuration(jor.totalHoras)}
