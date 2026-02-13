@@ -251,10 +251,23 @@ function JornadasContent() {
 
             dayShifts.forEach((shift, idx) => {
                 let descansoPrevio = null; // Hours
-                if (idx > 0) {
+                const currentStart = new Date(shift.horaEntrada);
+
+                // If first shift, check gap from 8:00 AM
+                if (idx === 0) {
+                    const baseStart = new Date(currentStart);
+                    baseStart.setHours(8, 0, 0, 0); // Set to 08:00:00 of the same day
+
+                    if (currentStart.getTime() > baseStart.getTime()) {
+                        const diffMs = currentStart.getTime() - baseStart.getTime();
+                        descansoPrevio = diffMs / (1000 * 60 * 60);
+                    }
+                }
+                // Subsequent shifts: Check gap from previous shift
+                else {
                     const prev = dayShifts[idx - 1];
                     if (prev.horaSalida) {
-                        const diffMs = new Date(shift.horaEntrada).getTime() - new Date(prev.horaSalida).getTime();
+                        const diffMs = currentStart.getTime() - new Date(prev.horaSalida).getTime();
                         descansoPrevio = diffMs / (1000 * 60 * 60); // Convert to hours
                     }
                 }
