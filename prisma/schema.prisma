@@ -31,6 +31,11 @@ model Empleado {
   fechaBaja     DateTime?
   observaciones String?
 
+  // Configuración Horaria
+  horaEntradaPrevista String? // "09:00"
+  horaSalidaPrevista  String? // "18:00"
+  puestoTrabajo       String? // "Jefe de Tráfico", "Administrativo", etc.
+
   // Vacaciones
   diasVacaciones Int   @default(30)
   diasExtras     Int   @default(0) // Por festivos trabajados

@@ -63,6 +63,11 @@ export async function POST(request: Request) {
                 direccion: sanitize(data.direccion),
                 observaciones: sanitize(data.observaciones),
                 activo: data.activo !== undefined ? data.activo : true,
+                // Configuración Horaria
+                horaEntradaPrevista: sanitize(data.horaEntradaPrevista),
+                horaSalidaPrevista: sanitize(data.horaSalidaPrevista),
+                puestoTrabajo: sanitize(data.puestoTrabajo),
+
                 fechaAlta: new Date(),
                 // PERFIL PROFESIONAL (If applicable)
                 perfilProfesional: (data.rol === 'CONDUCTOR' || data.rol === 'MECANICO') ? {
@@ -113,7 +118,10 @@ export async function PUT(request: Request) {
             direccion: sanitize(rest.direccion),
             rol: rest.rol,
             observaciones: sanitize(rest.observaciones),
-            activo: rest.activo
+            activo: rest.activo,
+            horaEntradaPrevista: sanitize(rest.horaEntradaPrevista),
+            horaSalidaPrevista: sanitize(rest.horaSalidaPrevista),
+            puestoTrabajo: sanitize(rest.puestoTrabajo),
         };
 
         if (password) {

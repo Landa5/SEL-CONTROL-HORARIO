@@ -41,7 +41,11 @@ export default function AdminEmpleados() {
         carnetTipo: '',
         carnetCaducidad: '',
         tieneAdr: false,
-        adrCaducidad: ''
+        adrCaducidad: '',
+        // Configuración Horaria
+        horaEntradaPrevista: '',
+        horaSalidaPrevista: '',
+        puestoTrabajo: ''
     });
 
     useEffect(() => {
@@ -139,7 +143,10 @@ export default function AdminEmpleados() {
             carnetTipo: emp.perfilProfesional?.carnetTipo || '',
             carnetCaducidad: emp.perfilProfesional?.carnetCaducidad ? new Date(emp.perfilProfesional.carnetCaducidad).toISOString().split('T')[0] : '',
             tieneAdr: emp.perfilProfesional?.tieneAdr || false,
-            adrCaducidad: emp.perfilProfesional?.adrCaducidad ? new Date(emp.perfilProfesional.adrCaducidad).toISOString().split('T')[0] : ''
+            adrCaducidad: emp.perfilProfesional?.adrCaducidad ? new Date(emp.perfilProfesional.adrCaducidad).toISOString().split('T')[0] : '',
+            horaEntradaPrevista: emp.horaEntradaPrevista || '',
+            horaSalidaPrevista: emp.horaSalidaPrevista || '',
+            puestoTrabajo: emp.puestoTrabajo || ''
         });
         setCurrentTab('PERSONAL');
         setIsModalOpen(true);
@@ -163,7 +170,10 @@ export default function AdminEmpleados() {
             carnetTipo: '',
             carnetCaducidad: '',
             tieneAdr: false,
-            adrCaducidad: ''
+            adrCaducidad: '',
+            horaEntradaPrevista: '',
+            horaSalidaPrevista: '',
+            puestoTrabajo: ''
         });
         setCurrentTab('PERSONAL');
         setIsModalOpen(true);
@@ -387,6 +397,42 @@ export default function AdminEmpleados() {
                                                 value={formData.observaciones}
                                                 onChange={e => handleInputChange('observaciones', e.target.value)}
                                             />
+                                        </div>
+
+                                        {/* HORARIO PREVISTO */}
+                                        <div className="bg-blue-50 p-4 rounded-xl space-y-4 border border-blue-100 mt-4">
+                                            <h4 className="font-bold text-blue-800 flex items-center gap-2">
+                                                <div className="w-1 h-4 bg-blue-500 rounded"></div>
+                                                Configuración Horaria (Para Informes)
+                                            </h4>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Entrada Prevista</label>
+                                                    <Input
+                                                        value={formData.horaEntradaPrevista}
+                                                        onChange={e => handleInputChange('horaEntradaPrevista', e.target.value)}
+                                                        placeholder="09:00"
+                                                        type="time"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Salida Prevista</label>
+                                                    <Input
+                                                        value={formData.horaSalidaPrevista}
+                                                        onChange={e => handleInputChange('horaSalidaPrevista', e.target.value)}
+                                                        placeholder="18:00"
+                                                        type="time"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-bold text-gray-700 mb-1">Puesto Específico (Opcional)</label>
+                                                <Input
+                                                    value={formData.puestoTrabajo}
+                                                    onChange={e => handleInputChange('puestoTrabajo', e.target.value)}
+                                                    placeholder="Ej. Administrativo Senior, Jefe de Taller..."
+                                                />
+                                            </div>
                                         </div>
 
                                         {/* DOCUMENTACIÓN / PERFIL PROFESIONAL */}
