@@ -33,16 +33,33 @@ export async function POST(request: Request) {
             if (camion) camionId = camion.id;
         }
 
+        // Map Frontend Enums to Backend Enums
+        let tipoFinal: TareaTipo = TareaTipo.OPERATIVA;
+        if (body.tipo === 'AVERIA' || body.tipo === 'MANTENIMIENTO') {
+            tipoFinal = TareaTipo.OPERATIVA;
+        } else if (body.tipo === 'TAREA_INTERNA') {
+            tipoFinal = TareaTipo.ADMINISTRATIVA;
+        } else if (Object.values(TareaTipo).includes(body.tipo as TareaTipo)) {
+            tipoFinal = body.tipo as TareaTipo;
+        }
+
+        let prioridadFinal: TareaPrioridad = TareaPrioridad.MEDIA;
+        if (body.prioridad === 'URGENTE') {
+            prioridadFinal = TareaPrioridad.ALTA;
+        } else if (Object.values(TareaPrioridad).includes(body.prioridad as TareaPrioridad)) {
+            prioridadFinal = body.prioridad as TareaPrioridad;
+        }
+
         const tarea = await prisma.tarea.create({
             data: {
                 titulo: body.titulo,
                 descripcion: body.descripcion || '',
-                tipo: (body.tipo as TareaTipo) || TareaTipo.OPERATIVA,
+                tipo: tipoFinal,
 
                 // If deadline or assignee is set, it's not backlog anymore, it's pending/planned
                 estado: (body.fechaLimite || body.asignadoAId) ? TareaEstado.PENDIENTE : TareaEstado.BACKLOG,
 
-                prioridad: (body.prioridad as TareaPrioridad) || TareaPrioridad.MEDIA,
+                prioridad: prioridadFinal,
 
                 activoTipo: body.activoTipo,
                 matricula: body.matricula,
