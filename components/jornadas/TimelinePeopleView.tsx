@@ -261,8 +261,42 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                                                         </TooltipTrigger>
                                                         <TooltipContent className="bg-gray-900 text-white text-xs border-0">
                                                             <p className="font-bold">{employee.nombre}</p>
-                                                            <p className="font-mono">{format(shift.start, 'HH:mm')} - {shift.isActive ? 'En curso' : format(shift.end, 'HH:mm')}</p>
-                                                            {shift.isActive && <p className="text-green-400 font-bold uppercase text-[10px] mt-1">Activo ahora</p>}
+                                                            <p className="font-mono text-gray-300 mb-2 border-b border-gray-700 pb-1">
+                                                                {format(shift.start, 'HH:mm')} - {shift.isActive ? 'En curso' : format(shift.end, 'HH:mm')}
+                                                                <span className="ml-2 text-gray-400">
+                                                                    ({differenceInMinutes(shift.isActive ? new Date() : shift.end, shift.start)}m)
+                                                                </span>
+                                                            </p>
+
+                                                            {/* Daily Stats */}
+                                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">KM:</span>
+                                                                    <span className="font-mono font-bold text-indigo-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + ((u.kmFinal || u.kmInicial) - u.kmInicial), 0) || 0}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">Viajes:</span>
+                                                                    <span className="font-mono font-bold text-green-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.viajesCount || 0), 0) || 0}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">Descargas:</span>
+                                                                    <span className="font-mono font-bold text-orange-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.descargasCount || u.descargas?.length || 0), 0) || 0}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">Gasoil:</span>
+                                                                    <span className="font-mono font-bold text-purple-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.litrosRepostados || 0), 0) || 0} L
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            {shift.isActive && <p className="text-green-400 font-bold uppercase text-[10px] mt-2 border-t border-gray-700 pt-1">Activo ahora</p>}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
