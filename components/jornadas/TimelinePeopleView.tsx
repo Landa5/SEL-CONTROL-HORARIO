@@ -58,8 +58,11 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                 if (!jor || !jor.empleado) return;
                 const empId = String(jor.empleado.id);
 
-                // If employee not in list (maybe inactive but has history), add them
-                if (!employeeData[empId]) {
+                // Find existing entry (string vs number match) - ROBUST
+                let existingKey = Object.keys(employeeData).find(k => String(k) === empId);
+
+                if (!existingKey) {
+                    // Create if not found
                     employeeData[empId] = {
                         employee: jor.empleado,
                         role: getRole(jor.empleado),
@@ -67,19 +70,23 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                         totalMinutes: 0,
                         status: 'finished'
                     };
+                    existingKey = empId;
                 }
+
+                // REFERENCE to the employee object
+                const entry = employeeData[existingKey];
 
                 const start = new Date(jor.horaEntrada);
                 const end = jor.horaSalida ? new Date(jor.horaSalida) : new Date();
                 const isActive = !jor.horaSalida;
 
-                employeeData[empId].shifts.push({ start, end, original: jor, isActive });
-                employeeData[empId].status = isActive ? 'active' : 'finished';
+                entry.shifts.push({ start, end, original: jor, isActive });
+                entry.status = isActive ? 'active' : 'finished';
 
                 if (jor.totalHoras) {
-                    employeeData[empId].totalMinutes += jor.totalHoras * 60;
+                    entry.totalMinutes += jor.totalHoras * 60;
                 } else {
-                    employeeData[empId].totalMinutes += differenceInMinutes(end, start);
+                    entry.totalMinutes += differenceInMinutes(end, start);
                 }
             });
         }
@@ -310,7 +317,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                                                         <div className="truncate font-bold text-gray-700 text-xs leading-none">{employee.nombre}</div>
                                                         {totalMinutes > 0 ? (
                                                             <div className="text-[9px] text-gray-400 font-mono mt-0.5">
-                                                                {Math.floor(totalMinutes / 60)}h {totalMinutes % 60}m
+                                                                {Math.floor(totalMinutes / 60)}h {Math.round(totalMinutes % 60)}m
                                                             </div>
                                                         ) : (
                                                             <div className="text-[9px] text-red-300 italic">Inactivo</div>
