@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { TaskBoard } from '@/components/tareas/kanban/TaskBoard';
+import TaskDashboard from '@/components/tareas/TaskDashboard';
 
 export default function AdminTareasPage() {
     const [session, setSession] = useState<any>(null);
@@ -18,7 +18,7 @@ export default function AdminTareasPage() {
                 <h1 className="text-3xl font-black text-blue-900 uppercase tracking-tight">Centro de Tareas</h1>
                 <p className="text-gray-500">Gestión global de incidencias y mantenimiento.</p>
             </header>
-            <TaskBoard rol={session.rol} userId={Number(session.id)} />
+            <TaskDashboard rol={session.rol} userId={Number(session.id)} />
         </div>
     );
 }

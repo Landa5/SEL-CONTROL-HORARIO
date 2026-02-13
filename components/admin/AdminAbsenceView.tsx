@@ -3,17 +3,51 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { User, Calendar, CheckCircle, XCircle, Clock, FileText, ChevronRight } from 'lucide-react';
+import { User, Calendar, CheckCircle, XCircle, Clock, FileText, ChevronRight, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import GlobalVacationsCalendar from './GlobalVacationsCalendar';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
+import { toast } from "sonner";
+
+interface Absence {
+    id: number;
+    tipo: string;
+    fechaInicio: string;
+    fechaFin: string;
+    estado: 'PENDIENTE' | 'APROBADA' | 'DENEGADA';
+    observaciones: string | null;
+    justificanteUrl: string | null;
+}
+
+interface Employee {
+    empleadoId: number;
+    nombre: string;
+    rol: string;
+    totalVacaciones: number;
+    diasDisfrutados: number;
+    diasRestantes: number;
+    numSolicitudesPendientes: number;
+    ausencias: Absence[];
+}
 
 export default function AdminAbsenceView() {
-    const [employees, setEmployees] = useState<any[]>([]);
-    const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
+    const [employees, setEmployees] = useState<Employee[]>([]);
+    const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
     const [loading, setLoading] = useState(true);
     const [showOnlyPending, setShowOnlyPending] = useState(false);
     const [viewMode, setViewMode] = useState<'LIST' | 'CALENDAR'>('LIST');
+
+    // State for confirmation dialog
+    const [confirmationDialog, setConfirmationDialog] = useState<{
+        isOpen: boolean;
+        absenceId: number | null;
+        action: 'APROBADA' | 'DENEGADA' | null;
+    }>({
+        isOpen: false,
+        absenceId: null,
+        action: null,
+    });
 
     useEffect(() => {
         fetchStats();
@@ -25,7 +59,7 @@ export default function AdminAbsenceView() {
             if (res.ok) {
                 const data = await res.json();
                 // Sort: Pending first, then by name
-                data.sort((a: any, b: any) => {
+                data.sort((a: Employee, b: Employee) => {
                     if (a.numSolicitudesPendientes > 0 && b.numSolicitudesPendientes === 0) return -1;
                     if (a.numSolicitudesPendientes === 0 && b.numSolicitudesPendientes > 0) return 1;
                     return a.nombre.localeCompare(b.nombre);
@@ -33,38 +67,52 @@ export default function AdminAbsenceView() {
                 setEmployees(data);
                 // Refresh selected employee if open
                 if (selectedEmployee) {
-                    const updated = data.find((e: any) => e.empleadoId === selectedEmployee.empleadoId);
+                    const updated = data.find((e: Employee) => e.empleadoId === selectedEmployee.empleadoId);
                     if (updated) setSelectedEmployee(updated);
                 }
             }
         } catch (error) {
             console.error("Error fetching stats:", error);
+            toast.error("Error al cargar las estadísticas de ausencias.");
         } finally {
             setLoading(false);
         }
     }
 
-    async function updateStatus(id: number, estado: string) {
-        if (!confirm(`¿Confirmar acción: ${estado}?`)) return;
+    const openConfirmation = (absenceId: number, action: 'APROBADA' | 'DENEGADA') => {
+        setConfirmationDialog({
+            isOpen: true,
+            absenceId,
+            action
+        });
+    };
+
+    const handleConfirmAction = async () => {
+        const { absenceId, action } = confirmationDialog;
+        if (!absenceId || !action) return;
 
         try {
-            const res = await fetch(`/api/ausencias/${id}`, {
+            const res = await fetch(`/api/ausencias/${absenceId}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ estado })
+                body: JSON.stringify({ estado: action })
             });
 
             if (res.ok) {
+                toast.success(`Solicitud ${action.toLowerCase()} correctamente.`);
                 fetchStats();
             } else {
-                alert("Error al actualizar estado");
+                toast.error("Ocurrió un error al actualizar el estado.");
             }
         } catch (error) {
             console.error(error);
+            toast.error("Error de red al intentar actualizar.");
+        } finally {
+            setConfirmationDialog({ isOpen: false, absenceId: null, action: null });
         }
-    }
+    };
 
-    if (loading) return <div className="p-4 text-center text-gray-500">Cargando datos de personal...</div>;
+    if (loading) return <div className="p-4 text-center text-gray-500 animate-pulse">Cargando datos de personal...</div>;
 
     const filteredEmployees = showOnlyPending
         ? employees.filter(e => e.numSolicitudesPendientes > 0)
@@ -150,7 +198,7 @@ export default function AdminAbsenceView() {
 
             {/* Modal Detail View */}
             {selectedEmployee && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="p-6 border-b flex justify-between items-center bg-gray-50">
                             <div>
@@ -169,7 +217,7 @@ export default function AdminAbsenceView() {
                                     No hay registros de ausencias.
                                 </div>
                             ) : (
-                                selectedEmployee.ausencias.map((aus: any) => (
+                                selectedEmployee.ausencias.map((aus: Absence) => (
                                     <div key={aus.id} className="border rounded-xl p-4 hover:bg-gray-50 transition-colors">
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex items-center gap-2">
@@ -203,10 +251,10 @@ export default function AdminAbsenceView() {
 
                                         {aus.estado === 'PENDIENTE' && (
                                             <div className="flex gap-2 mt-2 pt-2 border-t">
-                                                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-xs w-full" onClick={() => updateStatus(aus.id, 'APROBADA')}>
+                                                <Button size="sm" className="bg-green-600 hover:bg-green-700 text-xs w-full" onClick={() => openConfirmation(aus.id, 'APROBADA')}>
                                                     <CheckCircle className="w-3 h-3 mr-1" /> Aprobar
                                                 </Button>
-                                                <Button size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 text-xs w-full" onClick={() => updateStatus(aus.id, 'DENEGADA')}>
+                                                <Button size="sm" variant="outline" className="border-red-200 text-red-600 hover:bg-red-50 text-xs w-full" onClick={() => openConfirmation(aus.id, 'DENEGADA')}>
                                                     <XCircle className="w-3 h-3 mr-1" /> Denegar
                                                 </Button>
                                             </div>
@@ -218,6 +266,34 @@ export default function AdminAbsenceView() {
                     </div>
                 </div>
             )}
+
+            {/* Confirmation Dialog */}
+            <Dialog open={confirmationDialog.isOpen} onOpenChange={(open) => !open && setConfirmationDialog(prev => ({ ...prev, isOpen: false }))}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center text-gray-800">
+                            <AlertTriangle className="w-5 h-5 mr-2 text-yellow-500" />
+                            Confirmar Acción
+                        </DialogTitle>
+                        <DialogDescription>
+                            ¿Estás seguro de que deseas <strong>{confirmationDialog.action === 'APROBADA' ? 'APROBAR' : 'DENEGAR'}</strong> esta solicitud?
+                            Esta acción notificará al empleado y actualizará su saldo de días.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setConfirmationDialog(prev => ({ ...prev, isOpen: false }))}>
+                            Cancelar
+                        </Button>
+                        <Button
+                            className={`${confirmationDialog.action === 'APROBADA' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'} text-white`}
+                            onClick={handleConfirmAction}
+                        >
+                            {confirmationDialog.action === 'APROBADA' ? 'Confirmar Aprobación' : 'Confirmar Denegación'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
+
