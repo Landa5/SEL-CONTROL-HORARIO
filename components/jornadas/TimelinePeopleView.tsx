@@ -241,6 +241,14 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                                         // Calculations for gaps (Breaks)
                                         const segments: React.ReactNode[] = [];
 
+                                        // Safe format helper for tooltip
+                                        const safeFormatTimestamp = (d: Date) => {
+                                            try {
+                                                if (isNaN(d.getTime())) return '--:--';
+                                                return format(d, 'HH:mm');
+                                            } catch (e) { return '--:--'; }
+                                        };
+
                                         for (let i = 0; i < shifts.length; i++) {
                                             const shift = shifts[i];
                                             const startPct = getPercent(shift.start);
@@ -262,7 +270,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                                                         <TooltipContent className="bg-gray-900 text-white text-xs border-0">
                                                             <p className="font-bold">{employee.nombre}</p>
                                                             <p className="font-mono text-gray-300 mb-2 border-b border-gray-700 pb-1">
-                                                                {format(shift.start, 'HH:mm')} - {shift.isActive ? 'En curso' : format(shift.end, 'HH:mm')}
+                                                                {safeFormatTimestamp(shift.start)} - {shift.isActive ? 'En curso' : safeFormatTimestamp(shift.end)}
                                                                 <span className="ml-2 text-gray-400">
                                                                     ({differenceInMinutes(shift.isActive ? new Date() : shift.end, shift.start)}m)
                                                                 </span>
@@ -325,7 +333,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                                                                 </TooltipTrigger>
                                                                 <TooltipContent className="bg-orange-50 text-orange-900 border-orange-200 text-xs">
                                                                     <p className="font-bold uppercase">Pausa / Descanso</p>
-                                                                    <p className="font-mono">{format(shift.end, 'HH:mm')} ➔ {format(nextShift.start, 'HH:mm')}</p>
+                                                                    <p className="font-mono">{safeFormatTimestamp(shift.end)} ➔ {safeFormatTimestamp(nextShift.start)}</p>
                                                                     <p className="font-black">{differenceInMinutes(nextShift.start, shift.end)} min</p>
                                                                 </TooltipContent>
                                                             </Tooltip>

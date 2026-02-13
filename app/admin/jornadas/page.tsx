@@ -31,7 +31,12 @@ function JornadasContent() {
             const res = await fetch('/api/empleados');
             if (res.ok) {
                 const data = await res.json();
-                setEmployees(data.filter((e: any) => e.activo));
+                if (Array.isArray(data)) {
+                    setEmployees(data.filter((e: any) => e.activo));
+                } else {
+                    console.error("Employees API returned non-array:", data);
+                    setEmployees([]);
+                }
             }
         } catch (error) {
             console.error("Error fetching employees:", error);
@@ -39,10 +44,23 @@ function JornadasContent() {
     };
 
     const fetchJornadas = async () => {
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('admin', 'true');
-        const res = await fetch(`/api/jornadas?${params.toString()}`);
-        if (res.ok) setJornadas(await res.json());
+        try {
+            const params = new URLSearchParams(searchParams.toString());
+            params.set('admin', 'true');
+            const res = await fetch(`/api/jornadas?${params.toString()}`);
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    setJornadas(data);
+                } else {
+                    console.error("Jornadas API returned non-array:", data);
+                    setJornadas([]);
+                }
+            }
+        } catch (error) {
+            setJornadas([]);
+            console.error("Error fetching jornadas:", error);
+        }
     };
 
     // Helper to format duration, explicitly handling 0 and NaN
