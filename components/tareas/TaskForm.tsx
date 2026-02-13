@@ -105,7 +105,7 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
     return (
         <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
 
-            {/* TIPO Y PRIORIDAD (Solo Admin tiene flexibilidad total) */}
+            {/* TIPO Y PRIORIDAD */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {rol === 'ADMIN' && (
                     <div className="space-y-4">
@@ -119,6 +119,7 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                                 <option value="TAREA_INTERNA">Tarea Interna / Gestión</option>
                                 <option value="AVERIA">Avería / Incidencia</option>
                                 <option value="MANTENIMIENTO">Mantenimiento</option>
+                                <option value="RECLAMACION">Reclamación (Privado)</option>
                             </select>
                         </div>
 
@@ -136,6 +137,44 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                                     <option key={emp.id} value={emp.id}>{emp.nombre} ({emp.rol})</option>
                                 ))}
                             </select>
+                        </div>
+                    </div>
+                )}
+
+                {/* VISIBLE PARA TODOS EXCEPTO ADMIN */}
+                {rol !== 'ADMIN' && (
+                    <div className="md:col-span-2">
+                        <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                            Tipo de Registro
+                        </label>
+                        <div className="flex gap-4 mt-2">
+                            <label className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo !== 'RECLAMACION' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                                <input
+                                    type="radio"
+                                    name="tipo_incidencia"
+                                    className="hidden"
+                                    checked={tipo !== 'RECLAMACION'}
+                                    onChange={() => setTipo('AVERIA')}
+                                />
+                                <div className="text-center">
+                                    <span className="block font-black text-blue-900">AVERÍA / INCIDENCIA</span>
+                                    <span className="text-xs text-blue-700">Problemas con vehículos o instalaciones</span>
+                                </div>
+                            </label>
+
+                            <label className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo === 'RECLAMACION' ? 'border-purple-500 bg-purple-50' : 'border-gray-200'}`}>
+                                <input
+                                    type="radio"
+                                    name="tipo_incidencia"
+                                    className="hidden"
+                                    checked={tipo === 'RECLAMACION'}
+                                    onChange={() => setTipo('RECLAMACION')}
+                                />
+                                <div className="text-center">
+                                    <span className="block font-black text-purple-900">RECLAMACIÓN / SUGERENCIA</span>
+                                    <span className="text-xs text-purple-700">Privado: Solo visible por Administración</span>
+                                </div>
+                            </label>
                         </div>
                     </div>
                 )}
@@ -220,18 +259,9 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                                 onChange={(e) => setKilometros(e.target.value)}
                             />
                         </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-gray-500 uppercase text-blue-600">Descargas</label>
-                            <input
-                                type="number"
-                                placeholder="0"
-                                className="w-full p-2 rounded-lg border border-blue-200 focus:ring-2 focus:ring-blue-500 bg-blue-50"
-                                value={descargas}
-                                onChange={(e) => setDescargas(e.target.value)}
-                            />
-                        </div>
                     </div>
                 )}
+
                 {activoTipo === 'DEPOSITO_CLIENTE' && (
                     <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
                         <div>
@@ -300,28 +330,32 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
             </div>
 
             {/* CONTACTO */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4">
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Persona de Contacto (Opcional)</label>
-                    <input
-                        type="text"
-                        placeholder="Nombre..."
-                        className="w-full p-2 rounded-lg border border-gray-300"
-                        value={contactoNombre}
-                        onChange={(e) => setContactoNombre(e.target.value)}
-                    />
-                </div>
-                <div>
-                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono (Opcional)</label>
-                    <input
-                        type="tel"
-                        placeholder="600 000 000"
-                        className="w-full p-2 rounded-lg border border-gray-300"
-                        value={contactoTelefono}
-                        onChange={(e) => setContactoTelefono(e.target.value)}
-                    />
-                </div>
-            </div>
+            {
+                ['DEPOSITO_CLIENTE', 'OTRO'].includes(activoTipo) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4 animate-in fade-in slide-in-from-top-2">
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Persona de Contacto (Opcional)</label>
+                            <input
+                                type="text"
+                                placeholder="Nombre..."
+                                className="w-full p-2 rounded-lg border border-gray-300"
+                                value={contactoNombre}
+                                onChange={(e) => setContactoNombre(e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono (Opcional)</label>
+                            <input
+                                type="tel"
+                                placeholder="600 000 000"
+                                className="w-full p-2 rounded-lg border border-gray-300"
+                                value={contactoTelefono}
+                                onChange={(e) => setContactoTelefono(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                )
+            }
 
             {error && <p className="text-red-600 text-sm font-bold text-center bg-red-50 p-3 rounded-lg">{error}</p>}
 
@@ -334,6 +368,6 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                 {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
                 {loading ? 'Creando...' : 'REGISTRAR INCIDENCIA'}
             </Button>
-        </form>
+        </form >
     );
 }

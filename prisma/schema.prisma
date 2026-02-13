@@ -188,6 +188,7 @@ enum TareaTipo {
   ADMINISTRATIVA
   RECURRENTE
   AUTOMATICA
+  RECLAMACION
 }
 
 enum TareaPrioridad {

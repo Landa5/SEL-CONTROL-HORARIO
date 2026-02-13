@@ -133,12 +133,17 @@ export async function GET(request: Request) {
             const isStaff = ['MECANICO', 'OFICINA'].includes(session.rol as string);
 
             if (isStaff) {
-                // Staff: Can see their own, assigned to them, OR unassigned (pool)
+                // Staff: Can see their own, assigned to them, OR unassigned (pool) BUT NOT RECLAMACION
                 // They CANNOT see tasks assigned to others.
                 where.OR = [
                     { creadoPorId: Number(session.id) },
                     { asignadoAId: Number(session.id) },
-                    { asignadoAId: null }
+                    {
+                        AND: [
+                            { asignadoAId: null },
+                            { tipo: { not: 'RECLAMACION' } }
+                        ]
+                    }
                 ];
             } else {
                 // Regular Employee: Can only see their own or assigned to them
