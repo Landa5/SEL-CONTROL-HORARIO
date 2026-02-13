@@ -82,31 +82,32 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                     employeeData[empId].totalMinutes += differenceInMinutes(end, start);
                 }
             });
+        }
 
-            // Grouping
-            const roleOrder = ['ADMIN', 'OFICINA', 'JEFE_TRAFICO', 'CONDUCTOR', 'MECANICO', 'EMPLEADO', 'OTROS'];
-            const grouped: Record<string, typeof employeeData[string][]> = {};
-            const stats: Record<string, number> = {};
+        // Grouping
+        const roleOrder = ['ADMIN', 'OFICINA', 'JEFE_TRAFICO', 'CONDUCTOR', 'MECANICO', 'EMPLEADO', 'OTROS'];
+        const grouped: Record<string, typeof employeeData[string][]> = {};
+        const stats: Record<string, number> = {};
 
-            Object.values(employeeData).forEach(data => {
-                data.shifts.sort((a, b) => a.start.getTime() - b.start.getTime());
+        Object.values(employeeData).forEach(data => {
+            data.shifts.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-                let role = data.role;
-                if (!roleOrder.includes(role)) role = 'OTROS';
+            let role = data.role;
+            if (!roleOrder.includes(role)) role = 'OTROS';
 
-                if (!grouped[role]) grouped[role] = [];
-                grouped[role].push(data);
-            });
+            if (!grouped[role]) grouped[role] = [];
+            grouped[role].push(data);
+        });
 
-            // Sort inside groups
-            const sortedRoleKeys = roleOrder.filter(r => grouped[r] && grouped[r].length > 0);
-            sortedRoleKeys.forEach(r => {
-                grouped[r].sort((a, b) => a.employee.nombre.localeCompare(b.employee.nombre));
-                stats[r] = grouped[r].length;
-            });
+        // Sort inside groups
+        const sortedRoleKeys = roleOrder.filter(r => grouped[r] && grouped[r].length > 0);
+        sortedRoleKeys.forEach(r => {
+            grouped[r].sort((a, b) => a.employee.nombre.localeCompare(b.employee.nombre));
+            stats[r] = grouped[r].length;
+        });
 
-            return { sortedRoles: sortedRoleKeys, groupedByRole: grouped, statsByRole: stats };
-        }, [jornadas, employees, date, showAllEmployees]);
+        return { sortedRoles: sortedRoleKeys, groupedByRole: grouped, statsByRole: stats };
+    }, [jornadas, employees, date, showAllEmployees]);
 
     // 2. RENDERING HELPERS
     const startOfDayDate = startOfDay(parseISO(date));
