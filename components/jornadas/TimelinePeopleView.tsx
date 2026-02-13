@@ -38,9 +38,9 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
         const getRole = (emp: any) => emp.rol || 'OTROS';
 
         // Initialize with all employees IF showAllEmployees is true
-        if (showAllEmployees) {
+        if (showAllEmployees && Array.isArray(employees)) {
             employees.forEach(emp => {
-                if (!emp.activo) return;
+                if (!emp || !emp.activo) return;
                 const strId = String(emp.id);
                 employeeData[strId] = {
                     employee: emp,
@@ -53,59 +53,60 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
         }
 
         // Merge Jornadas
-        jornadas.forEach(jor => {
-            if (!jor.empleado) return;
-            const empId = String(jor.empleado.id);
+        if (Array.isArray(jornadas)) {
+            jornadas.forEach(jor => {
+                if (!jor || !jor.empleado) return;
+                const empId = String(jor.empleado.id);
 
-            // If employee not in list (maybe inactive but has history), add them
-            if (!employeeData[empId]) {
-                employeeData[empId] = {
-                    employee: jor.empleado,
-                    role: getRole(jor.empleado),
-                    shifts: [],
-                    totalMinutes: 0,
-                    status: 'finished'
-                };
-            }
+                // If employee not in list (maybe inactive but has history), add them
+                if (!employeeData[empId]) {
+                    employeeData[empId] = {
+                        employee: jor.empleado,
+                        role: getRole(jor.empleado),
+                        shifts: [],
+                        totalMinutes: 0,
+                        status: 'finished'
+                    };
+                }
 
-            const start = new Date(jor.horaEntrada);
-            const end = jor.horaSalida ? new Date(jor.horaSalida) : new Date();
-            const isActive = !jor.horaSalida;
+                const start = new Date(jor.horaEntrada);
+                const end = jor.horaSalida ? new Date(jor.horaSalida) : new Date();
+                const isActive = !jor.horaSalida;
 
-            employeeData[empId].shifts.push({ start, end, original: jor, isActive });
-            employeeData[empId].status = isActive ? 'active' : 'finished';
+                employeeData[empId].shifts.push({ start, end, original: jor, isActive });
+                employeeData[empId].status = isActive ? 'active' : 'finished';
 
-            if (jor.totalHoras) {
-                employeeData[empId].totalMinutes += jor.totalHoras * 60;
-            } else {
-                employeeData[empId].totalMinutes += differenceInMinutes(end, start);
-            }
-        });
+                if (jor.totalHoras) {
+                    employeeData[empId].totalMinutes += jor.totalHoras * 60;
+                } else {
+                    employeeData[empId].totalMinutes += differenceInMinutes(end, start);
+                }
+            });
 
-        // Grouping
-        const roleOrder = ['ADMIN', 'OFICINA', 'JEFE_TRAFICO', 'CONDUCTOR', 'MECANICO', 'EMPLEADO', 'OTROS'];
-        const grouped: Record<string, typeof employeeData[string][]> = {};
-        const stats: Record<string, number> = {};
+            // Grouping
+            const roleOrder = ['ADMIN', 'OFICINA', 'JEFE_TRAFICO', 'CONDUCTOR', 'MECANICO', 'EMPLEADO', 'OTROS'];
+            const grouped: Record<string, typeof employeeData[string][]> = {};
+            const stats: Record<string, number> = {};
 
-        Object.values(employeeData).forEach(data => {
-            data.shifts.sort((a, b) => a.start.getTime() - b.start.getTime());
+            Object.values(employeeData).forEach(data => {
+                data.shifts.sort((a, b) => a.start.getTime() - b.start.getTime());
 
-            let role = data.role;
-            if (!roleOrder.includes(role)) role = 'OTROS';
+                let role = data.role;
+                if (!roleOrder.includes(role)) role = 'OTROS';
 
-            if (!grouped[role]) grouped[role] = [];
-            grouped[role].push(data);
-        });
+                if (!grouped[role]) grouped[role] = [];
+                grouped[role].push(data);
+            });
 
-        // Sort inside groups
-        const sortedRoleKeys = roleOrder.filter(r => grouped[r] && grouped[r].length > 0);
-        sortedRoleKeys.forEach(r => {
-            grouped[r].sort((a, b) => a.employee.nombre.localeCompare(b.employee.nombre));
-            stats[r] = grouped[r].length;
-        });
+            // Sort inside groups
+            const sortedRoleKeys = roleOrder.filter(r => grouped[r] && grouped[r].length > 0);
+            sortedRoleKeys.forEach(r => {
+                grouped[r].sort((a, b) => a.employee.nombre.localeCompare(b.employee.nombre));
+                stats[r] = grouped[r].length;
+            });
 
-        return { sortedRoles: sortedRoleKeys, groupedByRole: grouped, statsByRole: stats };
-    }, [jornadas, employees, date, showAllEmployees]);
+            return { sortedRoles: sortedRoleKeys, groupedByRole: grouped, statsByRole: stats };
+        }, [jornadas, employees, date, showAllEmployees]);
 
     // 2. RENDERING HELPERS
     const startOfDayDate = startOfDay(parseISO(date));
