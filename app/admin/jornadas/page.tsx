@@ -370,7 +370,7 @@ function JornadasContent() {
                                                     // We create a map of ID -> rest for quick lookup, or just enrich.
                                                     // Since we need to calculate rests relative to *time*, let's sort by time first to compute, then apply usage sort.
 
-                                                    const timeSorted = [...rawItems].sort((a: any, b: any) => new Date(a.horaEntrada).getTime() - b.horaEntrada.getTime());
+                                                    const timeSorted = [...rawItems].sort((a: any, b: any) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
                                                     const restsMap = new Map<number, number>(); // ID -> Rest Hours
 
                                                     // Group by employee to check their previous shift
