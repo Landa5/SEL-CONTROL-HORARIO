@@ -45,12 +45,77 @@ function JornadasContent() {
         if (res.ok) setJornadas(await res.json());
     };
 
-    const formatDuration = (hoursDecimal: number | null) => {
-        if (!hoursDecimal) return '-';
+    // Helper to format duration, explicitly handling 0
+    const formatDuration = (hoursDecimal: number | null | undefined) => {
+        if (hoursDecimal === null || hoursDecimal === undefined) return '-';
         const hours = Math.floor(hoursDecimal);
         const minutes = Math.round((hoursDecimal - hours) * 60);
         return `${hours}h ${minutes}m`;
     };
+
+    // Helper to calculate rest across the entire dataset (Focused on 13:00-16:00 Window)
+    const calculateRest13to16 = (items: any[]) => {
+        // 1. Flatten and Group by Employee + Date
+        const grouped: Record<string, any[]> = {};
+
+        items.forEach(j => {
+            // Use safe date string for grouping key
+            try {
+                const d = new Date(j.fecha);
+                if (isNaN(d.getTime())) return;
+                const key = `${j.empleado?.id || 'unknown'}-${format(d, 'yyyy-MM-dd')}`;
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push(j);
+            } catch (e) { console.error("Error processing date", j); }
+        });
+
+        // 2. Calculate 13-16 Rest for each day
+        const result: any[] = [];
+        Object.values(grouped).forEach(dayShifts => {
+            // Sort by time
+            dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
+
+            if (dayShifts.length === 0) return;
+
+            // Define the 13:00 - 16:00 window using the first shift's date object base
+            // This avoids string parsing timezone issues by setting hours directly on a local date clone
+            const baseDate = new Date(dayShifts[0].fecha);
+            // Create local boundaries
+            const lunchStart = new Date(baseDate); lunchStart.setHours(13, 0, 0, 0);
+            const lunchEnd = new Date(baseDate); lunchEnd.setHours(16, 0, 0, 0);
+
+            // Calculate total working overlap with 13-16
+            let workedInLunchMs = 0;
+
+            dayShifts.forEach(shift => {
+                const s = new Date(shift.horaEntrada);
+                const e = shift.horaSalida ? new Date(shift.horaSalida) : new Date(); // If ongoing, assume working now
+
+                // Max(start, lunchStart)
+                const overlapStart = s > lunchStart ? s : lunchStart;
+                // Min(end, lunchEnd)
+                const overlapEnd = e < lunchEnd ? e : lunchEnd;
+
+                if (overlapStart < overlapEnd) {
+                    workedInLunchMs += (overlapEnd.getTime() - overlapStart.getTime());
+                }
+            });
+
+            // Total Lunch Window = 3 hours (180 mins)
+            // Rest = Window - Worked
+            const totalLunchWindowMs = 3 * 60 * 60 * 1000;
+            const restInLunchMs = Math.max(0, totalLunchWindowMs - workedInLunchMs);
+            const restInLunchHours = restInLunchMs / (1000 * 60 * 60);
+
+            // Assign this "Lunch Rest" to the shifts
+            dayShifts.forEach(shift => {
+                result.push({ ...shift, descansoPrevio: restInLunchHours });
+            });
+        });
+
+        return result;
+    };
+
 
     const groupedJornadas = jornadas.reduce((acc: any, jor) => {
         const dateKey = format(new Date(jor.fecha), 'yyyy-MM-dd');
@@ -107,14 +172,9 @@ function JornadasContent() {
                     const idxB = roleOrder.indexOf(roleB);
 
                     if (idxA !== idxB) {
-                        // If roles are different, sort by role index
-                        // direction logic is applied at the end usually, but for fixed role order 
-                        // we might want it always consistent or follow sort direction.
-                        // Let's follow sort direction for consistency.
                         aValue = idxA === -1 ? 999 : idxA;
                         bValue = idxB === -1 ? 999 : idxB;
                     } else {
-                        // If roles SAME, sort by Name
                         return a.empleado?.nombre.localeCompare(b.empleado?.nombre);
                     }
                     break;
@@ -190,7 +250,7 @@ function JornadasContent() {
         const headers = ['ID', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Descanso Previo', 'Estado', 'KM Totales', 'Total Descargas', 'Total Viajes', 'Total Repostajes'];
 
         // Pre-calculate rests for all jornadas
-        const jornadasWithRest = calculateRestsForJornadas(jornadas);
+        const jornadasWithRest = calculateRest13to16(jornadas);
 
         const rows = jornadasWithRest.flatMap(jor => {
             let kmTotal = 0;
@@ -231,63 +291,6 @@ function JornadasContent() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-    };
-
-    // Helper to calculate rest across the entire dataset (Focused on 13:00-16:00 Window)
-    const calculateRestsForJornadas = (items: any[]) => {
-        // 1. Flatten and Group by Employee + Date
-        const grouped: Record<string, any[]> = {};
-
-        items.forEach(j => {
-            const key = `${j.empleado.id}-${format(new Date(j.fecha), 'yyyy-MM-dd')}`;
-            if (!grouped[key]) grouped[key] = [];
-            grouped[key].push(j);
-        });
-
-        // 2. Calculate 13-16 Rest for each day
-        const result: any[] = [];
-        Object.values(grouped).forEach(dayShifts => {
-            // Sort by time
-            dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
-
-            if (dayShifts.length === 0) return;
-
-            // Define the 13:00 - 16:00 window for this day
-            const dateStr = format(new Date(dayShifts[0].fecha), 'yyyy-MM-dd');
-            const lunchStart = new Date(`${dateStr}T13:00:00`);
-            const lunchEnd = new Date(`${dateStr}T16:00:00`);
-
-            // Calculate total working overlap with 13-16
-            let workedInLunchMs = 0;
-
-            dayShifts.forEach(shift => {
-                const s = new Date(shift.horaEntrada);
-                const e = shift.horaSalida ? new Date(shift.horaSalida) : new Date(); // If ongoing, assume working now
-
-                // Max(start, lunchStart)
-                const overlapStart = s > lunchStart ? s : lunchStart;
-                // Min(end, lunchEnd)
-                const overlapEnd = e < lunchEnd ? e : lunchEnd;
-
-                if (overlapStart < overlapEnd) {
-                    workedInLunchMs += (overlapEnd.getTime() - overlapStart.getTime());
-                }
-            });
-
-            // Total Lunch Window = 3 hours (180 mins)
-            // Rest = Window - Worked
-            const totalLunchWindowMs = 3 * 60 * 60 * 1000;
-            const restInLunchMs = Math.max(0, totalLunchWindowMs - workedInLunchMs);
-            const restInLunchHours = restInLunchMs / (1000 * 60 * 60);
-
-            // Assign this "Lunch Rest" to the shifts (only the first one needs to carry it for display, or all)
-            // We'll assign to all for simplicity in finding it
-            dayShifts.forEach(shift => {
-                result.push({ ...shift, descansoPrevio: restInLunchHours });
-            });
-        });
-
-        return result;
     };
 
     // Helper for rendering Sort Arrow
@@ -392,7 +395,7 @@ function JornadasContent() {
                                                     const rawItems = groupedJornadas[date] || [];
 
                                                     // 2. Calculate rests using the centralized helper (which implements the 13-16 logic)
-                                                    const itemsWithRest = calculateRestsForJornadas(rawItems);
+                                                    const itemsWithRest = calculateRest13to16(rawItems);
 
                                                     // Map ID -> Rest for quick lookup after sorting
                                                     const restsMap = new Map();
