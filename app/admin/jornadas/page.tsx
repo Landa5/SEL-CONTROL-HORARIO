@@ -391,33 +391,12 @@ function JornadasContent() {
                                                     // 1. Get raw items for this day
                                                     const rawItems = groupedJornadas[date] || [];
 
-                                                    // 2. Calculate rests (needs time sorting for logic, but we apply it to items)
-                                                    // We create a map of ID -> rest for quick lookup, or just enrich.
-                                                    // Since we need to calculate rests relative to *time*, let's sort by time first to compute, then apply usage sort.
+                                                    // 2. Calculate rests using the centralized helper (which implements the 13-16 logic)
+                                                    const itemsWithRest = calculateRestsForJornadas(rawItems);
 
-                                                    const timeSorted = [...rawItems].sort((a: any, b: any) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
-                                                    const restsMap = new Map<number, number>(); // ID -> Rest Hours
-
-                                                    // Group by employee to check their previous shift
-                                                    const empShifts: Record<string, any[]> = {};
-                                                    timeSorted.forEach(j => {
-                                                        if (!j.empleado) return;
-                                                        const eid = j.empleado.id;
-                                                        if (!empShifts[eid]) empShifts[eid] = [];
-                                                        empShifts[eid].push(j);
-                                                    });
-
-                                                    Object.values(empShifts).forEach(shifts => {
-                                                        shifts.forEach((s, idx) => {
-                                                            if (idx > 0) {
-                                                                const prev = shifts[idx - 1];
-                                                                if (prev.horaSalida) {
-                                                                    const diff = new Date(s.horaEntrada).getTime() - new Date(prev.horaSalida).getTime();
-                                                                    restsMap.set(s.id, diff / (1000 * 60 * 60));
-                                                                }
-                                                            }
-                                                        });
-                                                    });
+                                                    // Map ID -> Rest for quick lookup after sorting
+                                                    const restsMap = new Map();
+                                                    itemsWithRest.forEach(i => restsMap.set(i.id, i.descansoPrevio));
 
                                                     // 3. Now apply the User's Sort preferences
                                                     const sortedAndEnriched = sortJornadas(rawItems).map(j => ({ ...j, descansoPrevio: restsMap.get(j.id) }));
