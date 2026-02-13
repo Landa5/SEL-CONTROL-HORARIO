@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { Wrench, AlertCircle, LayoutDashboard, LogOut, Clock, Calendar, Truck, BookOpen } from 'lucide-react';
+import { Wrench, AlertCircle, LayoutDashboard, LogOut, Clock, Calendar, Truck, BookOpen, User } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 
 
@@ -17,6 +17,7 @@ export default function MecanicoLayout({ children }: { children: React.ReactNode
         { href: '/mecanico/jornada', label: 'Mi Jornada y KM', icon: Clock },
         { href: '/mecanico/vacaciones', label: 'Mis Vacaciones', icon: Calendar },
         { href: '/mecanico/dashboard?section=formacion', label: 'Formación', icon: BookOpen },
+        { href: '/mecanico/perfil', label: 'Mi Perfil', icon: User },
     ];
 
     const handleLogout = async () => {
