@@ -187,8 +187,12 @@ function JornadasContent() {
     };
 
     const exportCSV = () => {
-        const headers = ['ID', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Estado', 'KM Totales', 'Total Descargas', 'Total Viajes', 'Total Repostajes'];
-        const rows = jornadas.flatMap(jor => {
+        const headers = ['ID', 'Empleado', 'Fecha', 'Entrada', 'Salida', 'Duración', 'Descanso Previo', 'Estado', 'KM Totales', 'Total Descargas', 'Total Viajes', 'Total Repostajes'];
+
+        // Pre-calculate rests for all jornadas
+        const jornadasWithRest = calculateRestsForJornadas(jornadas);
+
+        const rows = jornadasWithRest.flatMap(jor => {
             let kmTotal = 0;
             let countDescargas = 0;
             let countViajes = 0;
@@ -208,6 +212,7 @@ function JornadasContent() {
                 format(new Date(jor.horaEntrada), 'HH:mm'),
                 jor.horaSalida ? format(new Date(jor.horaSalida), 'HH:mm') : 'En curso',
                 formatDuration(jor.totalHoras),
+                jor.descansoPrevio ? formatDuration(jor.descansoPrevio) : '-',
                 jor.estado,
                 kmTotal,
                 countDescargas,
@@ -226,6 +231,38 @@ function JornadasContent() {
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+    };
+
+    // Helper to calculate rest across the entire dataset
+    const calculateRestsForJornadas = (items: any[]) => {
+        // 1. Flatten and Group by Employee + Date
+        const grouped: Record<string, any[]> = {};
+
+        items.forEach(j => {
+            const key = `${j.empleado.id}-${format(new Date(j.fecha), 'yyyy-MM-dd')}`;
+            if (!grouped[key]) grouped[key] = [];
+            grouped[key].push(j);
+        });
+
+        // 2. Sort and Calculate Gaps
+        const result: any[] = [];
+        Object.values(grouped).forEach(dayShifts => {
+            dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
+
+            dayShifts.forEach((shift, idx) => {
+                let descansoPrevio = null; // Hours
+                if (idx > 0) {
+                    const prev = dayShifts[idx - 1];
+                    if (prev.horaSalida) {
+                        const diffMs = new Date(shift.horaEntrada).getTime() - new Date(prev.horaSalida).getTime();
+                        descansoPrevio = diffMs / (1000 * 60 * 60); // Convert to hours
+                    }
+                }
+                result.push({ ...shift, descansoPrevio });
+            });
+        });
+
+        return result;
     };
 
     // Helper for rendering Sort Arrow
@@ -303,6 +340,9 @@ function JornadasContent() {
                                                     <th className="p-4 font-bold text-gray-600 text-center cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('total')}>
                                                         Total <SortIcon column="total" />
                                                     </th>
+                                                    <th className="p-4 font-bold text-gray-600 text-center text-orange-600">
+                                                        Descanso
+                                                    </th>
                                                     <th className="p-4 font-bold text-gray-600 text-center text-indigo-600 cursor-pointer hover:bg-gray-100 transition-colors select-none" onClick={() => handleSort('km')}>
                                                         KM <SortIcon column="km" />
                                                     </th>
@@ -322,69 +362,107 @@ function JornadasContent() {
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                {sortJornadas(groupedJornadas[date]).map((jor: any) => {
-                                                    const totalKm = jor.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0) || 0;
-                                                    const totalDescargas = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0) || 0;
-                                                    const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
-                                                    const totalRepostajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0) || 0;
+                                                {(() => {
+                                                    // 1. Get raw items for this day
+                                                    const rawItems = groupedJornadas[date] || [];
 
-                                                    return (
-                                                        <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
-                                                            <td className="p-4">
-                                                                <div className="flex items-center gap-3">
-                                                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase
+                                                    // 2. Calculate rests (needs time sorting for logic, but we apply it to items)
+                                                    // We create a map of ID -> rest for quick lookup, or just enrich.
+                                                    // Since we need to calculate rests relative to *time*, let's sort by time first to compute, then apply usage sort.
+
+                                                    const timeSorted = [...rawItems].sort((a: any, b: any) => new Date(a.horaEntrada).getTime() - b.horaEntrada.getTime());
+                                                    const restsMap = new Map<number, number>(); // ID -> Rest Hours
+
+                                                    // Group by employee to check their previous shift
+                                                    const empShifts: Record<string, any[]> = {};
+                                                    timeSorted.forEach(j => {
+                                                        const eid = j.empleado.id;
+                                                        if (!empShifts[eid]) empShifts[eid] = [];
+                                                        empShifts[eid].push(j);
+                                                    });
+
+                                                    Object.values(empShifts).forEach(shifts => {
+                                                        shifts.forEach((s, idx) => {
+                                                            if (idx > 0) {
+                                                                const prev = shifts[idx - 1];
+                                                                if (prev.horaSalida) {
+                                                                    const diff = new Date(s.horaEntrada).getTime() - new Date(prev.horaSalida).getTime();
+                                                                    restsMap.set(s.id, diff / (1000 * 60 * 60));
+                                                                }
+                                                            }
+                                                        });
+                                                    });
+
+                                                    // 3. Now apply the User's Sort preferences
+                                                    const sortedAndEnriched = sortJornadas(rawItems).map(j => ({ ...j, descansoPrevio: restsMap.get(j.id) }));
+
+                                                    return sortedAndEnriched.map((jor: any) => {
+                                                        const totalKm = jor.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0) || 0;
+                                                        const totalDescargas = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0) || 0;
+                                                        const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
+                                                        const totalRepostajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0) || 0;
+
+                                                        return (
+                                                            <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
+                                                                <td className="p-4">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs uppercase
                                                                         ${jor.empleado?.rol === 'CONDUCTOR' ? 'bg-blue-100 text-blue-700' :
-                                                                            jor.empleado?.rol === 'MECANICO' ? 'bg-orange-100 text-orange-700' :
-                                                                                'bg-gray-100 text-gray-700'}
+                                                                                jor.empleado?.rol === 'MECANICO' ? 'bg-orange-100 text-orange-700' :
+                                                                                    'bg-gray-100 text-gray-700'}
                                                                     `}>
-                                                                        {jor.empleado?.nombre?.charAt(0) || '?'}
+                                                                            {jor.empleado?.nombre?.charAt(0) || '?'}
+                                                                        </div>
+                                                                        <div>
+                                                                            <div className="font-bold text-gray-900">{jor.empleado?.nombre}</div>
+                                                                            <div className="text-[10px] text-gray-400 font-bold tracking-wider">{jor.empleado?.rol || 'OTROS'}</div>
+                                                                        </div>
                                                                     </div>
-                                                                    <div>
-                                                                        <div className="font-bold text-gray-900">{jor.empleado?.nombre}</div>
-                                                                        <div className="text-[10px] text-gray-400 font-bold tracking-wider">{jor.empleado?.rol || 'OTROS'}</div>
-                                                                    </div>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-4 text-center font-mono text-gray-600">
-                                                                <span className="bg-gray-100 px-2 py-1 rounded">{format(new Date(jor.horaEntrada), 'HH:mm')}</span>
-                                                            </td>
-                                                            <td className="p-4 text-center font-mono text-gray-500">
-                                                                <span className="bg-gray-100 px-2 py-1 rounded">{jor.horaSalida ? format(new Date(jor.horaSalida), 'HH:mm') : '--:--'}</span>
-                                                            </td>
-                                                            <td className="p-4 font-bold text-blue-700 text-center">
-                                                                {formatDuration(jor.totalHoras)}
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className="font-black text-indigo-600">{totalKm} km</span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
-                                                                    {totalDescargas}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
-                                                                    {totalViajes}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
-                                                                    {totalRepostajes} L
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                                    {jor.estado}
-                                                                </span>
-                                                            </td>
-                                                            <td className="p-4 text-center">
-                                                                <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
-                                                                    Detalles
-                                                                </Button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
+                                                                </td>
+                                                                <td className="p-4 text-center font-mono text-gray-600">
+                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{format(new Date(jor.horaEntrada), 'HH:mm')}</span>
+                                                                </td>
+                                                                <td className="p-4 text-center font-mono text-gray-500">
+                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{jor.horaSalida ? format(new Date(jor.horaSalida), 'HH:mm') : '--:--'}</span>
+                                                                </td>
+                                                                <td className="p-4 font-bold text-blue-700 text-center">
+                                                                    {formatDuration(jor.totalHoras)}
+                                                                </td>
+                                                                <td className="p-4 font-bold text-orange-600 text-center text-xs">
+                                                                    {jor.descansoPrevio ? formatDuration(jor.descansoPrevio) : '-'}
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <span className="font-black text-indigo-600">{totalKm} km</span>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
+                                                                        {totalDescargas}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
+                                                                        {totalViajes}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
+                                                                        {totalRepostajes} L
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                                                        {jor.estado}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
+                                                                        Detalles
+                                                                    </Button>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    });
+                                                })()}
                                             </tbody>
                                         </table>
                                     </div>

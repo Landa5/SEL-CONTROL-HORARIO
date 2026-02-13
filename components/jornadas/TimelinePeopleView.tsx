@@ -6,7 +6,7 @@ import { es } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/Button';
-import { Layers, Minimize2, Maximize2, Clock } from 'lucide-react';
+import { Layers, Minimize2, Maximize2, Clock, Users } from 'lucide-react';
 
 interface TimelinePeopleViewProps {
     jornadas: any[];
@@ -17,6 +17,7 @@ interface TimelinePeopleViewProps {
 export default function TimelinePeopleView({ jornadas, date, employees = [] }: TimelinePeopleViewProps) {
     const [viewMode, setViewMode] = useState<'expanded' | 'compact'>('expanded');
     const [currentTime, setCurrentTime] = useState(new Date());
+    const [showAllEmployees, setShowAllEmployees] = useState(false); // Default: Show only active
 
     // Update "Now" indicator every minute
     useEffect(() => {
@@ -36,18 +37,20 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
 
         const getRole = (emp: any) => emp.rol || 'OTROS';
 
-        // Initialize with all employees
-        employees.forEach(emp => {
-            if (!emp.activo) return;
-            const strId = String(emp.id);
-            employeeData[strId] = {
-                employee: emp,
-                role: getRole(emp),
-                shifts: [],
-                totalMinutes: 0,
-                status: 'inactive'
-            };
-        });
+        // Initialize with all employees IF showAllEmployees is true
+        if (showAllEmployees) {
+            employees.forEach(emp => {
+                if (!emp.activo) return;
+                const strId = String(emp.id);
+                employeeData[strId] = {
+                    employee: emp,
+                    role: getRole(emp),
+                    shifts: [],
+                    totalMinutes: 0,
+                    status: 'inactive'
+                };
+            });
+        }
 
         // Merge Jornadas
         jornadas.forEach(jor => {
@@ -102,7 +105,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
         });
 
         return { sortedRoles: sortedRoleKeys, groupedByRole: grouped, statsByRole: stats };
-    }, [jornadas, employees, date]);
+    }, [jornadas, employees, date, showAllEmployees]);
 
     // 2. RENDERING HELPERS
     const startOfDayDate = startOfDay(parseISO(date));
@@ -149,6 +152,15 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
                             <div className="w-2 h-2 rounded-full bg-orange-200 ml-2"></div>
                             <span className="font-bold text-gray-600">Descanso</span>
                         </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowAllEmployees(prev => !prev)}
+                            className={`gap-2 text-xs font-bold ${showAllEmployees ? 'bg-blue-50 text-blue-700 border-blue-200' : ''}`}
+                        >
+                            <Users className="w-3 h-3" />
+                            {showAllEmployees ? 'Todos' : 'Activos'}
+                        </Button>
                         <Button
                             variant="outline"
                             size="sm"
