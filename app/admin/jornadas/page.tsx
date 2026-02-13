@@ -45,9 +45,9 @@ function JornadasContent() {
         if (res.ok) setJornadas(await res.json());
     };
 
-    // Helper to format duration, explicitly handling 0
+    // Helper to format duration, explicitly handling 0 and NaN
     const formatDuration = (hoursDecimal: number | null | undefined) => {
-        if (hoursDecimal === null || hoursDecimal === undefined) return '-';
+        if (hoursDecimal === null || hoursDecimal === undefined || isNaN(hoursDecimal)) return '-';
         const hours = Math.floor(hoursDecimal);
         const minutes = Math.round((hoursDecimal - hours) * 60);
         return `${hours}h ${minutes}m`;
@@ -55,31 +55,45 @@ function JornadasContent() {
 
     // Helper to calculate rest across the entire dataset (Focused on 13:00-16:00 Window)
     const calculateRest13to16 = (items: any[]) => {
+        if (!items || items.length === 0) return [];
+
         // 1. Flatten and Group by Employee + Date
         const grouped: Record<string, any[]> = {};
 
         items.forEach(j => {
             // Use safe date string for grouping key
             try {
+                if (!j.fecha) return;
                 const d = new Date(j.fecha);
                 if (isNaN(d.getTime())) return;
                 const key = `${j.empleado?.id || 'unknown'}-${format(d, 'yyyy-MM-dd')}`;
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(j);
-            } catch (e) { console.error("Error processing date", j); }
+            } catch (e) {
+                // Ignore bad dates silenty to prevent crash
+            }
         });
 
         // 2. Calculate 13-16 Rest for each day
         const result: any[] = [];
         Object.values(grouped).forEach(dayShifts => {
-            // Sort by time
-            dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
+            if (!dayShifts || dayShifts.length === 0) return;
 
-            if (dayShifts.length === 0) return;
+            // Sort by time
+            dayShifts.sort((a, b) => {
+                const tA = new Date(a.horaEntrada).getTime();
+                const tB = new Date(b.horaEntrada).getTime();
+                return (isNaN(tA) ? 0 : tA) - (isNaN(tB) ? 0 : tB);
+            });
 
             // Define the 13:00 - 16:00 window using the first shift's date object base
-            // This avoids string parsing timezone issues by setting hours directly on a local date clone
-            const baseDate = new Date(dayShifts[0].fecha);
+            // Ideally should use UTC split, but Local is practical for user timezone context
+            let baseDate: Date;
+            try {
+                baseDate = new Date(dayShifts[0].fecha);
+                if (isNaN(baseDate.getTime())) baseDate = new Date();
+            } catch (e) { baseDate = new Date(); }
+
             // Create local boundaries
             const lunchStart = new Date(baseDate); lunchStart.setHours(13, 0, 0, 0);
             const lunchEnd = new Date(baseDate); lunchEnd.setHours(16, 0, 0, 0);
@@ -88,17 +102,21 @@ function JornadasContent() {
             let workedInLunchMs = 0;
 
             dayShifts.forEach(shift => {
-                const s = new Date(shift.horaEntrada);
-                const e = shift.horaSalida ? new Date(shift.horaSalida) : new Date(); // If ongoing, assume working now
+                try {
+                    const s = new Date(shift.horaEntrada);
+                    const e = shift.horaSalida ? new Date(shift.horaSalida) : new Date(); // If ongoing, assume working now
 
-                // Max(start, lunchStart)
-                const overlapStart = s > lunchStart ? s : lunchStart;
-                // Min(end, lunchEnd)
-                const overlapEnd = e < lunchEnd ? e : lunchEnd;
+                    if (isNaN(s.getTime()) || isNaN(e.getTime())) return;
 
-                if (overlapStart < overlapEnd) {
-                    workedInLunchMs += (overlapEnd.getTime() - overlapStart.getTime());
-                }
+                    // Max(start, lunchStart)
+                    const overlapStart = s > lunchStart ? s : lunchStart;
+                    // Min(end, lunchEnd)
+                    const overlapEnd = e < lunchEnd ? e : lunchEnd;
+
+                    if (overlapStart < overlapEnd) {
+                        workedInLunchMs += (overlapEnd.getTime() - overlapStart.getTime());
+                    }
+                } catch (e) { }
             });
 
             // Total Lunch Window = 3 hours (180 mins)
@@ -118,9 +136,16 @@ function JornadasContent() {
 
 
     const groupedJornadas = jornadas.reduce((acc: any, jor) => {
-        const dateKey = format(new Date(jor.fecha), 'yyyy-MM-dd');
-        if (!acc[dateKey]) acc[dateKey] = [];
-        acc[dateKey].push(jor);
+        try {
+            if (!jor.fecha) return acc;
+            const d = new Date(jor.fecha);
+            if (isNaN(d.getTime())) return acc;
+            const dateKey = format(d, 'yyyy-MM-dd');
+            if (!acc[dateKey]) acc[dateKey] = [];
+            acc[dateKey].push(jor);
+        } catch (e) {
+            // Skip invalid dates
+        }
         return acc;
     }, {});
 
