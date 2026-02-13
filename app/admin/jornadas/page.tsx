@@ -95,7 +95,7 @@ function JornadasContent() {
                 if (!j.fecha) return;
                 const d = new Date(j.fecha);
                 if (isNaN(d.getTime())) return;
-                const key = `${j.empleado?.id || 'unknown'}-${format(d, 'yyyy-MM-dd')}`;
+                const key = `${j.empleadoId || 'unknown'}-${format(d, 'yyyy-MM-dd')}`;
                 if (!grouped[key]) grouped[key] = [];
                 grouped[key].push(j);
             } catch (e) {
