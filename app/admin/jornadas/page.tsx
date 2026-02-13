@@ -376,6 +376,7 @@ function JornadasContent() {
                                                     // Group by employee to check their previous shift
                                                     const empShifts: Record<string, any[]> = {};
                                                     timeSorted.forEach(j => {
+                                                        if (!j.empleado) return;
                                                         const eid = j.empleado.id;
                                                         if (!empShifts[eid]) empShifts[eid] = [];
                                                         empShifts[eid].push(j);
