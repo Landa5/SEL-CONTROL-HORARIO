@@ -13,6 +13,7 @@ import TimelineView from '@/components/jornadas/TimelineView';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import EditUsoCamionDialog from '@/components/jornadas/EditUsoCamionDialog';
 import { Pencil } from 'lucide-react';
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 // ... rest of imports
 
 function JornadasContent() {
@@ -697,7 +698,9 @@ export default function AdminJornadas() {
                 <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
             </div>
         }>
-            <JornadasContent />
+            <ErrorBoundary>
+                <JornadasContent />
+            </ErrorBoundary>
         </Suspense>
     );
 }
