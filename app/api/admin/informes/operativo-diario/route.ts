@@ -152,8 +152,8 @@ export async function GET(request: Request) {
             // Or format as "08:00-14:00, 16:00-19:00"
             const sortedJornadas = jornadas.sort((a: any, b: any) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
             const timeRanges = sortedJornadas.map((j: any) => {
-                const s = format(new Date(j.horaEntrada), 'HH:mm');
-                const e = j.horaSalida ? format(new Date(j.horaSalida), 'HH:mm') : 'En curso';
+                const s = new Date(j.horaEntrada).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' });
+                const e = j.horaSalida ? new Date(j.horaSalida).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Madrid' }) : 'En curso';
                 return `${s}-${e}`;
             }).join(', ');
 

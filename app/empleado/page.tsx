@@ -135,8 +135,15 @@ export default function EmpleadoDashboard() {
     };
 
     const fetchTareas = async () => {
-        const res = await fetch('/api/tareas?estado=ABIERTA');
-        if (res.ok) setTareas(await res.json());
+        const res = await fetch('/api/tareas');
+        if (res.ok) {
+            const allTasks = await res.json();
+            // Filter for active tasks relevant to the employee
+            const activeTasks = allTasks.filter((t: any) =>
+                ['PENDIENTE', 'EN_CURSO', 'REVISION'].includes(t.estado)
+            );
+            setTareas(activeTasks);
+        }
     };
 
     const fetchData = async () => {
@@ -717,7 +724,11 @@ export default function EmpleadoDashboard() {
                                             <span className="font-bold">#{t.id} {t.titulo}</span>
                                             <p className="text-xs text-gray-500">{t.camion?.matricula}</p>
                                         </div>
-                                        <div className={`px-2 py-1 rounded text-xs font-bold ${t.estado === 'ABIERTA' ? 'bg-green-100 text-green-800' : 'bg-gray-100'}`}>{t.estado}</div>
+                                        <div className={`px-2 py-1 rounded text-xs font-bold ${t.estado === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-800' :
+                                                t.estado === 'EN_CURSO' ? 'bg-blue-100 text-blue-800' :
+                                                    t.estado === 'REVISION' ? 'bg-purple-100 text-purple-800' :
+                                                        'bg-gray-100'
+                                            }`}>{t.estado}</div>
                                     </div>
                                 ))}
                             </div>

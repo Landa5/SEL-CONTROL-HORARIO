@@ -109,12 +109,27 @@ export async function GET(request: Request) {
         else if (parentId) where.parentId = Number(parentId);
 
         // VISIBILITY RULES
-        const isStaff = ['ADMIN', 'MECANICO', 'OFICINA'].includes(session.rol as string);
-        if (!isStaff) {
-            where.OR = [
-                { creadoPorId: Number(session.id) },
-                { asignadoAId: Number(session.id) }
-            ];
+        // VISIBILITY RULES
+        const isGlobalAdmin = session.rol === 'ADMIN';
+
+        if (!isGlobalAdmin) {
+            const isStaff = ['MECANICO', 'OFICINA'].includes(session.rol as string);
+
+            if (isStaff) {
+                // Staff: Can see their own, assigned to them, OR unassigned (pool)
+                // They CANNOT see tasks assigned to others.
+                where.OR = [
+                    { creadoPorId: Number(session.id) },
+                    { asignadoAId: Number(session.id) },
+                    { asignadoAId: null }
+                ];
+            } else {
+                // Regular Employee: Can only see their own or assigned to them
+                where.OR = [
+                    { creadoPorId: Number(session.id) },
+                    { asignadoAId: Number(session.id) }
+                ];
+            }
         }
 
         const tareas = await prisma.tarea.findMany({
