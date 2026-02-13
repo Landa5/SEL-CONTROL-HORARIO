@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { startOfMonth, endOfMonth, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { startOfMonth, endOfMonth, parseISO, startOfDay, endOfDay, subHours } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,8 +10,13 @@ export async function GET(request: Request) {
     const to = searchParams.get('to');
 
     // Default to current month if no dates provided
-    const startDate = from ? startOfDay(parseISO(from)) : startOfMonth(new Date());
-    const endDate = to ? endOfDay(parseISO(to)) : endOfDay(new Date());
+    // ADJUSTMENT: Spain is UTC+1/UTC+2. UTC 00:00 is 01:00/02:00 in Spain.
+    // To Capture 00:00 in Spain, we need to go back 2 hours (22:00 UTC previous day).
+    const rawStart = from ? startOfDay(parseISO(from)) : startOfMonth(new Date());
+    const rawEnd = to ? endOfDay(parseISO(to)) : endOfDay(new Date());
+
+    const startDate = subHours(rawStart, 2);
+    const endDate = subHours(rawEnd, 2);
 
     try {
         const usos = await prisma.usoCamion.findMany({

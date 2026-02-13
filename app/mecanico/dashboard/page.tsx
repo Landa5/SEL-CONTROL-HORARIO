@@ -11,12 +11,14 @@ import EmployeeAbsenceSummary from '@/components/empleado/EmployeeAbsenceSummary
 import EmployeeAbsenceView from '@/components/empleado/EmployeeAbsenceView';
 import EmployeeTrainingView from '@/components/empleado/EmployeeTrainingView';
 import PredictiveMaintenanceWidget from '@/components/admin/PredictiveMaintenanceWidget';
+import FleetAlertsWidget from '@/components/admin/FleetAlertsWidget';
 
 export default function MecanicoDashboard() {
     const router = useRouter();
     const [tareas, setTareas] = useState<any[]>([]);
     const [jornada, setJornada] = useState<any>(null);
     const [session, setSession] = useState<any>(null);
+    const [fleetStats, setFleetStats] = useState<any>(null); // State for stats
     const [loading, setLoading] = useState(true);
     const [observaciones, setObservaciones] = useState('');
 
@@ -31,12 +33,22 @@ export default function MecanicoDashboard() {
         loadSession();
         fetchTareas();
         fetchJornada();
+        fetchFleetStats(); // Fetch stats
 
         // Check for section in URL
         const params = new URLSearchParams(window.location.search);
         const section = params.get('section');
         if (section) setActiveSection(section as any);
     }, []);
+
+    const fetchFleetStats = async () => {
+        try {
+            const res = await fetch('/api/admin/dashboard');
+            if (res.ok) setFleetStats(await res.json());
+        } catch (e) {
+            console.error(e);
+        }
+    };
 
     const fetchJornada = async () => {
         try {
@@ -135,6 +147,14 @@ export default function MecanicoDashboard() {
 
             {activeSection === 'summary' ? (
                 <div className="space-y-6 animate-in fade-in">
+
+                    {/* ALERTS SECTION (NEW) */}
+                    <div className="grid grid-cols-1 gap-6">
+                        <FleetAlertsWidget
+                            alerts={fleetStats?.section1?.criticalAlerts || []}
+                            hrefPrefix="/mecanico"
+                        />
+                    </div>
 
                     {/* Summary Widgets */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

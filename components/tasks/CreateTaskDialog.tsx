@@ -138,84 +138,83 @@ export default function CreateTaskDialog({ onTaskCreated }: { onTaskCreated: () 
                             <option value="BAJA">Baja</option>
                         </select>
                     </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium">Activo / Contexto</label>
-                        <select className="w-full p-2 border rounded-md" value={activoTipo} onChange={e => setActivoTipo(e.target.value)}>
-                            <option value="OTRO">Otro</option>
-                            <option value="CAMION">Camión</option>
-                            <option value="DEPOSITO_CLIENTE">Cliente</option>
-                            <option value="BASE">Base</option>
-                        </select>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Activo / Contexto</label>
+                            <select className="w-full p-2 border rounded-md" value={activoTipo} onChange={e => setActivoTipo(e.target.value)}>
+                                <option value="OTRO">Otro</option>
+                                <option value="CAMION">Camión</option>
+                                <option value="DEPOSITO_CLIENTE">Cliente</option>
+                                <option value="BASE">Base</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium">Asignar a (Opcional)</label>
+                            <select className="w-full p-2 border rounded-md" value={asignadoAId} onChange={e => setAsignadoAId(e.target.value)}>
+                                <option value="">Sin Asignar</option>
+                                {employees.map(e => (
+                                    <option key={e.id} value={e.id}>{e.nombre} {e.apellidos}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
+
+                    {activoTipo === 'CAMION' && (
+                        <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
+                            <label className="text-sm font-medium">Matrícula</label>
+                            <select
+                                required
+                                className="w-full p-2 border rounded-md"
+                                value={matricula}
+                                onChange={e => setMatricula(e.target.value)}
+                            >
+                                <option value="">Seleccionar Camión...</option>
+                                {camiones.map(c => (
+                                    <option key={c.id} value={c.matricula}>{c.matricula} - {c.modelo}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
                     <div className="space-y-2">
-                        <label className="text-sm font-medium">Asignar a (Opcional)</label>
-                        <select className="w-full p-2 border rounded-md" value={asignadoAId} onChange={e => setAsignadoAId(e.target.value)}>
-                            <option value="">Sin Asignar</option>
-                            {employees.map(e => (
-                                <option key={e.id} value={e.id}>{e.nombre} {e.apellidos}</option>
+                        <label className="text-sm font-medium">Proyecto (Opcional)</label>
+                        <select className="w-full p-2 border rounded-md" value={proyectoId} onChange={e => setProyectoId(e.target.value)}>
+                            <option value="">Sin Proyecto</option>
+                            {projects.map(p => (
+                                <option key={p.id} value={p.id}>{p.nombre}</option>
                             ))}
                         </select>
                     </div>
-                </div>
 
-                {activoTipo === 'CAMION' && (
-                    <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                        <label className="text-sm font-medium">Matrícula</label>
-                        <select
-                            required
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Fecha Límite</label>
+                        <input
+                            type="date"
                             className="w-full p-2 border rounded-md"
-                            value={matricula}
-                            onChange={e => setMatricula(e.target.value)}
-                        >
-                            <option value="">Seleccionar Camión...</option>
-                            {camiones.map(c => (
-                                <option key={c.id} value={c.matricula}>{c.matricula} - {c.modelo}</option>
-                            ))}
-                        </select>
+                            value={fechaLimite}
+                            onChange={e => setFechaLimite(e.target.value)}
+                        />
+                        <p className="text-xs text-gray-400">Si se deja vacío, irá al Backlog.</p>
                     </div>
-                )}
 
-                <div className="space-y-2">
-                    <label className="text-sm font-medium">Proyecto (Opcional)</label>
-                    <select className="w-full p-2 border rounded-md" value={proyectoId} onChange={e => setProyectoId(e.target.value)}>
-                        <option value="">Sin Proyecto</option>
-                        {projects.map(p => (
-                            <option key={p.id} value={p.id}>{p.nombre}</option>
-                        ))}
-                    </select>
-                </div>
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium">Descripción</label>
+                        <textarea
+                            className="w-full p-2 border rounded-md min-h-[100px]"
+                            placeholder="Detalles de la tarea..."
+                            value={descripcion}
+                            onChange={e => setDescripcion(e.target.value)}
+                        />
+                    </div>
 
-                <div className="space-y-2">
-                    <label className="text-sm font-medium">Fecha Límite</label>
-                    <input
-                        type="date"
-                        className="w-full p-2 border rounded-md"
-                        value={fechaLimite}
-                        onChange={e => setFechaLimite(e.target.value)}
-                    />
-                    <p className="text-xs text-gray-400">Si se deja vacío, irá al Backlog.</p>
-                </div>
-
-                <div className="space-y-2">
-                    <label className="text-sm font-medium">Descripción</label>
-                    <textarea
-                        className="w-full p-2 border rounded-md min-h-[100px]"
-                        placeholder="Detalles de la tarea..."
-                        value={descripcion}
-                        onChange={e => setDescripcion(e.target.value)}
-                    />
-                </div>
-
-                <div className="flex justify-end pt-4">
-                    <Button type="submit" disabled={loading}>
-                        {loading ? 'Creando...' : 'Crear Tarea'}
-                    </Button>
-                </div>
-            </form>
-        </DialogContent>
+                    <div className="flex justify-end pt-4">
+                        <Button type="submit" disabled={loading}>
+                            {loading ? 'Creando...' : 'Crear Tarea'}
+                        </Button>
+                    </div>
+                </form>
+            </DialogContent>
         </Dialog >
     );
 }

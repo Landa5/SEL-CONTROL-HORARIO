@@ -10,7 +10,7 @@ export async function GET(request: Request) {
         if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         const user: any = await verifyToken(session);
-        if (!user || (user.rol !== 'ADMIN' && user.rol !== 'OFICINA')) {
+        if (!user || (user.rol !== 'ADMIN' && user.rol !== 'OFICINA' && user.rol !== 'MECANICO')) {
             return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
         }
 

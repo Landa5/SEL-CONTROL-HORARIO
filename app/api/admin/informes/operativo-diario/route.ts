@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { startOfDay, endOfDay, parseISO, differenceInMinutes, format } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, differenceInMinutes, format, subHours } from 'date-fns';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,8 +9,12 @@ export async function GET(request: Request) {
     const dateParam = searchParams.get('date');
 
     const date = dateParam ? parseISO(dateParam) : new Date();
-    const dayStart = startOfDay(date);
-    const dayEnd = endOfDay(date);
+
+    // ADJUSTMENT: Spain Timezone (UTC+1/+2).
+    // Querying UTC 00:00 misses 00:00-02:00 in Spain.
+    // We shift the window back by 2 hours.
+    const dayStart = subHours(startOfDay(date), 2);
+    const dayEnd = subHours(endOfDay(date), 2);
 
     try {
         // 1. Fetch Jornadas (Base for presence)
