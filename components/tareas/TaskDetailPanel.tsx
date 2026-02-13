@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { X, Calendar, User, Truck, MapPin, AlertCircle, Phone, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge'; // Assuming we might have a Badge component, or I'll use standard classes
+import { Badge } from '@/components/ui/Badge';
 import TaskCRM from './TaskCRM';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -17,6 +17,39 @@ interface TaskDetailPanelProps {
 export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetailPanelProps) {
     const [task, setTask] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [employees, setEmployees] = useState<any[]>([]);
+    const [isAdminOrOffice, setIsAdminOrOffice] = useState(false);
+
+    // Fetch employees for assignment
+    useEffect(() => {
+        const fetchEmployees = async () => {
+            try {
+                const res = await fetch('/api/empleados'); // Assuming this endpoint returns all active employees
+                if (res.ok) {
+                    const data = await res.json();
+                    setEmployees(data);
+                }
+            } catch (error) {
+                console.error("Error fetching employees:", error);
+            }
+        };
+
+        // Check session role for permissions (Simplified check, ideally passed from parent or context)
+        // For now, we'll fetch employees regardless, and UI logic can hide/show based on role if we had it.
+        // We'll trust the API to handle permissions or just allow it if the user can see the detailed view.
+        fetchEmployees();
+
+        // Get session to check role
+        fetch('/api/auth/session')
+            .then(res => res.json())
+            .then(session => {
+                if (session?.rol === 'ADMIN' || session?.rol === 'OFICINA') {
+                    setIsAdminOrOffice(true);
+                }
+            })
+            .catch(err => console.error(err));
+
+    }, []);
 
     useEffect(() => {
         if (taskId) {
@@ -55,6 +88,25 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
             }
         } catch (error) {
             console.error("Error updating status:", error);
+        }
+    };
+
+    const handleAssigneeChange = async (newAssigneeId: string) => {
+        if (!task) return;
+        const assigneeId = newAssigneeId === 'unassigned' ? null : Number(newAssigneeId);
+
+        try {
+            const res = await fetch(`/api/tareas/${task.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ asignadoAId: assigneeId })
+            });
+            if (res.ok) {
+                fetchTaskDetails(task.id);
+                onUpdate();
+            }
+        } catch (error) {
+            console.error("Error updating assignee:", error);
         }
     };
 
@@ -137,6 +189,37 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                                             <p className="text-[10px] font-bold text-gray-400 uppercase">Fecha Reporte</p>
                                             <p className="text-sm font-medium">{format(new Date(task.createdAt), 'dd MMM yyyy', { locale: es })}</p>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Assignment Section - Only visible for Admin/Office or if assigned */}
+                            <div className="bg-white p-4 rounded-xl shadow-sm border space-y-3">
+                                <h4 className="text-xs font-bold text-gray-400 uppercase">Asignación</h4>
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-100 rounded-lg">
+                                        <User className="w-5 h-5 text-purple-600" />
+                                    </div>
+                                    <div className="flex-1">
+                                        {isAdminOrOffice ? (
+                                            <select
+                                                className="w-full text-sm font-medium text-gray-900 border-none bg-transparent focus:ring-0 cursor-pointer"
+                                                value={task.asignadoAId || 'unassigned'}
+                                                onChange={(e) => handleAssigneeChange(e.target.value)}
+                                            >
+                                                <option value="unassigned">Sin asignar</option>
+                                                {employees.map(emp => (
+                                                    <option key={emp.id} value={emp.id}>
+                                                        {emp.nombre} {emp.apellidos}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase">Asignado a</p>
+                                                <p className="font-bold text-gray-700">{task.asignadoA?.nombre || 'Sin asignar'}</p>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                             </div>
