@@ -41,7 +41,7 @@ export async function GET(request: Request) {
             const jornadas = await prisma.jornadaLaboral.findMany({
                 where,
                 include: {
-                    empleado: { select: { nombre: true, email: true, rol: true } },
+                    empleado: { select: { id: true, nombre: true, email: true, rol: true } },
                     usosCamion: { include: { camion: true, descargas: true } }
                 },
                 orderBy: { fecha: 'desc' }

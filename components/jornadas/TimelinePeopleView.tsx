@@ -56,7 +56,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [] }: T
         if (Array.isArray(jornadas)) {
             jornadas.forEach(jor => {
                 if (!jor || !jor.empleado) return;
-                const empId = String(jor.empleado.id);
+                const empId = String(jor.empleadoId || jor.empleado.id);
 
                 // Find existing entry (string vs number match) - ROBUST
                 let existingKey = Object.keys(employeeData).find(k => String(k) === empId);
