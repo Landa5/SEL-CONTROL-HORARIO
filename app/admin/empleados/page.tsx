@@ -45,6 +45,8 @@ export default function AdminEmpleados() {
         // Configuración Horaria
         horaEntradaPrevista: '',
         horaSalidaPrevista: '',
+        horaEntradaTarde: '',
+        horaSalidaTarde: '',
         puestoTrabajo: ''
     });
 
@@ -146,6 +148,8 @@ export default function AdminEmpleados() {
             adrCaducidad: emp.perfilProfesional?.adrCaducidad ? new Date(emp.perfilProfesional.adrCaducidad).toISOString().split('T')[0] : '',
             horaEntradaPrevista: emp.horaEntradaPrevista || '',
             horaSalidaPrevista: emp.horaSalidaPrevista || '',
+            horaEntradaTarde: emp.horaEntradaTarde || '',
+            horaSalidaTarde: emp.horaSalidaTarde || '',
             puestoTrabajo: emp.puestoTrabajo || ''
         });
         setCurrentTab('PERSONAL');
@@ -173,6 +177,8 @@ export default function AdminEmpleados() {
             adrCaducidad: '',
             horaEntradaPrevista: '',
             horaSalidaPrevista: '',
+            horaEntradaTarde: '',
+            horaSalidaTarde: '',
             puestoTrabajo: ''
         });
         setCurrentTab('PERSONAL');
@@ -407,7 +413,7 @@ export default function AdminEmpleados() {
                                             </h4>
                                             <div className="grid grid-cols-2 gap-4">
                                                 <div>
-                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Entrada Prevista</label>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Entrada (Mañana)</label>
                                                     <Input
                                                         value={formData.horaEntradaPrevista}
                                                         onChange={e => handleInputChange('horaEntradaPrevista', e.target.value)}
@@ -416,11 +422,32 @@ export default function AdminEmpleados() {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Salida Prevista</label>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Salida (Mañana)</label>
                                                     <Input
                                                         value={formData.horaSalidaPrevista}
                                                         onChange={e => handleInputChange('horaSalidaPrevista', e.target.value)}
-                                                        placeholder="18:00"
+                                                        placeholder="13:30"
+                                                        type="time"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Entrada (Tarde)</label>
+                                                    <Input
+                                                        value={formData.horaEntradaTarde}
+                                                        onChange={e => handleInputChange('horaEntradaTarde', e.target.value)}
+                                                        placeholder="15:30"
+                                                        type="time"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-bold text-gray-700 mb-1">Hora Salida (Tarde)</label>
+                                                    <Input
+                                                        value={formData.horaSalidaTarde}
+                                                        onChange={e => handleInputChange('horaSalidaTarde', e.target.value)}
+                                                        placeholder="19:00"
                                                         type="time"
                                                     />
                                                 </div>

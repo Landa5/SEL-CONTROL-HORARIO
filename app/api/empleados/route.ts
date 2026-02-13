@@ -63,9 +63,12 @@ export async function POST(request: Request) {
                 direccion: sanitize(data.direccion),
                 observaciones: sanitize(data.observaciones),
                 activo: data.activo !== undefined ? data.activo : true,
+                // @ts-ignore
                 // Configuración Horaria
                 horaEntradaPrevista: sanitize(data.horaEntradaPrevista),
                 horaSalidaPrevista: sanitize(data.horaSalidaPrevista),
+                horaEntradaTarde: sanitize(data.horaEntradaTarde),
+                horaSalidaTarde: sanitize(data.horaSalidaTarde),
                 puestoTrabajo: sanitize(data.puestoTrabajo),
 
                 fechaAlta: new Date(),
@@ -121,6 +124,8 @@ export async function PUT(request: Request) {
             activo: rest.activo,
             horaEntradaPrevista: sanitize(rest.horaEntradaPrevista),
             horaSalidaPrevista: sanitize(rest.horaSalidaPrevista),
+            horaEntradaTarde: sanitize(rest.horaEntradaTarde),
+            horaSalidaTarde: sanitize(rest.horaSalidaTarde),
             puestoTrabajo: sanitize(rest.puestoTrabajo),
         };
 

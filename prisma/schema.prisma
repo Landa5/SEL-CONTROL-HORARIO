@@ -34,6 +34,8 @@ model Empleado {
   // Configuración Horaria
   horaEntradaPrevista String? // "09:00"
   horaSalidaPrevista  String? // "18:00"
+  horaEntradaTarde    String? // "16:00" (Para jornada partida)
+  horaSalidaTarde     String? // "19:00" (Para jornada partida)
   puestoTrabajo       String? // "Jefe de Tráfico", "Administrativo", etc.
 
   // Vacaciones

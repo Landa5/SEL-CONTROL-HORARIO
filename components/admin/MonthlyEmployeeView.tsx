@@ -13,7 +13,7 @@ interface MonthlyEmployeeViewProps {
 }
 
 export default function MonthlyEmployeeView({ employeeId, year, month }: MonthlyEmployeeViewProps) {
-    const [data, setData] = useState<any>(null);
+    const [reportData, setReportData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -23,49 +23,52 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
             try {
                 const res = await fetch(`/api/admin/informes/mensuales/empleado?employeeId=${employeeId}&year=${year}&month=${month}`);
                 if (res.ok) {
-                    const json = await res.json();
-                    setData(json);
+                    const data = await res.json();
+                    setReportData(data);
                 }
-            } catch (error) {
-                console.error("Error fetching employee data", error);
-            } finally {
-                setLoading(false);
-            }
+            } catch (error) { console.error(error); }
+            setLoading(false);
         };
         fetchData();
     }, [employeeId, year, month]);
 
-    if (loading) return <div className="p-12 flex justify-center"><Loader2 className="animate-spin w-8 h-8 text-blue-500" /></div>;
-    if (!data) return <div className="p-8 text-center text-gray-400">Selecciona un empleado para ver su informe.</div>;
+    if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin inline mr-2" /> Cargando informe...</div>;
+    if (!reportData) return <div className="p-8 text-center text-gray-500">Sin datos disponibles</div>;
 
-    const { employee, summary, shifts } = data;
-    const daysInMonth = eachDayOfInterval({
-        start: startOfMonth(new Date(year, month - 1)),
-        end: endOfMonth(new Date(year, month - 1))
-    });
+    const { employee, summary, shifts, daysInMonth } = reportData;
 
-    const getShiftForDay = (date: Date) => {
+    const getShiftForDay = (date: any) => {
         return shifts.find((s: any) => isSameDay(parseISO(s.date), date));
     };
 
-    const getPunctualityColor = (mins: number) => {
-        if (mins > 10) return 'text-red-500';
-        if (mins > 0) return 'text-orange-500';
-        return 'text-green-500';
+    // Helper: Get color based on punctuality average
+    const getPunctualityColor = (avg: number) => {
+        if (avg <= 0) return 'text-green-600'; // On time or early
+        if (avg < 15) return 'text-orange-500'; // Slightly late
+        return 'text-red-600'; // Late
     };
+
+    const hasAfternoonShift = employee.horaEntradaTarde && employee.horaSalidaTarde;
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
-            {/* HEADLINE */}
-            <div className="flex items-center justify-between">
+            {/* HEADER */}
+            <div className="flex justify-between items-start bg-white p-6 rounded-xl shadow-sm border mb-6">
                 <div>
-                    <h2 className="text-xl font-black text-gray-800 uppercase tracking-tight flex items-center gap-2">
-                        <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-sm">{employee.rol}</span>
-                        {employee.nombre}
-                    </h2>
-                    <p className="text-sm text-gray-500 mt-1">
-                        Horario Previsto: <span className="font-mono font-bold">{employee.horaEntradaPrevista || '--:--'} - {employee.horaSalidaPrevista || '--:--'}</span>
-                    </p>
+                    <h2 className="text-2xl font-black text-gray-900">{employee.nombre}</h2>
+                    <p className="text-gray-500 font-bold">{employee.rol}</p>
+                    <div className="flex gap-4 mt-2 text-sm">
+                        <div className="bg-blue-50 text-blue-800 px-2 py-1 rounded">
+                            <span className="font-bold">Horario Mañana: </span>
+                            {employee.horaEntradaPrevista || '--:--'} - {employee.horaSalidaPrevista || '--:--'}
+                        </div>
+                        {hasAfternoonShift && (
+                            <div className="bg-orange-50 text-orange-800 px-2 py-1 rounded">
+                                <span className="font-bold">Horario Tarde: </span>
+                                {employee.horaEntradaTarde} - {employee.horaSalidaTarde}
+                            </div>
+                        )}
+                    </div>
                 </div>
                 <div className="text-right">
                     <p className="text-xs font-bold text-gray-400 uppercase">Puntualidad Media</p>
