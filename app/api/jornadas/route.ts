@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
+import { registrarAuditoria } from '@/lib/auditoria';
 
 export async function GET(request: Request) {
     try {
@@ -167,6 +168,9 @@ export async function PUT(request: Request) {
         const session = cookieStore.get('session')?.value;
         if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
+        const user: any = await verifyToken(session);
+        if (!user || !user.id) return NextResponse.json({ error: 'Sesión inválida' }, { status: 401 });
+
         const body = await request.json();
         const { id, horaSalida, estado, observaciones } = body;
 
@@ -273,6 +277,15 @@ export async function PUT(request: Request) {
             where: { id: parseInt(id) },
             data,
         });
+
+        // AUDITORÍA
+        await registrarAuditoria(
+            parseInt(user.id),
+            'EDICION_JORNADA',
+            'JornadaLaboral',
+            jornada.id,
+            data
+        );
 
         return NextResponse.json(jornada);
     } catch (error) {

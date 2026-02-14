@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
+import { registrarAuditoria } from '@/lib/auditoria';
 
 export async function PATCH(
     request: Request,
@@ -34,6 +35,15 @@ export async function PATCH(
                 aprobadoPorId: Number(session.id)
             }
         });
+
+        // AUDITORÍA
+        await registrarAuditoria(
+            Number(session.id),
+            `AUSENCIA_${estado}`,
+            'Ausencia',
+            parseInt(id),
+            { estadoAnterior: ausencia.estado, estadoNuevo: estado }
+        );
 
         return NextResponse.json(updated);
     } catch (error) {
