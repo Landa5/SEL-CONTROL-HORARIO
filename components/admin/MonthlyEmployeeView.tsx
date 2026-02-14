@@ -123,7 +123,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                         <div key={`pad-${i}`} className="h-24 bg-transparent" />
                     ))}
 
-                    {daysInMonth.map(date => {
+                    {daysInMonth.map((date: Date) => {
                         const shift = getShiftForDay(date);
                         const isWeekend = getDay(date) === 0 || getDay(date) === 6;
 
