@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Download, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import MonthlyEmployeeView from '@/components/admin/MonthlyEmployeeView';
@@ -18,6 +18,11 @@ export default function MonthlyReportPage() {
     const [activeTab, setActiveTab] = useState<'GLOBAL' | 'INDIVIDUAL'>('GLOBAL');
     const [employees, setEmployees] = useState<any[]>([]);
     const [selectedEmployeeId, setSelectedEmployeeId] = useState<number | null>(null);
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const fetchStats = async () => {
         setLoading(true);
@@ -45,6 +50,7 @@ export default function MonthlyReportPage() {
         return `${h}h ${m}m`;
     };
 
+    if (!mounted) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
     if (loading && !stats) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
     const { totals, averages, averagesByRole, ranking } = stats || {};
