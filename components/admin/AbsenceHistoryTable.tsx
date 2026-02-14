@@ -1,12 +1,13 @@
-'use client';
-
 import React, { useState } from 'react';
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/Table";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FileText, AlertTriangle } from 'lucide-react';
+import { FileText, CheckCircle, XCircle } from 'lucide-react';
+import { Button } from "@/components/ui/Button";
+import { toast } from "sonner";
+import { useRouter } from 'next/navigation';
 
 interface EmployeeSimple {
     id: number;
@@ -31,14 +32,43 @@ interface AbsenceHistoryTableProps {
 }
 
 export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProps) {
+    const router = useRouter();
     const [filterType, setFilterType] = useState<string>('TODOS');
     const [filterState, setFilterState] = useState<string>('TODOS');
+    const [processingId, setProcessingId] = useState<number | null>(null);
 
     const filteredHistory = history.filter(abs => {
         if (filterType !== 'TODOS' && abs.tipo !== filterType) return false;
         if (filterState !== 'TODOS' && abs.estado !== filterState) return false;
         return true;
     });
+
+    const handleUpdateStatus = async (id: number, newStatus: 'APROBADA' | 'DENEGADA') => {
+        setProcessingId(id);
+        try {
+            const res = await fetch(`/api/ausencias/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: newStatus })
+            });
+
+            if (res.ok) {
+                toast.success(`Solicitud ${newStatus.toLowerCase()} correctamente`);
+                router.refresh(); // Refresh data
+                // Ideally trigger a parent refetch, but router.refresh works for server components or if page handles it.
+                // Since this is a client component inside a client view that fetches data, we might need a callback or just rely on state update if we had it.
+                // For now, let's assume the parent view will re-render or we force a reload.
+                window.location.reload();
+            } else {
+                toast.error("Error al actualizar la solicitud");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error de conexión");
+        } finally {
+            setProcessingId(null);
+        }
+    };
 
     const getStatusColor = (estado: string) => {
         switch (estado) {
@@ -60,8 +90,8 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
 
     return (
         <div className="bg-white rounded-lg border shadow-sm">
-            <div className="p-4 border-b flex justify-between items-center">
-                <h3 className="font-bold text-gray-700">Historial Reciente</h3>
+            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                <h3 className="font-bold text-gray-700">Historial y Solicitudes</h3>
                 <div className="flex gap-2">
                     <select
                         className="text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
@@ -94,12 +124,13 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                             <TableHead>Fechas</TableHead>
                             <TableHead>Estado</TableHead>
                             <TableHead>Adjunto</TableHead>
+                            <TableHead className="text-right">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filteredHistory.length === 0 ? (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                                <TableCell colSpan={6} className="text-center py-8 text-gray-500">
                                     No hay registros que coincidan con los filtros.
                                 </TableCell>
                             </TableRow>
@@ -107,7 +138,7 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                             filteredHistory.map(abs => (
                                 <TableRow key={abs.id} className="hover:bg-gray-50">
                                     <TableCell>
-                                        <div className="font-medium">{abs.empleado.nombre} {abs.empleado.apellidos}</div>
+                                        <div className="font-medium text-gray-900">{abs.empleado.nombre} {abs.empleado.apellidos}</div>
                                         <div className="text-xs text-gray-500 uppercase">{abs.empleado.rol}</div>
                                     </TableCell>
                                     <TableCell>
@@ -117,7 +148,7 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                     </TableCell>
                                     <TableCell>
                                         <div className="text-sm text-gray-700">
-                                            {format(new Date(abs.fechaInicio), 'dd MMM yyyy', { locale: es })}
+                                            {format(new Date(abs.fechaInicio), 'dd MMM', { locale: es })}
                                             {abs.fechaInicio !== abs.fechaFin && (
                                                 <> - {format(new Date(abs.fechaFin), 'dd MMM yyyy', { locale: es })}</>
                                             )}
@@ -135,6 +166,31 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                             </a>
                                         ) : (
                                             <span className="text-gray-300">-</span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        {abs.estado === 'PENDIENTE' && (
+                                            <div className="flex justify-end gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    disabled={processingId === abs.id}
+                                                    onClick={() => handleUpdateStatus(abs.id, 'APROBADA')}
+                                                    className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 text-xs"
+                                                    title="Aprobar"
+                                                >
+                                                    {processingId === abs.id ? '...' : <CheckCircle className="w-4 h-4" />}
+                                                </Button>
+                                                <Button
+                                                    size="sm"
+                                                    variant="danger"
+                                                    disabled={processingId === abs.id}
+                                                    onClick={() => handleUpdateStatus(abs.id, 'DENEGADA')}
+                                                    className="h-7 px-2 text-xs"
+                                                    title="Denegar"
+                                                >
+                                                    {processingId === abs.id ? '...' : <XCircle className="w-4 h-4" />}
+                                                </Button>
+                                            </div>
                                         )}
                                     </TableCell>
                                 </TableRow>

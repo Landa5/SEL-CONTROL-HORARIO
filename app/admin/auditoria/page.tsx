@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -115,7 +114,7 @@ export default function AuditoriaPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${log.usuario.rol === 'ADMIN' ? 'bg-purple-100 text-purple-700' :
-                                                        log.usuario.rol === 'OFICINA' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                                                    log.usuario.rol === 'OFICINA' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
                                                     }`}>
                                                     {log.usuario.rol}
                                                 </span>
@@ -130,9 +129,16 @@ export default function AuditoriaPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <pre className="text-[10px] text-gray-500 bg-gray-50 p-2 rounded max-w-[300px] overflow-x-auto border border-gray-100 font-mono">
-                                                    {typeof log.detalles === 'string' && log.detalles.startsWith('{')
-                                                        ? JSON.stringify(JSON.parse(log.detalles), null, 2)
-                                                        : log.detalles}
+                                                    {(() => {
+                                                        try {
+                                                            if (typeof log.detalles === 'string' && log.detalles.startsWith('{')) {
+                                                                return JSON.stringify(JSON.parse(log.detalles), null, 2);
+                                                            }
+                                                            return typeof log.detalles === 'object' ? JSON.stringify(log.detalles, null, 2) : log.detalles;
+                                                        } catch (e) {
+                                                            return log.detalles;
+                                                        }
+                                                    })()}
                                                 </pre>
                                             </td>
                                         </tr>
