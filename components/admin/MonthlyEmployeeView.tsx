@@ -35,7 +35,10 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
     if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin inline mr-2" /> Cargando informe...</div>;
     if (!reportData) return <div className="p-8 text-center text-gray-500">Sin datos disponibles</div>;
 
-    const { employee, summary, shifts } = reportData;
+    const { employee, summary, shifts = [] } = reportData || {};
+
+    // Safety check
+    if (!employee || !summary) return <div className="p-8 text-center text-red-500">Error en el formato del informe.</div>;
 
     const startDate = new Date(year, month - 1, 1);
     const endDate = endOfMonth(startDate);
