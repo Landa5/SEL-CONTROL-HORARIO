@@ -19,7 +19,8 @@ interface Vacation {
     id: number;
     fechaInicio: string;
     fechaFin: string;
-    estado: 'APROBADA' | 'PENDIENTE'; // Added status
+    tipo: string;
+    estado: 'APROBADA' | 'PENDIENTE';
     empleado: {
         id: number;
         nombre: string;
@@ -35,7 +36,7 @@ export default function GlobalVacationsCalendar() {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [vacations, setVacations] = useState<Vacation[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
-    const [holidays, setHolidays] = useState<any[]>([]); // New state
+    const [holidays, setHolidays] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedRole, setSelectedRole] = useState<string>('TODOS');
 
@@ -198,6 +199,22 @@ export default function GlobalVacationsCalendar() {
 
     const roles = Array.from(new Set(employees.map(e => e.rol))).filter(Boolean);
 
+    // Helper for holiday color
+    const getHolidayColor = (ambito: string) => {
+        switch (ambito) {
+            case 'NACIONAL': return 'bg-red-100 text-red-700 font-bold';
+            case 'AUTONOMICO': return 'bg-orange-100 text-orange-700 font-bold';
+            case 'LOCAL': return 'bg-purple-100 text-purple-700 font-bold';
+            default: return 'bg-gray-200 text-gray-700';
+        }
+    };
+
+    const getVacationColor = (v: Vacation) => {
+        if (v.estado === 'PENDIENTE') return 'bg-yellow-400';
+        if (v.tipo === 'BAJA') return 'bg-orange-500';
+        return 'bg-blue-500';
+    };
+
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando calendario...</div>;
 
     const getTitle = () => {
@@ -206,16 +223,6 @@ export default function GlobalVacationsCalendar() {
         if (viewScope === 'SEMESTER') {
             const isSecond = getMonth(currentDate) >= 6;
             return `${isSecond ? '2º' : '1º'} Semestre ${format(currentDate, 'yyyy')}`;
-        }
-    };
-
-    // Helper for holiday color
-    const getHolidayColor = (ambito: string) => {
-        switch (ambito) {
-            case 'NACIONAL': return 'bg-red-100 text-red-700 font-bold';
-            case 'AUTONOMICO': return 'bg-orange-100 text-orange-700 font-bold';
-            case 'LOCAL': return 'bg-purple-100 text-purple-700 font-bold';
-            default: return 'bg-gray-200 text-gray-700';
         }
     };
 
@@ -240,7 +247,6 @@ export default function GlobalVacationsCalendar() {
                         </Button>
                     </div>
 
-                    {/* View Controls */}
                     {/* View Controls */}
                     <div className="flex gap-2 overflow-x-auto pb-2 md:pb-0 hide-scrollbar w-full md:w-auto">
                         <div className="flex bg-gray-100 rounded-lg p-1 text-xs font-medium shrink-0">
@@ -284,10 +290,11 @@ export default function GlobalVacationsCalendar() {
                 </div>
 
                 <div className="flex flex-col md:flex-row items-center gap-4 justify-end">
-                    {/* Leyenda - Hidden on very small screens, scrollable on others */}
+                    {/* Leyenda */}
                     <div className="hidden sm:flex items-center gap-3 mr-4 text-[10px] text-gray-500 flex-wrap justify-end">
-                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div> Aprobadas</div>
-                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-400 rounded"></div> Pendientes</div>
+                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-blue-500 rounded"></div> Vacaciones</div>
+                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-orange-500 rounded"></div> Baja</div>
+                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-yellow-400 rounded"></div> Pendiente</div>
                         <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-100 border border-red-200 rounded"></div> Fest. Nac.</div>
                     </div>
 
@@ -380,8 +387,8 @@ export default function GlobalVacationsCalendar() {
                                         >
                                             {vacation && (
                                                 <div
-                                                    className={`absolute inset-1 rounded-sm shadow-sm ${vacation.estado === 'PENDIENTE' ? 'bg-yellow-400' : 'bg-blue-500/80'} z-10 cursor-help`}
-                                                    title={`${vacation.estado === 'PENDIENTE' ? 'PENDIENTE' : 'APROBADA'} - ${format(new Date(vacation.fechaInicio), 'd MMM')} a ${format(new Date(vacation.fechaFin), 'd MMM')}`}
+                                                    className={`absolute inset-1 rounded-sm shadow-sm ${getVacationColor(vacation)} z-10 cursor-help opacity-90`}
+                                                    title={`${vacation.tipo} (${vacation.estado}) - ${format(new Date(vacation.fechaInicio), 'd MMM')} a ${format(new Date(vacation.fechaFin), 'd MMM')}`}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         // Prevent bubbling

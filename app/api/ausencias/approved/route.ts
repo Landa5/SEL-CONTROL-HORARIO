@@ -5,7 +5,6 @@ export async function GET() {
     try {
         const approvedVacations = await prisma.ausencia.findMany({
             where: {
-                tipo: 'VACACIONES',
                 estado: {
                     in: ['APROBADA', 'PENDIENTE']
                 }
