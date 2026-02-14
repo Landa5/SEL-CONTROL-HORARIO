@@ -721,3 +721,15 @@ model AlquilerPlaza {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
+
+model ConfiguracionAusencias {
+  id Int @id @default(autoincrement())
+  
+  // Reglas de Auto-aprobación
+  habilitarAutoAprobacion Boolean @default(false)
+  autoAprobarDias         Int     @default(1) // Duración máxima en días para auto-aprobar
+  diasAntelacion          Int     @default(7) // Días mínimos de antelación
+  
+  updatedBy Int? // ID del admin que modificó
+  updatedAt DateTime @updatedAt
+}

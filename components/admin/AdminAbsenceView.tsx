@@ -7,8 +7,10 @@ import { User, Calendar, CheckCircle, XCircle, Clock, FileText, ChevronRight, Al
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import GlobalVacationsCalendar from './GlobalVacationsCalendar';
+import AdminAbsenceConfig from './AdminAbsenceConfig';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import { toast } from "sonner";
+import { Settings } from 'lucide-react';
 
 interface Absence {
     id: number;
@@ -18,6 +20,7 @@ interface Absence {
     estado: 'PENDIENTE' | 'APROBADA' | 'DENEGADA';
     observaciones: string | null;
     justificanteUrl: string | null;
+    overlaps?: { empleadoNombre: string; tipo: string }[];
 }
 
 interface Employee {
@@ -37,6 +40,7 @@ export default function AdminAbsenceView() {
     const [loading, setLoading] = useState(true);
     const [showOnlyPending, setShowOnlyPending] = useState(false);
     const [viewMode, setViewMode] = useState<'LIST' | 'CALENDAR'>('LIST');
+    const [isConfigOpen, setIsConfigOpen] = useState(false);
 
     // State for confirmation dialog
     const [confirmationDialog, setConfirmationDialog] = useState<{
@@ -127,6 +131,15 @@ export default function AdminAbsenceView() {
                 </h3>
                 <div className="flex gap-2">
                     <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsConfigOpen(true)}
+                        className="text-gray-500 hover:text-gray-900 border border-gray-200"
+                        title="Configuración de Ausencias"
+                    >
+                        <Settings className="w-4 h-4" />
+                    </Button>
+                    <Button
                         variant={viewMode === 'CALENDAR' ? 'primary' : 'outline'}
                         size="sm"
                         onClick={() => setViewMode(viewMode === 'LIST' ? 'CALENDAR' : 'LIST')}
@@ -147,6 +160,8 @@ export default function AdminAbsenceView() {
                     )}
                 </div>
             </div>
+
+            <AdminAbsenceConfig open={isConfigOpen} onOpenChange={setIsConfigOpen} />
 
             {viewMode === 'CALENDAR' ? (
                 <GlobalVacationsCalendar />
@@ -220,15 +235,26 @@ export default function AdminAbsenceView() {
                                 selectedEmployee.ausencias.map((aus: Absence) => (
                                     <div key={aus.id} className="border rounded-xl p-4 hover:bg-gray-50 transition-colors">
                                         <div className="flex justify-between items-start mb-2">
-                                            <div className="flex items-center gap-2">
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${aus.tipo === 'VACACIONES' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
-                                                    }`}>
-                                                    {aus.tipo}
-                                                </span>
-                                                <span className="text-sm font-bold text-gray-700">
-                                                    {format(new Date(aus.fechaInicio), 'dd MMM yyyy', { locale: es })} - {format(new Date(aus.fechaFin), 'dd MMM yyyy', { locale: es })}
-                                                </span>
+                                            <div className="flex flex-col gap-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${aus.tipo === 'VACACIONES' ? 'bg-purple-100 text-purple-700' : 'bg-orange-100 text-orange-700'
+                                                        }`}>
+                                                        {aus.tipo}
+                                                    </span>
+                                                    <span className="text-sm font-bold text-gray-700">
+                                                        {format(new Date(aus.fechaInicio), 'dd MMM yyyy', { locale: es })} - {format(new Date(aus.fechaFin), 'dd MMM yyyy', { locale: es })}
+                                                    </span>
+                                                </div>
+
+                                                {/* Overlap Warning */}
+                                                {aus.overlaps && aus.overlaps.length > 0 && (
+                                                    <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded border border-amber-200 w-fit" title={`Coincide con: ${aus.overlaps.map(o => o.empleadoNombre).join(', ')}`}>
+                                                        <AlertTriangle className="w-3 h-3 text-amber-600" />
+                                                        <span className="font-semibold">Coincide con {aus.overlaps.length} empleado(s)</span>
+                                                    </div>
+                                                )}
                                             </div>
+
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${aus.estado === 'APROBADA' ? 'bg-green-100 text-green-700' :
                                                 aus.estado === 'DENEGADA' ? 'bg-red-100 text-red-700' :
                                                     'bg-yellow-100 text-yellow-700'

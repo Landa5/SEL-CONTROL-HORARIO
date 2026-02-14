@@ -132,7 +132,20 @@ export default function MonthlyReportPage() {
             )}
 
             {/* INDIVIDUAL VIEW */}
-            {activeTab === 'INDIVIDUAL' && selectedEmployeeId && (
+            {activeTab === 'INDIVIDUAL' && month === 0 && (
+                <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r shadow-sm animate-in fade-in">
+                    <div className="flex">
+                        <div className="ml-3">
+                            <p className="text-sm text-yellow-700">
+                                Por favor, <strong>selecciona un mes específico</strong> para ver el detalle individual del empleado.
+                                <br />La vista anual no está disponible en modo detalle.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'INDIVIDUAL' && selectedEmployeeId && month !== 0 && (
                 <MonthlyEmployeeView
                     employeeId={selectedEmployeeId}
                     year={year}

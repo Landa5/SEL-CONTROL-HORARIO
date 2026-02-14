@@ -74,6 +74,31 @@ export async function GET(request: Request) {
             // Calculate all pending requests count (Vacations + Sick Leave + Permissions)
             const numSolicitudesPendientes = empAusencias.filter(a => a.estado === 'PENDIENTE').length;
 
+            // Enhance absences with overlap info
+            const enrichedAusencias = empAusencias.map(a => {
+                if (a.estado !== 'PENDIENTE') return a;
+
+                const startA = new Date(a.fechaInicio);
+                const endA = new Date(a.fechaFin);
+
+                // Find overlaps with APPROVED absences of OTHER employees
+                const conflicts = ausencias.filter(other => {
+                    if (other.empleadoId === emp.id) return false; // Skip self
+                    if (other.estado !== 'APROBADA') return false; // Only check against approved
+
+                    const startB = new Date(other.fechaInicio);
+                    const endB = new Date(other.fechaFin);
+
+                    // Check overlap: StartA <= EndB && EndA >= StartB
+                    return startA <= endB && endA >= startB;
+                }).map(c => ({
+                    empleadoNombre: c.empleado.nombre,
+                    tipo: c.tipo
+                }));
+
+                return { ...a, overlaps: conflicts };
+            });
+
             return {
                 empleadoId: emp.id,
                 nombre: emp.nombre,
@@ -86,11 +111,10 @@ export async function GET(request: Request) {
                 diasRestantes: (emp.diasVacaciones || 30) + (emp.diasExtras || 0) - diasDisfrutados,
                 diasSolicitados,
                 numSolicitudesPendientes,
-                ausencias: empAusencias,
+                ausencias: enrichedAusencias,
                 compensaciones: emp.compensaciones
             };
         });
-
         return NextResponse.json(stats);
     } catch (error) {
         console.error('Error getting absence stats:', error);
