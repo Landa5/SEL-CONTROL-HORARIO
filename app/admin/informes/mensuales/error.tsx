@@ -23,10 +23,15 @@ export default function Error({
             <h2 className="text-2xl font-black text-gray-900 mb-2">Algo salió mal</h2>
             <p className="text-gray-500 mb-8 max-w-md">
                 Ha ocurrido un error al cargar el informe mensual.
+                Si ves "Minified React error #310", significa que hay una diferencia entre la hora/fecha de tu navegador y la del servidor.
                 <br />
-                <span className="text-xs font-mono bg-gray-100 p-1 rounded mt-2 block overflow-hidden text-ellipsis">
-                    {error.message || 'Error desconocido'}
-                </span>
+                <div className="mt-4 p-4 bg-gray-100 rounded text-left text-xs font-mono overflow-auto max-h-40 border border-gray-200">
+                    <p className="font-bold mb-1">Detalles Técnicos:</p>
+                    <p>{error.message || 'Error desconocido'}</p>
+                    {error.digest && <p className="text-gray-500">Digest: {error.digest}</p>}
+                    <p className="mt-2 text-gray-500">User Agent: {typeof navigator !== 'undefined' ? navigator.userAgent : 'Server'}</p>
+                    <p className="text-gray-500">Time: {new Date().toISOString()}</p>
+                </div>
             </p>
             <div className="flex gap-4">
                 <Button
