@@ -40,9 +40,13 @@ export default function GlobalVacationsCalendar() {
     const [loading, setLoading] = useState(true);
     const [selectedRole, setSelectedRole] = useState<string>('TODOS');
 
-    // New State
+    // View State
     const [viewScope, setViewScope] = useState<ViewScope>('MONTH');
     const [grouping, setGrouping] = useState<Grouping>('DAY');
+
+    // Request Dialog State
+    const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+    const [selectedRequestData, setSelectedRequestData] = useState<{ employeeId: number, employeeName: string, date: Date } | null>(null);
 
     useEffect(() => {
         fetchData();
@@ -67,15 +71,15 @@ export default function GlobalVacationsCalendar() {
 
             if (vacRes.ok) {
                 const data = await vacRes.json();
-                setVacations(data);
+                setVacations(Array.isArray(data) ? data : []);
             }
             if (empRes.ok) {
                 const empData = await empRes.json();
-                setEmployees(empData.filter((e: any) => e.activo));
+                setEmployees(Array.isArray(empData) ? empData.filter((e: any) => e.activo) : []);
             }
             if (holidayRes.ok) {
                 const hData = await holidayRes.json();
-                setHolidays(hData);
+                setHolidays(Array.isArray(hData) ? hData : []);
             }
         } catch (error) {
             console.error("Error loading data:", error);
@@ -85,121 +89,131 @@ export default function GlobalVacationsCalendar() {
     }
 
     const handleNext = () => {
-        if (viewScope === 'MONTH') setCurrentDate(addMonths(currentDate, 1));
-        if (viewScope === 'SEMESTER') setCurrentDate(addMonths(currentDate, 6));
-        if (viewScope === 'YEAR') setCurrentDate(addYears(currentDate, 1));
+        try {
+            if (viewScope === 'MONTH') setCurrentDate(addMonths(currentDate, 1));
+            else if (viewScope === 'SEMESTER') setCurrentDate(addMonths(currentDate, 6));
+            else if (viewScope === 'YEAR') setCurrentDate(addYears(currentDate, 1));
+        } catch (error) { setCurrentDate(new Date()); }
     };
 
     const handlePrev = () => {
-        if (viewScope === 'MONTH') setCurrentDate(subMonths(currentDate, 1));
-        if (viewScope === 'SEMESTER') setCurrentDate(subMonths(currentDate, 6));
-        if (viewScope === 'YEAR') setCurrentDate(subYears(currentDate, 1));
+        try {
+            if (viewScope === 'MONTH') setCurrentDate(subMonths(currentDate, 1));
+            else if (viewScope === 'SEMESTER') setCurrentDate(subMonths(currentDate, 6));
+            else if (viewScope === 'YEAR') setCurrentDate(subYears(currentDate, 1));
+        } catch (error) { setCurrentDate(new Date()); }
     };
 
     const getIntervals = () => {
-        let start: Date, end: Date;
+        try {
+            let start: Date = new Date(), end: Date = new Date();
 
-        if (viewScope === 'MONTH') {
-            start = startOfMonth(currentDate);
-            end = endOfMonth(currentDate);
-            return eachDayOfInterval({ start, end }).map(date => {
-                // Check if holiday
-                const holiday = holidays.find(h => isSameDay(new Date(h.fecha), date));
-                const isWe = isWeekend(date);
+            if (viewScope === 'MONTH') {
+                start = startOfMonth(currentDate);
+                end = endOfMonth(currentDate);
+                if (!isValid(start) || !isValid(end)) return [];
 
-                return {
-                    start: date,
-                    end: endOfDay(date),
-                    label: format(date, 'd'),
-                    subLabel: format(date, 'EEEEE', { locale: es }),
-                    id: date.toISOString(),
-                    isWeekend: isWe,
-                    holiday: holiday
-                };
-            });
-        }
+                return eachDayOfInterval({ start, end }).map(date => {
+                    const holiday = Array.isArray(holidays) ? holidays.find(h => h && h.fecha && isSameDay(new Date(h.fecha), date)) : null;
+                    const isWe = isWeekend(date);
 
-        if (viewScope === 'SEMESTER') {
-            const currentMonth = getMonth(currentDate);
-            const isSecondSemester = currentMonth >= 6;
-            start = new Date(getYear(currentDate), isSecondSemester ? 6 : 0, 1);
-            end = endOfMonth(new Date(getYear(currentDate), isSecondSemester ? 11 : 5, 1));
-        } else { // YEAR
-            start = startOfYear(currentDate);
-            end = endOfYear(currentDate);
-        }
-
-        if (grouping === 'WEEK') {
-            const weeks = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
-            return weeks.map(weekStart => {
-                const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
-                // Check if full week matches a holiday? Unlikely for single day holidays.
-                // Just keep standard styling for weeks.
-                return {
-                    start: weekStart,
-                    end: weekEnd,
-                    label: `S${format(weekStart, 'w')}`,
-                    subLabel: format(weekStart, 'MMM', { locale: es }),
-                    id: weekStart.toISOString(),
-                    isWeekend: false,
-                    holiday: null
-                };
-            });
-        }
-
-        if (grouping === 'FORTNIGHT') {
-            const intervals = [];
-            let cursor = start;
-            while (cursor <= end) {
-                const monthEnd = endOfMonth(cursor);
-                const midMonth = new Date(getYear(cursor), getMonth(cursor), 15);
-
-                // First Fortnight: 1-15
-                if (midMonth >= cursor && midMonth <= end) {
-                    intervals.push({
-                        start: cursor,
-                        end: midMonth,
-                        label: 'Q1',
-                        subLabel: format(cursor, 'MMM', { locale: es }),
-                        id: cursor.toISOString() + '_1',
-                        isWeekend: false,
-                        holiday: null
-                    });
-                }
-
-                // Second Fortnight: 16-End
-                const secondStart = new Date(getYear(cursor), getMonth(cursor), 16);
-                if (secondStart <= end) {
-                    intervals.push({
-                        start: secondStart,
-                        end: monthEnd > end ? end : monthEnd,
-                        label: 'Q2',
-                        subLabel: format(cursor, 'MMM', { locale: es }),
-                        id: secondStart.toISOString() + '_2',
-                        isWeekend: false,
-                        holiday: null
-                    });
-                }
-
-                cursor = addMonths(cursor, 1);
-                cursor = startOfMonth(cursor);
+                    return {
+                        start: date,
+                        end: endOfDay(date),
+                        label: format(date, 'd'),
+                        subLabel: format(date, 'EEEEE', { locale: es }),
+                        id: date.toISOString(),
+                        isWeekend: isWe,
+                        holiday: holiday
+                    };
+                });
             }
-            return intervals;
-        }
 
-        return [];
+            if (viewScope === 'SEMESTER') {
+                const currentMonth = getMonth(currentDate);
+                const isSecondSemester = currentMonth >= 6;
+                start = new Date(getYear(currentDate), isSecondSemester ? 6 : 0, 1);
+                end = endOfMonth(new Date(getYear(currentDate), isSecondSemester ? 11 : 5, 1));
+            } else { // YEAR
+                start = startOfYear(currentDate);
+                end = endOfYear(currentDate);
+            }
+
+            if (!isValid(start) || !isValid(end)) return [];
+
+            if (grouping === 'WEEK') {
+                const weeks = eachWeekOfInterval({ start, end }, { weekStartsOn: 1 });
+                return weeks.map(weekStart => {
+                    const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+                    return {
+                        start: weekStart,
+                        end: weekEnd,
+                        label: `S${format(weekStart, 'w')}`,
+                        subLabel: format(weekStart, 'MMM', { locale: es }),
+                        id: weekStart.toISOString(),
+                        isWeekend: false,
+                        holiday: null
+                    };
+                });
+            }
+
+            if (grouping === 'FORTNIGHT') {
+                const intervals = [];
+                let cursor = start;
+                while (cursor <= end) {
+                    const monthEnd = endOfMonth(cursor);
+                    const midMonth = new Date(getYear(cursor), getMonth(cursor), 15);
+
+                    // First Fortnight: 1-15
+                    if (midMonth >= cursor && midMonth <= end) {
+                        intervals.push({
+                            start: cursor,
+                            end: midMonth,
+                            label: 'Q1',
+                            subLabel: format(cursor, 'MMM', { locale: es }),
+                            id: cursor.toISOString() + '_1',
+                            isWeekend: false,
+                            holiday: null
+                        });
+                    }
+
+                    // Second Fortnight: 16-End
+                    const secondStart = new Date(getYear(cursor), getMonth(cursor), 16);
+                    if (secondStart <= end) {
+                        intervals.push({
+                            start: secondStart,
+                            end: monthEnd > end ? end : monthEnd,
+                            label: 'Q2',
+                            subLabel: format(cursor, 'MMM', { locale: es }),
+                            id: secondStart.toISOString() + '_2',
+                            isWeekend: false,
+                            holiday: null
+                        });
+                    }
+
+                    cursor = addMonths(cursor, 1);
+                    cursor = startOfMonth(cursor);
+                }
+                return intervals;
+            }
+
+            return [];
+        } catch (error) {
+            console.error("Error generating intervals:", error);
+            return [];
+        }
     };
 
     const intervals = getIntervals();
 
     // Filter employees from the master list
-    const filteredEmployees = selectedRole === 'TODOS'
-        ? employees
-        : employees.filter(emp => emp.rol === selectedRole);
+    const filteredEmployees = (employees && Array.isArray(employees))
+        ? (selectedRole === 'TODOS' ? employees : employees.filter(emp => emp.rol === selectedRole))
+        : [];
 
-    const roles = Array.from(new Set(employees.map(e => e.rol))).filter(Boolean);
+    const roles = Array.from(new Set((employees || []).map(e => e.rol))).filter(Boolean);
 
-    // Helper for holiday color
+    // Helpers
     const getHolidayColor = (ambito: string) => {
         switch (ambito) {
             case 'NACIONAL': return 'bg-red-100 text-red-700 font-bold';
@@ -215,8 +229,6 @@ export default function GlobalVacationsCalendar() {
         return 'bg-blue-500';
     };
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Cargando calendario...</div>;
-
     const getTitle = () => {
         if (viewScope === 'MONTH') return format(currentDate, 'MMMM yyyy', { locale: es });
         if (viewScope === 'YEAR') return format(currentDate, 'yyyy', { locale: es });
@@ -226,9 +238,7 @@ export default function GlobalVacationsCalendar() {
         }
     };
 
-    // Request Dialog State
-    const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
-    const [selectedRequestData, setSelectedRequestData] = useState<{ employeeId: number, employeeName: string, date: Date } | null>(null);
+    if (loading) return <div className="p-8 text-center text-gray-500">Cargando calendario...</div>;
 
     return (
         <Card className="shadow-lg border-none overflow-hidden">
@@ -315,7 +325,7 @@ export default function GlobalVacationsCalendar() {
             </div>
 
             <CardContent className="p-0 overflow-x-auto">
-                <div style={{ minWidth: intervals.length * (grouping === 'DAY' ? 30 : 60) + 200 }}>
+                <div style={{ minWidth: (intervals?.length || 0) * (grouping === 'DAY' ? 30 : 60) + 200 }}>
                     {/* Header Row */}
                     <div className="flex border-b bg-gray-50">
                         <div className="w-48 flex-shrink-0 p-3 font-bold text-gray-600 border-r bg-gray-100 sticky left-0 z-20 shadow-sm">
@@ -363,12 +373,15 @@ export default function GlobalVacationsCalendar() {
                                     else if (iv.isWeekend) cellClass += ' bg-gray-50';
 
                                     // Find Matching Vacation
-                                    const vacation = vacations.find(v => {
-                                        if (v.empleado.id !== emp.id) return false;
-                                        const vacStart = parseISO(v.fechaInicio as any); // Type assertion if string
-                                        const vacEnd = parseISO(v.fechaFin as any);
-                                        return (vacStart <= iv.end) && (vacEnd >= iv.start);
-                                    });
+                                    const vacation = Array.isArray(vacations) ? vacations.find(v => {
+                                        if (!v.empleado || v.empleado.id !== emp.id) return false;
+                                        if (!v.fechaInicio || !v.fechaFin) return false;
+                                        try {
+                                            const vacStart = parseISO(v.fechaInicio as any);
+                                            const vacEnd = parseISO(v.fechaFin as any);
+                                            return (vacStart <= iv.end) && (vacEnd >= iv.start);
+                                        } catch (e) { return false; }
+                                    }) : null;
 
                                     return (
                                         <div
@@ -391,7 +404,6 @@ export default function GlobalVacationsCalendar() {
                                                     title={`${vacation.tipo} (${vacation.estado}) - ${format(new Date(vacation.fechaInicio), 'd MMM')} a ${format(new Date(vacation.fechaFin), 'd MMM')}`}
                                                     onClick={(e) => {
                                                         e.stopPropagation();
-                                                        // Prevent bubbling
                                                     }}
                                                 ></div>
                                             )}
