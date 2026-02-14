@@ -61,12 +61,20 @@ export default function MonthlyReportPage() {
             const res = await fetch('/api/empleados');
             if (res.ok) {
                 const data = await res.json();
-                setEmployees(data.filter((e: any) => e.activo));
-                if (data.length > 0 && !selectedEmployeeId) {
-                    setSelectedEmployeeId(data[0].id);
+                if (Array.isArray(data)) {
+                    setEmployees(data.filter((e: any) => e.activo));
+                    if (data.length > 0 && !selectedEmployeeId) {
+                        setSelectedEmployeeId(data[0].id);
+                    }
+                } else {
+                    console.error("API /api/empleados did not return an array", data);
+                    setEmployees([]);
                 }
             }
-        } catch (error) { console.error("Error fetching employees", error); }
+        } catch (error) {
+            console.error("Error fetching employees", error);
+            setEmployees([]);
+        }
     };
 
     useEffect(() => {
