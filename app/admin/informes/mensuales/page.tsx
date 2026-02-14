@@ -92,7 +92,7 @@ function MonthlyReportContent() {
     }, [activeTab]);
 
     return (
-        <div className="space-y-8 pb-12">
+        <div className="space-y-8 pb-12" suppressHydrationWarning>
             <div className="flex justify-between items-center bg-white p-6 rounded-xl border shadow-sm">
                 <div>
                     <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Informe Mensual</h1>

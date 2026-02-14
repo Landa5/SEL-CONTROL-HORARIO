@@ -71,7 +71,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                 <div>
                     <h2 className="text-2xl font-black text-gray-900">{employee.nombre}</h2>
                     <p className="text-gray-500 font-bold">{employee.rol}</p>
-                    <div className="flex gap-4 mt-2 text-sm">
+                    <div className="flex gap-4 mt-2 text-sm" suppressHydrationWarning>
                         <div className="bg-blue-50 text-blue-800 px-2 py-1 rounded">
                             <span className="font-bold">Horario Mañana: </span>
                             {employee.horaEntradaPrevista || '--:--'} - {employee.horaSalidaPrevista || '--:--'}
