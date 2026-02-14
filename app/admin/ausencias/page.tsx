@@ -1,6 +1,8 @@
 'use client';
 
+import React, { Suspense } from 'react';
 import AdminAbsenceView from "@/components/admin/AdminAbsenceView";
+import { Loader2 } from 'lucide-react';
 import { Calendar } from "lucide-react";
 
 export default function AdminAbsencePage() {
@@ -16,7 +18,13 @@ export default function AdminAbsencePage() {
                 </div>
             </header>
 
-            <AdminAbsenceView />
+            <Suspense fallback={
+                <div className="flex h-[50vh] items-center justify-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                </div>
+            }>
+                <AdminAbsenceView />
+            </Suspense>
         </div>
     );
 }
