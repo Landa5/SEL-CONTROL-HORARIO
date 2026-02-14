@@ -32,7 +32,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
         fetchData();
     }, [employeeId, year, month]);
 
-    if (loading) return <div className="p-8 text-center"><Loader2 className="animate-spin inline mr-2" /> Cargando informe...</div>;
+    if (loading) return <div className="p-8 text-center flex justify-center items-center"><Loader2 className="animate-spin inline mr-2" /> Cargando informe...</div>;
     if (!reportData) return <div className="p-8 text-center text-gray-500">Sin datos disponibles</div>;
 
     const { employee, summary, shifts = [] } = reportData || {};
@@ -71,7 +71,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                 <div>
                     <h2 className="text-2xl font-black text-gray-900">{employee.nombre}</h2>
                     <p className="text-gray-500 font-bold">{employee.rol}</p>
-                    <div className="flex gap-4 mt-2 text-sm" suppressHydrationWarning>
+                    <div className="flex gap-4 mt-2 text-sm">
                         <div className="bg-blue-50 text-blue-800 px-2 py-1 rounded">
                             <span className="font-bold">Horario Mañana: </span>
                             {employee.horaEntradaPrevista || '--:--'} - {employee.horaSalidaPrevista || '--:--'}
@@ -188,7 +188,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                 </div>
             </Card>
 
-            {/* TABLE VIEW (Optional if Calendar is enough, but good for details) */}
+            {/* TABLE VIEW */}
             <div className="mt-8">
                 <h3 className="text-sm font-bold text-gray-400 uppercase mb-3">Detalle de Registros</h3>
                 <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
