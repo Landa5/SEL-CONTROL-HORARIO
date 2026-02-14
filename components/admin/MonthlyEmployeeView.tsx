@@ -195,7 +195,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                         </thead>
                         <tbody>
                             {shifts.map((s: any) => (
-                                <tr key={s.id} className="border-b last:border-0 hover:bg-gray-50">
+                                <tr key={s.date} className="border-b last:border-0 hover:bg-gray-50">
                                     <td className="p-3 font-mono text-gray-600">{s.date}</td>
                                     <td className="p-3 font-mono">{s.start}</td>
                                     <td className="p-3 font-mono">{s.end}</td>
