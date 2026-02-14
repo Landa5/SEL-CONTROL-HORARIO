@@ -62,7 +62,6 @@ export async function POST(request: Request) {
         }
 
         // 1. Check Blocked Periods
-        // @ts-ignore
         const blockedPeriods = await prisma.periodoBloqueado.findMany({
             where: { activo: true }
         });
@@ -132,7 +131,6 @@ export async function POST(request: Request) {
                 observaciones: observaciones || null,
                 justificanteUrl,
                 empleadoId: Number(session.id),
-                // @ts-ignore
                 horas: horas > 0 ? horas : null,
                 estado
             }
