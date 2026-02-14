@@ -45,7 +45,14 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
     const daysInMonth = eachDayOfInterval({ start: startDate, end: endDate });
 
     const getShiftForDay = (date: any) => {
-        return shifts.find((s: any) => isSameDay(parseISO(s.date), date));
+        return shifts.find((s: any) => {
+            if (!s.date) return false;
+            try {
+                return isSameDay(parseISO(s.date), date);
+            } catch (e) {
+                return false;
+            }
+        });
     };
 
     // Helper: Get color based on punctuality average
@@ -144,7 +151,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
 
                         return (
                             <div
-                                key={date.toISOString()}
+                                key={date ? date.toISOString() : Math.random()}
                                 className={`h-24 p-2 rounded border border-gray-100 transition-all hover:shadow-md relative group ${bgColor}`}
                             >
                                 <span className={`text-xs font-bold ${isWeekend ? 'text-gray-400' : 'text-gray-600'}`}>
