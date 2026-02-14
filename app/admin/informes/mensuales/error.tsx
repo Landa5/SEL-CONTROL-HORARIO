@@ -21,7 +21,7 @@ export default function Error({
                 <AlertTriangle className="h-12 w-12 text-red-600" />
             </div>
             <h2 className="text-2xl font-black text-gray-900 mb-2">Algo salió mal</h2>
-            <p className="text-gray-500 mb-8 max-w-md">
+            <div className="text-gray-500 mb-8 max-w-md">
                 Ha ocurrido un error al cargar el informe mensual.
                 Si ves "Minified React error #310", significa que hay una diferencia entre la hora/fecha de tu navegador y la del servidor.
                 <br />
@@ -32,7 +32,7 @@ export default function Error({
                     <p className="mt-2 text-gray-500">User Agent: {typeof navigator !== 'undefined' ? navigator.userAgent : 'Server'}</p>
                     <p className="text-gray-500">Time: {new Date().toISOString()}</p>
                 </div>
-            </p>
+            </div>
             <div className="flex gap-4">
                 <Button
                     onClick={() => window.location.reload()}

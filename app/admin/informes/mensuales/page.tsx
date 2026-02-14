@@ -11,8 +11,9 @@ import MonthlyEmployeeView from '@/components/admin/MonthlyEmployeeView';
 export default function MonthlyReportPage() {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
-    const [year, setYear] = useState(new Date().getFullYear());
-    const [month, setMonth] = useState(new Date().getMonth() + 1);
+    // Initialize with safe defaults to prevent hydration mismatch
+    const [year, setYear] = useState<number>(0);
+    const [month, setMonth] = useState<number>(0);
 
     // New State for Individual View
     const [activeTab, setActiveTab] = useState<'GLOBAL' | 'INDIVIDUAL'>('GLOBAL');
@@ -22,6 +23,10 @@ export default function MonthlyReportPage() {
 
     useEffect(() => {
         setMounted(true);
+        // Set dates only on client side
+        const now = new Date();
+        setYear(now.getFullYear());
+        setMonth(now.getMonth() + 1);
     }, []);
 
     const fetchStats = async () => {
@@ -40,7 +45,10 @@ export default function MonthlyReportPage() {
     };
 
     useEffect(() => {
-        fetchStats();
+        // Only fetch if dates are initialized
+        if (year !== 0 && month !== 0) {
+            fetchStats();
+        }
     }, [year, month]);
 
     const formatDuration = (hoursDecimal: number) => {
