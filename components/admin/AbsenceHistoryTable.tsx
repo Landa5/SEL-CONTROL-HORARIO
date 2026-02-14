@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/Table";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FileText, CheckCircle, XCircle } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Trash2 } from 'lucide-react';
 import { Button } from "@/components/ui/Button";
 import { toast } from "sonner";
 import { useRouter } from 'next/navigation';
@@ -61,6 +61,29 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                 window.location.reload();
             } else {
                 toast.error("Error al actualizar la solicitud");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error de conexión");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const handleDelete = async (id: number) => {
+        if (!confirm('¿Estás seguro de que quieres eliminar esta ausencia permanentemente?')) return;
+
+        setProcessingId(id);
+        try {
+            const res = await fetch(`/api/ausencias/${id}`, {
+                method: 'DELETE'
+            });
+
+            if (res.ok) {
+                toast.success("Ausencia eliminada");
+                window.location.reload();
+            } else {
+                toast.error("Error al eliminar");
             }
         } catch (error) {
             console.error(error);
@@ -192,6 +215,18 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                                 </Button>
                                             </div>
                                         )}
+                                        <div className="flex justify-end mt-1">
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                disabled={processingId === abs.id}
+                                                onClick={() => handleDelete(abs.id)}
+                                                className="text-gray-400 hover:text-red-600 h-7 px-2"
+                                                title="Eliminar permanentemente"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
                                     </TableCell>
                                 </TableRow>
                             ))

@@ -120,7 +120,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 { href: '/admin/informes/mensuales', label: 'Informes Mensuales', icon: BarChart2 },
                 { href: '/admin/informes/gestoria', label: 'Exportaciones Gestoría', icon: Download },
                 { href: '/admin/informes/legal', label: 'Registro Jornada Legal', icon: FileCheck },
-                { href: '/admin/construccion?modulo=Auditoría Interna', label: 'Auditoría Interna', icon: ShieldCheck },
+                { href: '/admin/auditoria', label: 'Auditoría Interna', icon: ShieldCheck },
             ]
         },
         {

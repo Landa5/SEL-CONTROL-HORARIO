@@ -51,3 +51,47 @@ export async function PATCH(
         return NextResponse.json({ error: 'Error al actualizar' }, { status: 500 });
     }
 }
+
+export async function DELETE(
+    request: Request,
+    { params }: { params: any }
+) {
+    try {
+        const session = await getSession();
+        if (!session || (session.rol !== 'ADMIN' && session.rol !== 'OFICINA')) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
+        const { id } = await params;
+
+        const ausencia = await prisma.ausencia.findUnique({
+            where: { id: parseInt(id) },
+            include: { empleado: true }
+        });
+
+        if (!ausencia) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
+
+        await prisma.ausencia.delete({
+            where: { id: parseInt(id) }
+        });
+
+        // AUDITORÍA
+        await registrarAuditoria(
+            Number(session.id),
+            'ELIMINAR_AUSENCIA',
+            'Ausencia',
+            parseInt(id),
+            {
+                empleado: ausencia.empleado.nombre,
+                tipo: ausencia.tipo,
+                fechas: `${ausencia.fechaInicio} - ${ausencia.fechaFin}`,
+                estado: ausencia.estado
+            }
+        );
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error(error);
+        return NextResponse.json({ error: 'Error al eliminar' }, { status: 500 });
+    }
+}
