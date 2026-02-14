@@ -4,7 +4,7 @@ import {
 } from "@/components/ui/Table";
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { FileText, CheckCircle, XCircle, Trash2 } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Trash2, Calendar } from 'lucide-react';
 import { Button } from "@/components/ui/Button";
 import { toast } from "sonner";
 import { useRouter } from 'next/navigation';
@@ -194,6 +194,15 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                     <TableCell className="text-right">
                                         {abs.estado === 'PENDIENTE' && (
                                             <div className="flex justify-end gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="outline"
+                                                    onClick={() => router.push(`/admin/ausencias?view=CALENDAR&date=${abs.fechaInicio}`)}
+                                                    className="h-7 px-2 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                                                    title="Ver en Calendario Global"
+                                                >
+                                                    <Calendar className="w-3 h-3" />
+                                                </Button>
                                                 <Button
                                                     size="sm"
                                                     disabled={processingId === abs.id}

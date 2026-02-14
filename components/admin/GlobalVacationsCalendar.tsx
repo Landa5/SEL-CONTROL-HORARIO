@@ -32,8 +32,8 @@ interface Vacation {
 type ViewScope = 'MONTH' | 'SEMESTER' | 'YEAR';
 type Grouping = 'DAY' | 'WEEK' | 'FORTNIGHT';
 
-export default function GlobalVacationsCalendar() {
-    const [currentDate, setCurrentDate] = useState(new Date());
+export default function GlobalVacationsCalendar({ initialDate }: { initialDate?: Date }) {
+    const [currentDate, setCurrentDate] = useState(initialDate || new Date());
     const [vacations, setVacations] = useState<Vacation[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
     const [holidays, setHolidays] = useState<any[]>([]);
@@ -47,6 +47,10 @@ export default function GlobalVacationsCalendar() {
     // Request Dialog State
     const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
     const [selectedRequestData, setSelectedRequestData] = useState<{ employeeId: number, employeeName: string, date: Date } | null>(null);
+
+    useEffect(() => {
+        if (initialDate) setCurrentDate(initialDate);
+    }, [initialDate]);
 
     useEffect(() => {
         fetchData();

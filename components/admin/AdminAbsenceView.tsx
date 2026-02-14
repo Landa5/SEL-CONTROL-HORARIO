@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { User, Calendar, Settings, LayoutDashboard, History } from 'lucide-react';
+import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import GlobalVacationsCalendar from './GlobalVacationsCalendar';
 import AdminAbsenceConfig from './AdminAbsenceConfig';
 import TodayOverview from './TodayOverview';
@@ -26,11 +27,33 @@ export default function AdminAbsenceView() {
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<'DASHBOARD' | 'CALENDAR' | 'EMPLOYEES'>('DASHBOARD');
+    const [calendarDate, setCalendarDate] = useState<Date | undefined>(undefined);
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    const pathname = usePathname();
     const [isConfigOpen, setIsConfigOpen] = useState(false);
 
     useEffect(() => {
         fetchAllData();
-    }, []);
+
+        const view = searchParams.get('view');
+        const date = searchParams.get('date');
+
+        if (view === 'CALENDAR') {
+            setViewMode('CALENDAR');
+            if (date) {
+                setCalendarDate(new Date(date));
+            }
+        }
+    }, [searchParams]);
+
+    // Update URL when view changes manually
+    const handleViewChange = (mode: 'DASHBOARD' | 'CALENDAR' | 'EMPLOYEES') => {
+        setViewMode(mode);
+        // Optional: Update URL to reflect state, or keep it simple.
+        // For now, let's clear params when switching manually to avoid getting stuck
+        if (mode === 'DASHBOARD') router.push(pathname);
+    };
 
     async function fetchAllData() {
         setLoading(true);
@@ -71,7 +94,7 @@ export default function AdminAbsenceView() {
                     <Button
                         variant={viewMode === 'DASHBOARD' ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => setViewMode('DASHBOARD')}
+                        onClick={() => handleViewChange('DASHBOARD')}
                         className="flex items-center gap-2"
                     >
                         <LayoutDashboard className="w-4 h-4" /> Dashboard Hoy
@@ -79,7 +102,7 @@ export default function AdminAbsenceView() {
                     <Button
                         variant={viewMode === 'CALENDAR' ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => setViewMode('CALENDAR')}
+                        onClick={() => handleViewChange('CALENDAR')}
                         className="flex items-center gap-2"
                     >
                         <Calendar className="w-4 h-4" /> Calendario Global
@@ -87,7 +110,7 @@ export default function AdminAbsenceView() {
                     <Button
                         variant={viewMode === 'EMPLOYEES' ? 'primary' : 'outline'}
                         size="sm"
-                        onClick={() => setViewMode('EMPLOYEES')}
+                        onClick={() => handleViewChange('EMPLOYEES')}
                         className="flex items-center gap-2"
                     >
                         <User className="w-4 h-4" /> Saldos Vacaciones
@@ -116,7 +139,7 @@ export default function AdminAbsenceView() {
 
             {viewMode === 'CALENDAR' && (
                 <div className="animate-in fade-in duration-500">
-                    <GlobalVacationsCalendar />
+                    <GlobalVacationsCalendar initialDate={calendarDate} />
                 </div>
             )}
 
