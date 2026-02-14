@@ -130,20 +130,25 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                     {daysInMonth.map((date: Date) => {
                         const shift = getShiftForDay(date);
                         const isWeekend = getDay(date) === 0 || getDay(date) === 6;
+                        const isHoliday = shift?.dayType === 'HOLIDAY';
+                        const isAbsence = ['VACACIONES', 'BAJA', 'PERMISO', 'AUSENCIA'].includes(shift?.dayType || '');
+
+                        let bgColor = 'bg-white';
+                        if (isWeekend) bgColor = 'bg-gray-50/50';
+                        if (isHoliday) bgColor = 'bg-red-50';
+                        if (isAbsence) bgColor = 'bg-green-50';
+                        if (shift?.workedMinutes > 0) bgColor = 'bg-white ring-1 ring-blue-100';
 
                         return (
                             <div
                                 key={date.toISOString()}
-                                className={`h-24 p-2 rounded border border-gray-100 transition-all hover:shadow-md relative group
-                                    ${isWeekend && !shift ? 'bg-gray-50/50' : 'bg-white'}
-                                    ${shift ? 'ring-1 ring-blue-100' : ''}
-                                `}
+                                className={`h-24 p-2 rounded border border-gray-100 transition-all hover:shadow-md relative group ${bgColor}`}
                             >
                                 <span className={`text-xs font-bold ${isWeekend ? 'text-gray-400' : 'text-gray-600'}`}>
                                     {format(date, 'd')}
                                 </span>
 
-                                {shift ? (
+                                {shift?.workedMinutes > 0 ? (
                                     <div className="mt-1 space-y-1">
                                         <div className="flex justify-between items-center bg-blue-50 px-1 py-0.5 rounded">
                                             <span className="text-[10px] font-mono text-blue-700">{shift.start}</span>
@@ -159,8 +164,12 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                                         </div>
                                     </div>
                                 ) : (
-                                    <div className="flex h-full items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <span className="text-[9px] text-gray-300 font-bold uppercase">Libre</span>
+                                    <div className="flex h-full items-center justify-center">
+                                        {isHoliday && <span className="text-[10px] text-red-500 font-bold uppercase transform -rotate-45 whitespace-nowrap">FESTIVO</span>}
+                                        {isAbsence && <span className="text-[10px] text-green-600 font-bold uppercase text-center transform -rotate-45 whitespace-nowrap">{shift.dayType}</span>}
+                                        {!isHoliday && !isAbsence && !isWeekend && (
+                                            <span className="text-[9px] text-gray-300 font-bold uppercase opacity-0 group-hover:opacity-100 transition-opacity">Libre</span>
+                                        )}
                                     </div>
                                 )}
                             </div>

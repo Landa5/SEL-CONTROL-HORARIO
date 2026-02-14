@@ -48,6 +48,7 @@ export async function POST(request: Request) {
         const fechaFinStr = formData.get('fechaFin') as string;
         const observaciones = formData.get('observaciones') as string;
         const file = formData.get('justificante') as File | null;
+        const horas = parseFloat(formData.get('horas') as string) || 0;
 
         if (!tipo || !fechaInicioStr || !fechaFinStr) {
             return NextResponse.json({ error: 'Faltan campos obligatorios' }, { status: 400 });
@@ -60,7 +61,30 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'Fechas inválidas' }, { status: 400 });
         }
 
+        // 1. Check Blocked Periods
+        const blockedPeriods = await prisma.periodoBloqueado.findMany({
+            where: { activo: true }
+        });
+
+        for (const block of blockedPeriods) {
+            // Check overlap
+            if (fechaInicio <= block.fechaFin && fechaFin >= block.fechaInicio) {
+                // Allow admin override? Maybe later. For now, strict block.
+                if (session.rol !== 'ADMIN') {
+                    return NextResponse.json({
+                        error: `Periodo bloqueado por: ${block.motivo} (${block.fechaInicio.toLocaleDateString()} - ${block.fechaFin.toLocaleDateString()})`
+                    }, { status: 400 });
+                }
+            }
+        }
+
+        // Validation for BAJA
+        if (tipo === 'BAJA' && (!file || file.size === 0)) {
+            return NextResponse.json({ error: 'Es obligatorio adjuntar un justificante para bajas médicas.' }, { status: 400 });
+        }
+
         let justificanteUrl = null;
+
 
         if (file && file.size > 0) {
             try {
@@ -86,6 +110,7 @@ export async function POST(request: Request) {
                 observaciones: observaciones || null,
                 justificanteUrl,
                 empleadoId: Number(session.id),
+                horas: horas > 0 ? horas : null,
                 estado: tipo === 'VACACIONES' ? 'PENDIENTE' : 'APROBADA'
             }
         });

@@ -12,6 +12,8 @@ import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Filter, Calendar as CalendarIcon, Grid, List } from 'lucide-react';
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
+import AbsenceForm from '@/components/ausencias/AbsenceForm';
 
 interface Vacation {
     id: number;
@@ -217,6 +219,10 @@ export default function GlobalVacationsCalendar() {
         }
     };
 
+    // Request Dialog State
+    const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
+    const [selectedRequestData, setSelectedRequestData] = useState<{ employeeId: number, employeeName: string, date: Date } | null>(null);
+
     return (
         <Card className="shadow-lg border-none overflow-hidden">
             <div className="bg-white p-4 border-b space-y-4">
@@ -358,11 +364,28 @@ export default function GlobalVacationsCalendar() {
                                     });
 
                                     return (
-                                        <div key={iv.id} className={cellClass}>
+                                        <div
+                                            key={iv.id}
+                                            className={`${cellClass} ${!vacation ? 'cursor-pointer hover:bg-blue-50' : ''} transition-colors`}
+                                            onClick={() => {
+                                                if (!vacation) {
+                                                    setSelectedRequestData({
+                                                        employeeId: emp.id,
+                                                        employeeName: `${emp.nombre} ${emp.apellidos || ''}`,
+                                                        date: iv.start
+                                                    });
+                                                    setIsRequestDialogOpen(true);
+                                                }
+                                            }}
+                                        >
                                             {vacation && (
                                                 <div
-                                                    className={`absolute inset-1 rounded-sm shadow-sm ${vacation.estado === 'PENDIENTE' ? 'bg-yellow-400' : 'bg-blue-500/80'}`}
-                                                    title={`${vacation.estado} - ${format(new Date(vacation.fechaInicio), 'd MMM')} a ${format(new Date(vacation.fechaFin), 'd MMM')}`}
+                                                    className={`absolute inset-1 rounded-sm shadow-sm ${vacation.estado === 'PENDIENTE' ? 'bg-yellow-400' : 'bg-blue-500/80'} z-10 cursor-help`}
+                                                    title={`${vacation.estado === 'PENDIENTE' ? 'PENDIENTE' : 'APROBADA'} - ${format(new Date(vacation.fechaInicio), 'd MMM')} a ${format(new Date(vacation.fechaFin), 'd MMM')}`}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        // Prevent bubbling
+                                                    }}
                                                 ></div>
                                             )}
                                         </div>
@@ -373,6 +396,25 @@ export default function GlobalVacationsCalendar() {
                     )}
                 </div>
             </CardContent>
-        </Card>
+
+            <Dialog open={isRequestDialogOpen} onOpenChange={setIsRequestDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Crear Solicitud para {selectedRequestData?.employeeName}</DialogTitle>
+                    </DialogHeader>
+                    {selectedRequestData && (
+                        <AbsenceForm
+                            employeeId={selectedRequestData.employeeId}
+                            defaultDate={selectedRequestData.date}
+                            onSuccess={() => {
+                                setIsRequestDialogOpen(false);
+                                fetchData();
+                            }}
+                            onCancel={() => setIsRequestDialogOpen(false)}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+        </Card >
     );
 }

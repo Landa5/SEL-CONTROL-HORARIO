@@ -2,19 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import AbsenceForm from '@/components/ausencias/AbsenceForm';
 
 export default function EmployeeAbsenceView() {
-    const [activeTab, setActiveTab] = useState<'VACACIONES' | 'BAJA'>('VACACIONES');
     const [ausencias, setAusencias] = useState<any[]>([]);
-    const [loading, setLoading] = useState(false);
-
-    // Form States
-    const [fechaInicio, setFechaInicio] = useState("");
-    const [fechaFin, setFechaFin] = useState("");
-    const [observaciones, setObservaciones] = useState("");
-    const [file, setFile] = useState<File | null>(null);
 
     useEffect(() => {
         fetchAusencias();
@@ -32,41 +23,6 @@ export default function EmployeeAbsenceView() {
         }
     }
 
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
-        setLoading(true);
-
-        try {
-            const formData = new FormData();
-            formData.append('tipo', activeTab);
-            formData.append('fechaInicio', fechaInicio);
-            if (fechaFin) formData.append('fechaFin', fechaFin);
-            if (observaciones) formData.append('observaciones', observaciones);
-            if (file) formData.append('justificante', file);
-
-            const res = await fetch('/api/ausencias', {
-                method: 'POST',
-                body: formData
-            });
-
-            if (res.ok) {
-                // Reset form
-                setFechaInicio("");
-                setFechaFin("");
-                setObservaciones("");
-                setFile(null);
-                fetchAusencias();
-            } else {
-                alert("Error al enviar solicitud");
-            }
-        } catch (error) {
-            console.error(error);
-            alert("Error de conexión");
-        } finally {
-            setLoading(false);
-        }
-    }
-
     const getStatusColor = (ausencia: any) => {
         const isPast = new Date(ausencia.fechaFin) < new Date();
         if (ausencia.estado === 'PENDIENTE') return 'text-green-600 font-bold';
@@ -79,54 +35,10 @@ export default function EmployeeAbsenceView() {
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-                        <button
-                            className={`px-4 py-2 font-bold w-full sm:w-auto ${activeTab === 'VACACIONES' ? 'border-b-2 border-blue-500 bg-blue-50 sm:bg-transparent' : ''}`}
-                            onClick={() => setActiveTab('VACACIONES')}
-                        >
-                            Solicitar Vacaciones
-                        </button>
-                        <button
-                            className={`px-4 py-2 font-bold w-full sm:w-auto ${activeTab === 'BAJA' ? 'border-b-2 border-blue-500 bg-blue-50 sm:bg-transparent' : ''}`}
-                            onClick={() => setActiveTab('BAJA')}
-                        >
-                            Notificar Baja / Ausencia
-                        </button>
-                    </div>
+                    <CardTitle>Nueva Solicitud</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Fecha Inicio</label>
-                                <Input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)} required />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Fecha Fin</label>
-                                <Input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} required />
-                            </div>
-                        </div>
-
-                        {activeTab === 'VACACIONES' ? (
-                            <div>
-                                <label className="block text-sm font-medium mb-1">Observaciones (Opcional)</label>
-                                <Input value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Motivo o comentarios..." />
-                            </div>
-                        ) : (
-                            <div>
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium mb-1">Observaciones / Motivo</label>
-                                    <Input value={observaciones} onChange={e => setObservaciones(e.target.value)} placeholder="Explica el motivo..." />
-                                </div>
-                                <label className="block text-sm font-medium mb-1">Justificante Médico (PDF/Imagen)</label>
-                                <Input type="file" onChange={e => setFile(e.target.files?.[0] || null)} accept=".pdf,image/*" />
-                            </div>
-                        )}
-
-                        <Button type="submit" disabled={loading}>
-                            {loading ? 'Enviando...' : (activeTab === 'VACACIONES' ? 'Solicitar Vacaciones' : 'Registrar Baja')}
-                        </Button>
-                    </form>
+                    <AbsenceForm onSuccess={fetchAusencias} />
                 </CardContent>
             </Card>
 

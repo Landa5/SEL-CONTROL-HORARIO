@@ -49,7 +49,7 @@ export async function GET(request: Request) {
         const stats = empleados.map(emp => {
             const empAusencias = ausencias.filter(a => a.empleadoId === emp.id);
 
-            // Calculate used vacation days (only APPROVED)
+            // Calculate used vacation days (only APPROVED VACATIONS)
             const diasDisfrutados = empAusencias
                 .filter(a => a.tipo === 'VACACIONES' && a.estado === 'APROBADA')
                 .reduce((acc, a) => {

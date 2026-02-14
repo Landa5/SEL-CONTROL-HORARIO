@@ -183,6 +183,18 @@ model Ausencia {
   fechaResolucion DateTime?
 
   justificanteUrl String?
+  horas           Float? @default(0) // 0 or null = Full day
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PeriodoBloqueado {
+  id          Int      @id @default(autoincrement())
+  fechaInicio DateTime
+  fechaFin    DateTime
+  motivo      String
+  activo      Boolean  @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
