@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Loader2 } from 'lucide-react';
@@ -8,7 +8,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import MonthlyEmployeeView from '@/components/admin/MonthlyEmployeeView';
 
-export default function MonthlyReportPage() {
+function MonthlyReportContent() {
     const [stats, setStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     // Initialize with safe defaults to prevent hydration mismatch
@@ -153,7 +153,6 @@ export default function MonthlyReportPage() {
                 </div>
             )}
 
-            {/* INDIVIDUAL VIEW */}
             {activeTab === 'INDIVIDUAL' && month === 0 && (
                 <div className="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r shadow-sm animate-in fade-in">
                     <div className="flex">
@@ -303,5 +302,13 @@ export default function MonthlyReportPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+export default function MonthlyReportPage() {
+    return (
+        <Suspense fallback={<div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>}>
+            <MonthlyReportContent />
+        </Suspense>
     );
 }
