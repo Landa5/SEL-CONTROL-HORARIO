@@ -47,6 +47,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const pathname = usePathname();
     const [session, setSession] = useState<Session | null>(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [currentDate, setCurrentDate] = useState<string>('');
+
+    useEffect(() => {
+        setCurrentDate(format(new Date(), "EEEE, d 'de' MMMM", { locale: es }));
+    }, []);
 
     // State for collapsible groups
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
@@ -223,7 +228,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                         <div className="text-right hidden sm:block mr-4 pr-4 border-r">
                             <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Hoy</p>
                             <p className="text-sm font-bold text-gray-700 capitalize">
-                                {format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}
+                                {currentDate}
                             </p>
                         </div>
                         <Button

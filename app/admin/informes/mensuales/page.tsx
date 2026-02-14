@@ -50,7 +50,7 @@ export default function MonthlyReportPage() {
         return `${h}h ${m}m`;
     };
 
-    if (!mounted) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
+    if (!mounted) return null;
     if (loading && !stats) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
 
     const { totals, averages, averagesByRole, ranking } = stats || {};
