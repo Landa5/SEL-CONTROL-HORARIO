@@ -91,8 +91,8 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                     <div className="absolute top-0 right-0 p-2 opacity-10"><Clock className="w-12 h-12 text-blue-500" /></div>
                     <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-gray-400 uppercase">Horas Trabajadas</CardTitle></CardHeader>
                     <CardContent>
-                        <div className="text-3xl font-black text-gray-800">{summary.totalHours.toFixed(1)}h</div>
-                        <p className="text-xs text-blue-500 mt-1">de {summary.expectedHours.toFixed(1)}h esperadas</p>
+                        <div className="text-3xl font-black text-gray-800">{(summary.totalHours || 0).toFixed(1)}h</div>
+                        <p className="text-xs text-blue-500 mt-1">de {(summary.expectedHours || 0).toFixed(1)}h esperadas</p>
                     </CardContent>
                 </Card>
 
@@ -101,7 +101,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                     <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-gray-400 uppercase">Horas Extra</CardTitle></CardHeader>
                     <CardContent>
                         <div className="text-3xl font-black text-orange-600">
-                            {summary.totalOvertime > 0 ? `+${summary.totalOvertime.toFixed(1)}h` : '0h'}
+                            {summary.totalOvertime > 0 ? `+${(summary.totalOvertime || 0).toFixed(1)}h` : '0h'}
                         </div>
                         <p className="text-xs text-orange-400 mt-1">Exceso de jornada</p>
                     </CardContent>
@@ -158,7 +158,7 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                                             <span className="text-[10px] font-mono text-blue-700">{shift.end}</span>
                                         </div>
                                         <div className="flex justify-between items-end">
-                                            <span className="text-[10px] font-bold text-gray-500">{(shift.workedMinutes / 60).toFixed(1)}h</span>
+                                            <span className="text-[10px] font-bold text-gray-500">{((shift.workedMinutes || 0) / 60).toFixed(1)}h</span>
                                             {shift.punctuality !== 0 && (
                                                 <span className={`text-[9px] font-bold ${getPunctualityColor(shift.punctuality)}`}>
                                                     {shift.punctuality > 0 ? `+${shift.punctuality}` : shift.punctuality}m
@@ -202,12 +202,12 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                                     <td className="p-3 font-mono text-gray-600">{s.date}</td>
                                     <td className="p-3 font-mono">{s.start}</td>
                                     <td className="p-3 font-mono">{s.end}</td>
-                                    <td className="p-3 font-bold">{(s.workedMinutes / 60).toFixed(2)}h</td>
+                                    <td className="p-3 font-bold">{((s.workedMinutes || 0) / 60).toFixed(2)}h</td>
                                     <td className={`p-3 font-bold ${getPunctualityColor(s.punctuality)}`}>
                                         {s.punctuality > 0 ? `+${s.punctuality}m` : `${s.punctuality}m`}
                                     </td>
                                     <td className="p-3 font-bold text-orange-400">
-                                        {s.overtimeMinutes > 0 ? `+${(s.overtimeMinutes / 60).toFixed(2)}` : '-'}
+                                        {s.overtimeMinutes > 0 ? `+${((s.overtimeMinutes || 0) / 60).toFixed(2)}` : '-'}
                                     </td>
                                 </tr>
                             ))}

@@ -227,11 +227,11 @@ export default function MonthlyReportPage() {
                                     <div className="grid grid-cols-2 gap-4 text-center">
                                         <div>
                                             <p className="text-xs text-slate-400 uppercase">Horas / Día</p>
-                                            <p className="text-xl font-black text-slate-800">{roleStat.horasPorDia.toFixed(1)} h</p>
+                                            <p className="text-xl font-black text-slate-800">{(roleStat.horasPorDia || 0).toFixed(1)} h</p>
                                         </div>
                                         <div>
                                             <p className="text-xs text-slate-400 uppercase">KM / Día</p>
-                                            <p className="text-xl font-black text-slate-800">{Math.round(roleStat.kmPorDia)} km</p>
+                                            <p className="text-xl font-black text-slate-800">{Math.round(roleStat.kmPorDia || 0)} km</p>
                                         </div>
                                     </div>
                                 </CardContent>
