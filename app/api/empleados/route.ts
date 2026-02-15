@@ -18,7 +18,10 @@ export async function GET(request: Request) {
     }
 
     const empleados = await prisma.empleado.findMany({
-        orderBy: { nombre: 'asc' },
+        orderBy: [
+            { rol: 'asc' },
+            { nombre: 'asc' }
+        ],
         include: { perfilProfesional: true }
     });
     // Omit passwords

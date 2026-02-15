@@ -168,7 +168,11 @@ export async function GET(request: Request) {
             mediaHorasDia: e.diasTrabajados > 0 ? (e.horas / e.diasTrabajados) : 0,
             mediaKmDia: e.diasTrabajados > 0 ? (e.km / e.diasTrabajados) : 0,
             consumoMedio: e.km > 0 ? ((e.litros / e.km) * 100) : 0
-        })).sort((a: any, b: any) => b.horas - a.horas);
+        })).sort((a: any, b: any) => {
+            if (a.rol < b.rol) return -1;
+            if (a.rol > b.rol) return 1;
+            return a.empleado.localeCompare(b.empleado);
+        });
 
         return NextResponse.json({
             meta: { year, month },
