@@ -196,13 +196,10 @@ export async function GET(request: Request) {
                 startStr = formatTime(start);
                 endStr = end ? formatTime(end) : 'En curso';
 
-                if (shift.totalHoras) {
-                    // Trust DB if it has an override
-                    workedMinutes = shift.totalHoras * 60;
-                } else {
-                    const refEnd = end || new Date();
-                    workedMinutes = calculateNetWorkedMinutes(start, refEnd);
-                }
+                // Always recalculate to ensure lunch break deduction is applied. 
+                // We ignore DB totalHoras because it might be inflated (missing the deduction).
+                const refEnd = end || new Date();
+                workedMinutes = calculateNetWorkedMinutes(start, refEnd);
 
                 // Punctuality (Only if expected to work)
                 if (expectedMinutes > 0 && emp.horaEntradaPrevista) {
