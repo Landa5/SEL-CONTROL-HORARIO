@@ -217,12 +217,22 @@ export default function OficinaDashboard() {
                                     ) : (
                                         <div className="flex items-center justify-between">
                                             <div>
-                                                <p className="text-2xl font-black text-gray-900">{format(new Date(jornada.horaEntrada), 'HH:mm')}</p>
+                                                <p className="text-2xl font-black text-gray-900">
+                                                    {(() => {
+                                                        const d = new Date(jornada.horaEntrada);
+                                                        return !isNaN(d.getTime()) ? format(d, 'HH:mm') : '--:--';
+                                                    })()}
+                                                </p>
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase">Mi Entrada</p>
                                             </div>
                                             {jornada.horaSalida ? (
                                                 <div className="text-right">
-                                                    <p className="text-2xl font-black text-green-600">{format(new Date(jornada.horaSalida), 'HH:mm')}</p>
+                                                    <p className="text-2xl font-black text-green-600">
+                                                        {(() => {
+                                                            const d = new Date(jornada.horaSalida);
+                                                            return !isNaN(d.getTime()) ? format(d, 'HH:mm') : '--:--';
+                                                        })()}
+                                                    </p>
                                                     <p className="text-[10px] font-bold text-gray-400 uppercase">Mi Salida</p>
                                                 </div>
                                             ) : (
@@ -476,7 +486,8 @@ export default function OficinaDashboard() {
                         </Card>
                     )}
                 </div>
-            )}
-        </MainDashboardLayout>
+            )
+            }
+        </MainDashboardLayout >
     );
 }

@@ -58,7 +58,10 @@ export default function FleetAlertsWidget({ alerts, hrefPrefix = '/admin' }: Fle
                                 <div className="text-left sm:text-right pl-11 sm:pl-0">
                                     <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${alert.isExpired ? 'bg-red-600 text-white' : 'bg-orange-50 text-orange-700'}`}>
                                         <Calendar className="w-4 h-4" />
-                                        {format(new Date(alert.date), 'dd/MM/yy', { locale: es })}
+                                        {(() => {
+                                            const d = new Date(alert.date);
+                                            return !isNaN(d.getTime()) ? format(d, 'dd/MM/yy', { locale: es }) : 'N/A';
+                                        })()}
                                     </div>
                                     <p className="text-[10px] font-medium text-gray-400 mt-1 flex items-center sm:justify-end gap-1">
                                         <Clock className="w-2.5 h-2.5" />

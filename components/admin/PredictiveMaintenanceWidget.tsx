@@ -146,7 +146,7 @@ export default function PredictiveMaintenanceWidget() {
                                         </div>
 
                                         <div className="space-y-1.5">
-                                            {item.alerts.map((alert: string, i: number) => (
+                                            {Array.isArray(item.alerts) && item.alerts.map((alert: string, i: number) => (
                                                 <div key={i} className="flex items-start gap-2 text-[11px] font-medium text-gray-600 bg-white/60 p-2 rounded-lg border border-gray-100/50">
                                                     <AlertTriangle className={`w-3.5 h-3.5 mt-0.5 flex-shrink-0 ${item.healthScore < 60 ? 'text-red-500' : 'text-purple-500'}`} />
                                                     {alert}
