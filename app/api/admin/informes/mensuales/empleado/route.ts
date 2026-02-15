@@ -136,6 +136,48 @@ export async function GET(request: Request) {
                 expectedMinutes = standardDailyHours * 60;
             }
 
+            // ---------------------------------------------------------
+            // Fix UTC Display & Lunch Deduction Logic
+            // ---------------------------------------------------------
+
+            // Helper: Format Time in Madrid Zone
+            const formatTime = (date: Date) => {
+                // We manually adjust for Madrid (UTC+1/UTC+2) to ensure consistency regardless of Server Timezone
+                // Since this is a simple display, using toLocaleString is robust enough
+                return date.toLocaleTimeString('es-ES', {
+                    timeZone: 'Europe/Madrid',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+            };
+
+            const calculateNetWorkedMinutes = (start: Date, end: Date) => {
+                let total = differenceInMinutes(end, start);
+
+                // Deduct Lunch Break if configured and shift spans across it
+                if (emp.horaSalidaPrevista && emp.horaEntradaTarde) {
+                    const [hEnd, mEnd] = emp.horaSalidaPrevista.split(':').map(Number);
+                    const [hStart, mStart] = emp.horaEntradaTarde.split(':').map(Number);
+
+                    const lunchStart = new Date(start);
+                    lunchStart.setHours(hEnd, mEnd, 0, 0);
+
+                    const lunchEnd = new Date(start);
+                    lunchEnd.setHours(hStart, mStart, 0, 0);
+
+                    // Only deduct if shift starts BEFORE lunch and ends AFTER lunch starts
+                    // (and strictly if it covers the break roughly)
+                    if (start < lunchStart && end > lunchEnd) {
+                        const breakMinutes = differenceInMinutes(lunchEnd, lunchStart);
+                        if (breakMinutes > 0) {
+                            total -= breakMinutes;
+                        }
+                    }
+                }
+                return Math.max(0, total);
+            };
+
             // Find Shift
             // Note: shifts from DB are UTC/Local. We match by comparing formatted strings or isSameDay.
             // Assumption: shift.fecha is stored correctly as the shift day.
@@ -151,31 +193,34 @@ export async function GET(request: Request) {
                 const start = new Date(shift.horaEntrada);
                 const end = shift.horaSalida ? new Date(shift.horaSalida) : null;
 
-                startStr = format(start, 'HH:mm');
-                endStr = end ? format(end, 'HH:mm') : 'En curso';
+                startStr = formatTime(start);
+                endStr = end ? formatTime(end) : 'En curso';
 
                 if (shift.totalHoras) {
+                    // Trust DB if it has an override
                     workedMinutes = shift.totalHoras * 60;
                 } else {
-                    const refEnd = end || new Date(); // If ongoing, calc up to now
-                    workedMinutes = differenceInMinutes(refEnd, start);
+                    const refEnd = end || new Date();
+                    workedMinutes = calculateNetWorkedMinutes(start, refEnd);
                 }
 
                 // Punctuality (Only if expected to work)
                 if (expectedMinutes > 0 && emp.horaEntradaPrevista) {
                     const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
-                    const expectedStart = new Date(day); // Use the current loop day
+                    const expectedStart = new Date(day);
                     expectedStart.setHours(h, m, 0, 0);
 
                     // Compare shift start with expected start
-                    // We need to match day components if shift.horaEntrada is precise
-                    // Usually punctuality is just time difference
+                    // We interpret the "expected start" as being in local time (Madrid) relative to the day
+                    // But 'start' is a UTC timestamp.
+                    // To compare correctly, we should get the "local time minutes" of the shift
 
-                    // Fix for potential date mismatches: Set shift start to same day as expectedStart for comparing TIME ONLY
-                    const shiftStartAsTime = new Date(expectedStart);
-                    shiftStartAsTime.setHours(start.getHours(), start.getMinutes(), 0, 0);
+                    // Simple approach: parse the HH:mm we just formatted
+                    const [sh, sm] = startStr.split(':').map(Number);
+                    const shiftMinutes = sh * 60 + sm;
+                    const expectedMinutes = h * 60 + m;
 
-                    punctualityForDay = differenceInMinutes(shiftStartAsTime, expectedStart);
+                    punctualityForDay = shiftMinutes - expectedMinutes;
                     punctualityScore += punctualityForDay;
                 }
             }
@@ -183,6 +228,7 @@ export async function GET(request: Request) {
             // If they worked on a weekend/holiday/absence, expectedMinutes for OVERTIME calculation
             // is debatable. Usually: Overtime = Worked - Expected.
             // If Expected is 0, then ALL worked is Overtime. OK.
+            // But if they just worked, we count it.
 
             const overtime = Math.max(0, workedMinutes - expectedMinutes);
 
