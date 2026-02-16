@@ -385,21 +385,23 @@ export default function PayrollMonthDetail(props: Props) {
     return (
         <div className="max-w-6xl mx-auto space-y-6">
             <Card>
-                <CardHeader className="flex flex-row items-center justify-between border-b bg-gray-50/50">
-                    <div className="flex items-center gap-2">
+                <CardHeader className="flex flex-col md:flex-row items-center justify-between gap-4 border-b bg-gray-50/50">
+                    <div className="flex items-center gap-2 w-full md:w-auto">
                         <FileText className="w-5 h-5 text-gray-500" />
                         <div>
                             <CardTitle>Nóminas: {month}/{year}</CardTitle>
                             <p className="text-xs text-gray-500 mt-1">Gestión mensual de variables y complementos</p>
                         </div>
                     </div>
-                    <Button onClick={handleGenerate} disabled={generating} className={generating ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}>
-                        <Calculator className="w-4 h-4 mr-2" />
-                        {generating ? 'Procesando...' : 'Recalcular Todo'}
-                    </Button>
-                    <Button onClick={handleExportGlobalPDF} variant="outline" className="text-gray-700 border-gray-300">
-                        <FileText className="w-4 h-4 mr-2" /> Exportar Global
-                    </Button>
+                    <div className="flex gap-2 w-full md:w-auto justify-end">
+                        <Button onClick={handleGenerate} disabled={generating} className={generating ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}>
+                            <Calculator className="w-4 h-4 mr-2" />
+                            {generating ? 'Procesando...' : 'Recalcular Todo'}
+                        </Button>
+                        <Button onClick={handleExportGlobalPDF} variant="outline" className="text-gray-700 border-gray-300">
+                            <FileText className="w-4 h-4 mr-2" /> Exportar Global
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="p-0">
                     {loading && <div className="p-8 text-center text-gray-500">Cargando datos...</div>}
@@ -439,7 +441,7 @@ export default function PayrollMonthDetail(props: Props) {
                                         {detailsLoading ? <p className="text-center py-4 text-gray-500">Cargando detalle...</p> : details && (
                                             <div className="bg-white rounded-lg shadow-sm border max-w-4xl mx-auto overflow-hidden">
                                                 {/* Header Actions */}
-                                                <div className="bg-gray-100 px-6 py-3 flex justify-between items-center border-b">
+                                                <div className="bg-gray-100 px-6 py-3 flex flex-col md:flex-row justify-between items-center gap-4 border-b">
                                                     <span className="text-sm font-bold text-gray-600 uppercase tracking-wider">Detalle de Nómina</span>
                                                     <div className="flex gap-2">
                                                         {details.estado === 'BORRADOR' && (
@@ -452,7 +454,7 @@ export default function PayrollMonthDetail(props: Props) {
                                                 </div>
 
                                                 {/* Payslip Table */}
-                                                <div className="p-0">
+                                                <div className="p-0 overflow-x-auto">
                                                     <table className="w-full text-sm">
                                                         <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider border-b">
                                                             <tr>

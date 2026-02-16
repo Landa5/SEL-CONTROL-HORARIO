@@ -204,102 +204,104 @@ export default function AdminEmpleados() {
 
             <Card className="border-none shadow-md">
                 <CardContent className="p-0 overflow-hidden rounded-xl">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-gray-100 border-b border-gray-200">
-                                <th className="p-4 font-bold text-gray-600 text-sm uppercase">Empleado</th>
-                                <th className="p-4 font-bold text-gray-600 text-sm uppercase">Contacto</th>
-                                <th className="p-4 font-bold text-gray-600 text-sm uppercase">Documentación</th>
-                                <th className="p-4 font-bold text-gray-600 text-sm uppercase">Rol / Usuario</th>
-                                <th className="p-4 font-bold text-gray-600 text-sm uppercase text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {empleados.map(emp => (
-                                <tr key={emp.id} className={`hover:bg-blue-50 transition-colors ${!emp.activo ? 'opacity-50 grayscale bg-gray-50' : 'bg-white'}`}>
-                                    <td className="p-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-                                                {emp.nombre.charAt(0)}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-gray-900">{emp.nombre} {emp.apellidos}</p>
-                                                <p className="text-xs text-gray-500 font-mono">{emp.dni}</p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-sm">
-                                        {emp.telefono && <div className="flex items-center gap-2"><Phone className="w-3 h-3 text-gray-400" /> {emp.telefono}</div>}
-                                        {emp.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3 text-gray-400" /> {emp.email}</div>}
-                                    </td>
-                                    <td className="p-4">
-                                        {emp.perfilProfesional ? (
-                                            <div className="space-y-1 text-xs">
-                                                {/* Carnet */}
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-bold bg-gray-100 px-1 rounded">
-                                                        {emp.perfilProfesional.carnetTipo || 'Sin tipo'}
-                                                    </span>
-                                                    {emp.perfilProfesional.carnetCaducidad ? (
-                                                        <span className={`${new Date(emp.perfilProfesional.carnetCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                                            Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString()}
-                                                        </span>
-                                                    ) : <span className="text-red-500">Sin fecha</span>}
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-gray-100 border-b border-gray-200">
+                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Empleado</th>
+                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Contacto</th>
+                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Documentación</th>
+                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Rol / Usuario</th>
+                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {empleados.map(emp => (
+                                    <tr key={emp.id} className={`hover:bg-blue-50 transition-colors ${!emp.activo ? 'opacity-50 grayscale bg-gray-50' : 'bg-white'}`}>
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
+                                                    {emp.nombre.charAt(0)}
                                                 </div>
-                                                {/* ADR */}
-                                                {emp.perfilProfesional.tieneAdr && (
+                                                <div>
+                                                    <p className="font-bold text-gray-900">{emp.nombre} {emp.apellidos}</p>
+                                                    <p className="text-xs text-gray-500 font-mono">{emp.dni}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-sm">
+                                            {emp.telefono && <div className="flex items-center gap-2"><Phone className="w-3 h-3 text-gray-400" /> {emp.telefono}</div>}
+                                            {emp.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3 text-gray-400" /> {emp.email}</div>}
+                                        </td>
+                                        <td className="p-4">
+                                            {emp.perfilProfesional ? (
+                                                <div className="space-y-1 text-xs">
+                                                    {/* Carnet */}
                                                     <div className="flex items-center gap-2">
-                                                        <span className="font-bold bg-orange-100 text-orange-800 px-1 rounded">ADR</span>
-                                                        {emp.perfilProfesional.adrCaducidad ? (
-                                                            <span className={`${new Date(emp.perfilProfesional.adrCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                                                Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString()}
+                                                        <span className="font-bold bg-gray-100 px-1 rounded">
+                                                            {emp.perfilProfesional.carnetTipo || 'Sin tipo'}
+                                                        </span>
+                                                        {emp.perfilProfesional.carnetCaducidad ? (
+                                                            <span className={`${new Date(emp.perfilProfesional.carnetCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                                Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString()}
                                                             </span>
                                                         ) : <span className="text-red-500">Sin fecha</span>}
                                                     </div>
-                                                )}
-                                                {/* DNI Warning if near */}
-                                                {emp.perfilProfesional.dniCaducidad && (
-                                                    <div className="text-gray-400 text-[10px]">
-                                                        DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString()}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            (emp.rol === 'CONDUCTOR' || emp.rol === 'MECANICO') ? (
-                                                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                                                    ⚠ Faltan Datos
-                                                </span>
+                                                    {/* ADR */}
+                                                    {emp.perfilProfesional.tieneAdr && (
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="font-bold bg-orange-100 text-orange-800 px-1 rounded">ADR</span>
+                                                            {emp.perfilProfesional.adrCaducidad ? (
+                                                                <span className={`${new Date(emp.perfilProfesional.adrCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                                    Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString()}
+                                                                </span>
+                                                            ) : <span className="text-red-500">Sin fecha</span>}
+                                                        </div>
+                                                    )}
+                                                    {/* DNI Warning if near */}
+                                                    {emp.perfilProfesional.dniCaducidad && (
+                                                        <div className="text-gray-400 text-[10px]">
+                                                            DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString()}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             ) : (
-                                                <span className="text-xs text-gray-400 italic">No requiere</span>
-                                            )
-                                        )}
-                                    </td>
-                                    <td className="p-4">
-                                        <div className="space-y-1">
-                                            <span className={`inline-flex px-2 py-1 rounded text-xs font-bold ${emp.rol === 'ADMIN' ? 'bg-purple-100 text-purple-800' :
-                                                emp.rol === 'MECANICO' ? 'bg-orange-100 text-orange-800' :
-                                                    emp.rol === 'OFICINA' ? 'bg-blue-100 text-blue-800' :
-                                                        'bg-green-100 text-green-800'
-                                                }`}>
-                                                {emp.rol}
-                                            </span>
-                                            <div className="text-xs text-gray-500 font-mono bg-gray-100 px-1 rounded w-fit">@{emp.usuario}</div>
-                                        </div>
-                                    </td>
-                                    <td className="p-4 text-right space-x-2">
-                                        <Button size="sm" variant="secondary" onClick={() => openEdit(emp)} className="hover:bg-blue-100 text-blue-600">
-                                            <Edit className="w-4 h-4" />
-                                        </Button>
-                                        {emp.activo && (
-                                            <Button size="sm" className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-100" onClick={() => handleDelete(emp.id)}>
-                                                <Trash2 className="w-4 h-4" />
+                                                (emp.rol === 'CONDUCTOR' || emp.rol === 'MECANICO') ? (
+                                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+                                                        ⚠ Faltan Datos
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-xs text-gray-400 italic">No requiere</span>
+                                                )
+                                            )}
+                                        </td>
+                                        <td className="p-4">
+                                            <div className="space-y-1">
+                                                <span className={`inline-flex px-2 py-1 rounded text-xs font-bold ${emp.rol === 'ADMIN' ? 'bg-purple-100 text-purple-800' :
+                                                    emp.rol === 'MECANICO' ? 'bg-orange-100 text-orange-800' :
+                                                        emp.rol === 'OFICINA' ? 'bg-blue-100 text-blue-800' :
+                                                            'bg-green-100 text-green-800'
+                                                    }`}>
+                                                    {emp.rol}
+                                                </span>
+                                                <div className="text-xs text-gray-500 font-mono bg-gray-100 px-1 rounded w-fit">@{emp.usuario}</div>
+                                            </div>
+                                        </td>
+                                        <td className="p-4 text-right space-x-2">
+                                            <Button size="sm" variant="secondary" onClick={() => openEdit(emp)} className="hover:bg-blue-100 text-blue-600">
+                                                <Edit className="w-4 h-4" />
                                             </Button>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                            {emp.activo && (
+                                                <Button size="sm" className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-100" onClick={() => handleDelete(emp.id)}>
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -348,11 +350,11 @@ export default function AdminEmpleados() {
                                 {/* TAB: PERSONAL */}
                                 {currentTab === 'PERSONAL' && (
                                     <div className="space-y-4 animate-in slide-in-from-right-4 fade-in duration-300">
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Input label="Nombre" value={formData.nombre} onChange={e => handleInputChange('nombre', e.target.value)} required />
                                             <Input label="Apellidos" value={formData.apellidos} onChange={e => handleInputChange('apellidos', e.target.value)} />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <Input label="DNI / NIE" value={formData.dni} onChange={e => handleInputChange('dni', e.target.value)} placeholder="00000000X" />
                                             <Input label="Teléfono" value={formData.telefono} onChange={e => handleInputChange('telefono', e.target.value)} type="tel" />
                                         </div>
@@ -411,7 +413,7 @@ export default function AdminEmpleados() {
                                                 <div className="w-1 h-4 bg-blue-500 rounded"></div>
                                                 Configuración Horaria (Para Informes)
                                             </h4>
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
                                                     <label className="block text-sm font-bold text-gray-700 mb-1">Hora Entrada (Mañana)</label>
                                                     <Input
@@ -432,7 +434,7 @@ export default function AdminEmpleados() {
                                                 </div>
                                             </div>
 
-                                            <div className="grid grid-cols-2 gap-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div>
                                                     <label className="block text-sm font-bold text-gray-700 mb-1">Hora Entrada (Tarde)</label>
                                                     <Input
@@ -469,7 +471,7 @@ export default function AdminEmpleados() {
                                                     <Award className="w-4 h-4" /> Documentación Profesional
                                                 </h4>
 
-                                                <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <Input
                                                         label="Caducidad DNI (Obligatorio)"
                                                         type="date"
@@ -478,7 +480,7 @@ export default function AdminEmpleados() {
                                                     />
                                                 </div>
 
-                                                <div className="grid grid-cols-2 gap-4">
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                     <div>
                                                         <label className="block text-sm font-bold text-gray-700 mb-1">Tipo de Carnet</label>
                                                         <select
@@ -586,8 +588,7 @@ export default function AdminEmpleados() {
                         </CardContent>
                     </Card>
                 </div>
-            )
-            }
-        </div >
+            )}
+        </div>
     );
 }

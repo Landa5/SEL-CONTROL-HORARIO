@@ -560,7 +560,7 @@ function JornadasContent() {
                 selectedJornada && (
                     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setSelectedJornada(null)}>
                         <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                            <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
+                            <div className="p-6 border-b flex justify-between items-center bg-gray-50 rounded-t-xl sticky top-0 z-10">
                                 <div>
                                     <h2 className="text-xl font-black text-gray-900">Detalle de Jornada</h2>
                                     <p className="text-sm text-gray-600">{selectedJornada.empleado?.nombre} • {format(new Date(selectedJornada.fecha), "dd 'de' MMMM", { locale: es })}</p>
@@ -569,7 +569,7 @@ function JornadasContent() {
                             </div>
                             <div className="p-6 space-y-6">
                                 {/* Summary Stats */}
-                                <div className="grid grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="bg-blue-50 p-4 rounded-lg text-center">
                                         <p className="text-xs text-blue-600 font-bold uppercase">Total Horas</p>
                                         <p className="text-xl font-black text-blue-900">{formatDuration(selectedJornada.totalHoras)}</p>
