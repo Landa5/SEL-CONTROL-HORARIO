@@ -96,10 +96,14 @@ export async function GET(request: Request) {
                 criticalAlerts.push({
                     id,
                     type: 'VENCIMIENTO',
+                    alertType: type, // For FleetAlertsWidget (ITV, ADR...)
                     message: `${type} ${days < 0 ? 'CADUCADO' : `vence en ${days} días`}`,
                     entity: text,
+                    entityName: text, // For FleetAlertsWidget
                     entityType: entity,
-                    severity
+                    severity,
+                    date: date, // For FleetAlertsWidget sorting/display
+                    isExpired: days < 0 // For FleetAlertsWidget styling
                 });
             }
         };
