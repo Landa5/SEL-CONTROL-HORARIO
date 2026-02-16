@@ -39,7 +39,11 @@ async function main() {
     ];
 
     for (const u of users) {
-        const existing = await prisma.empleado.findUnique({ where: { usuario: u.usuario } });
+        const existing = await prisma.empleado.findUnique({
+            where: {
+                usuario: u.usuario,
+            },
+        });
         if (!existing) {
             await prisma.empleado.create({ data: u });
             console.log(`Created user: ${u.usuario} (${u.rol})`);

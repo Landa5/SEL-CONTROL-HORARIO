@@ -43,6 +43,13 @@ export async function GET(request: Request) {
             { codigo: 'DESCUENTO_AUSENCIA', nombre: 'Descuento por Ausencia' },
             { codigo: 'DESCUENTO_VACACIONES', nombre: 'Descuento por Vacaciones' },
             { codigo: 'PORCENTAJE_PRODUCTIVIDAD', nombre: '% Productividad (sobre resto)' },
+            // Nuevos Incentivos
+            { codigo: 'PLUS_ANTIGUEDAD', nombre: 'Plus Antigüedad' },
+            { codigo: 'BONUS_SEGURIDAD', nombre: 'Bonus Seguridad y No Siniestralidad' },
+            { codigo: 'PLUS_FORMACION', nombre: 'Plus Formación y Títulos' },
+            { codigo: 'PLUS_DISPONIBILIDAD', nombre: 'Plus Disponibilidad / Guardias' },
+            { codigo: 'BONUS_PUNTUALIDAD', nombre: 'Bonus Puntualidad' },
+            { codigo: 'BONUS_CONSUMO', nombre: 'Bonus Consumo Eficiente' },
         ];
 
         // Ensure all defaults exist
