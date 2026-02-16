@@ -68,11 +68,11 @@ export default function AbsenceForm({ onSuccess, employeeId, defaultDate, onCanc
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
 
-        // Validation for BAJA
-        if (activeTab === 'BAJA' && !file) {
-            toast.error("Es obligatorio adjuntar un justificante para bajas médicas.");
-            return;
-        }
+        // Validation for BAJA - Removed mandatory file check per user request
+        // if (activeTab === 'BAJA' && !file) {
+        //     toast.error("Es obligatorio adjuntar un justificante para bajas médicas.");
+        //     return;
+        // }
 
         // Validation for Hours
         if (isHourly && (!hours || parseFloat(hours) <= 0)) {
@@ -229,10 +229,10 @@ export default function AbsenceForm({ onSuccess, employeeId, defaultDate, onCanc
                         </div>
                         <div className="bg-orange-50 p-3 rounded border border-orange-100">
                             <label className="block text-sm font-bold text-orange-800 mb-1">
-                                Justificante Médico (Obligatorio) <span className="text-red-500">*</span>
+                                Justificante Médico (Opcional)
                             </label>
                             <Input type="file" onChange={e => setFile(e.target.files?.[0] || null)} accept=".pdf,image/*" className="bg-white" />
-                            <p className="text-xs text-orange-600 mt-1">Es necesario adjuntar el parte de baja o justificante.</p>
+                            <p className="text-xs text-orange-600 mt-1">Puedes adjuntar el parte de baja o justificante si lo tienes.</p>
                         </div>
                     </div>
                 )}

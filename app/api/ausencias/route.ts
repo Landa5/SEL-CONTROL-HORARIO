@@ -78,10 +78,10 @@ export async function POST(request: Request) {
             }
         }
 
-        // Validation for BAJA
-        if (tipo === 'BAJA' && (!file || file.size === 0)) {
-            return NextResponse.json({ error: 'Es obligatorio adjuntar un justificante para bajas médicas.' }, { status: 400 });
-        }
+        // Validation for BAJA - Optional now
+        // if (tipo === 'BAJA' && (!file || file.size === 0)) {
+        //    return NextResponse.json({ error: 'Es obligatorio adjuntar un justificante para bajas médicas.' }, { status: 400 });
+        // }
 
         let justificanteUrl = null;
 
