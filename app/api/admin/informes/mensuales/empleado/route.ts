@@ -196,10 +196,23 @@ export async function GET(request: Request) {
                 startStr = formatTime(start);
                 endStr = end ? formatTime(end) : 'En curso';
 
+                // Strict Schedule Logic: Count hours from Schedule Start if arrived early
+                let effectiveStart = start;
+                if (emp.horaEntradaPrevista) {
+                    const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
+                    const expectedStart = new Date(day);
+                    expectedStart.setHours(h, m, 0, 0);
+
+                    // If arricved BEFORE schedule, count from schedule
+                    if (start < expectedStart) {
+                        effectiveStart = expectedStart;
+                    }
+                }
+
                 // Always recalculate to ensure lunch break deduction is applied. 
                 // We ignore DB totalHoras because it might be inflated (missing the deduction).
                 const refEnd = end || new Date();
-                workedMinutes = calculateNetWorkedMinutes(start, refEnd);
+                workedMinutes = calculateNetWorkedMinutes(effectiveStart, refEnd);
 
                 // Punctuality (Only if expected to work)
                 if (expectedMinutes > 0 && emp.horaEntradaPrevista) {
