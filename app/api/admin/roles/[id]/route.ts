@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const cookieStore = await cookies();
         const session = cookieStore.get('session')?.value;
@@ -13,7 +13,8 @@ export async function PUT(request: Request, { params }: { params: { id: string }
             return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
         }
 
-        const rolId = parseInt(params.id);
+        const { id: idStr } = await params;
+        const rolId = parseInt(idStr);
         const body = await request.json();
         const { permisos, descripcion } = body; // permisos: string[] of codes or number[] of ids? Let's assume IDs for simplicity or Codes if easier.
         // Let's assume array of permission IDs coming from frontend matrix.
@@ -51,7 +52,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         return NextResponse.json({ success: true });
 
     } catch (error: any) {
-        console.error(`PUT /api/admin/roles/${params.id} Error:`, error);
+        console.error(`PUT /api/admin/roles/[id] Error:`, error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

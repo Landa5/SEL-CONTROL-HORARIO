@@ -1,0 +1,186 @@
+
+> sel-control-horario@0.1.0 build
+> next build --webpack
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.7 (webpack)
+   - Environments: .env
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+ ✓ (pwa) Compiling for server...
+ ✓ (pwa) Compiling for server...
+ ✓ (pwa) Compiling for client (static)...
+ ○ (pwa) Service worker: C:\Users\Usuario.Usuario-PC\sel-control-horario\public\sw.js
+ ○ (pwa)   URL: /sw.js
+ ○ (pwa)   Scope: /
+ ✓ Compiled successfully in 10.3s
+   Running TypeScript ...
+   Collecting page data using 19 workers ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   Generating static pages using 19 workers (0/103) ...
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   Generating static pages using 19 workers (25/103) 
+   Generating static pages using 19 workers (51/103) 
+   Generating static pages using 19 workers (77/103) 
+ ✓ Generating static pages using 19 workers (103/103) in 2.3s
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /admin/alquiler
+├ ○ /admin/auditoria
+├ ○ /admin/ausencias
+├ ○ /admin/camiones
+├ ƒ /admin/camiones/[id]
+├ ○ /admin/configuracion/parametros
+├ ○ /admin/construccion
+├ ○ /admin/dashboard
+├ ○ /admin/empleados
+├ ○ /admin/evaluaciones
+├ ○ /admin/fiestas
+├ ○ /admin/fiestas/reporte
+├ ○ /admin/flota/inteligencia
+├ ○ /admin/formacion
+├ ƒ /admin/formacion/editar/[id]
+├ ○ /admin/formacion/nuevo
+├ ○ /admin/formacion/resultados
+├ ○ /admin/incentivos
+├ ○ /admin/informes/gestoria
+├ ○ /admin/informes/legal
+├ ○ /admin/informes/mensuales
+├ ○ /admin/informes/operativos
+├ ○ /admin/informes/personalizados
+├ ○ /admin/jornadas
+├ ○ /admin/nominas
+├ ƒ /admin/nominas/[year]/[month]
+├ ○ /admin/nominas/comercial
+├ ○ /admin/nominas/config
+├ ○ /admin/roles
+├ ○ /admin/tareas
+├ ƒ /admin/tareas/[id]
+├ ○ /admin/tareas/nueva
+├ ƒ /api/admin/alquiler/clientes
+├ ƒ /api/admin/alquiler/dashboard
+├ ƒ /api/admin/alquiler/informe
+├ ƒ /api/admin/alquiler/rentals
+├ ƒ /api/admin/auditoria
+├ ƒ /api/admin/ausencias/bloqueos
+├ ƒ /api/admin/ausencias/config
+├ ƒ /api/admin/ausencias/dashboard
+├ ƒ /api/admin/compensaciones
+├ ƒ /api/admin/configuracion/parametros
+├ ƒ /api/admin/dashboard
+├ ƒ /api/admin/deduplicate
+├ ƒ /api/admin/evaluaciones
+├ ƒ /api/admin/evaluaciones/[id]
+├ ƒ /api/admin/fiestas
+├ ƒ /api/admin/fiestas/[id]
+├ ƒ /api/admin/flota/inteligencia
+├ ƒ /api/admin/flota/mantenimiento
+├ ƒ /api/admin/informes/custom
+├ ƒ /api/admin/informes/flota
+├ ƒ /api/admin/informes/gestoria
+├ ƒ /api/admin/informes/legal
+├ ƒ /api/admin/informes/mensuales
+├ ƒ /api/admin/informes/mensuales/empleado
+├ ƒ /api/admin/informes/operativo-diario
+├ ƒ /api/admin/nominas
+├ ƒ /api/admin/process-invoices
+├ ƒ /api/admin/reset-fallbacks
+├ ƒ /api/admin/roles
+├ ƒ /api/admin/roles/[id]
+├ ƒ /api/admin/roles/create
+├ ƒ /api/admin/roles/list
+├ ƒ /api/admin/roles/permisos
+├ ƒ /api/ai/predictive
+├ ƒ /api/ausencias
+├ ƒ /api/ausencias/[id]
+├ ƒ /api/ausencias/approved
+├ ƒ /api/ausencias/calc
+├ ƒ /api/ausencias/stats
+├ ƒ /api/auth/login
+├ ƒ /api/auth/logout
+├ ƒ /api/auth/session
+├ ƒ /api/camiones
+├ ƒ /api/camiones/[id]/estadisticas
+├ ƒ /api/camiones/metadata
+├ ƒ /api/cron/check-expirations
+├ ƒ /api/descargas
+├ ƒ /api/documentos
+├ ƒ /api/empleados
+├ ƒ /api/formacion/evaluacion
+├ ƒ /api/formacion/modulos
+├ ƒ /api/formacion/modulos/[id]
+├ ƒ /api/formacion/resultados
+├ ƒ /api/jornadas
+├ ƒ /api/jornadas/historico
+├ ƒ /api/jornadas/mensual
+├ ƒ /api/mantenimientos
+├ ƒ /api/nominas
+├ ƒ /api/nominas/[id]
+├ ƒ /api/nominas/comercial
+├ ƒ /api/nominas/config
+├ ƒ /api/nominas/generar
+├ ƒ /api/nominas/lineas/[id]
+├ ƒ /api/proyectos
+├ ƒ /api/repostaje
+├ ƒ /api/tareas
+├ ƒ /api/tareas/[id]
+├ ƒ /api/tareas/[id]/adjuntos
+├ ƒ /api/tareas/[id]/historial
+├ ƒ /api/turnos
+├ ƒ /api/turnos/ultimo-km
+├ ƒ /api/usos-camion/[id]
+├ ƒ /api/viajes
+├ ○ /empleado
+├ ƒ /empleado/formacion/[id]
+├ ƒ /empleado/formacion/[id]/evaluacion
+├ ƒ /empleado/nomina/[year]/[month]
+├ ○ /login
+├ ○ /mecanico/camiones
+├ ○ /mecanico/dashboard
+├ ○ /mecanico/jornada
+├ ○ /mecanico/perfil
+├ ○ /mecanico/tareas
+├ ○ /mecanico/vacaciones
+├ ○ /oficina/camiones
+├ ○ /oficina/dashboard
+├ ○ /oficina/jornadas
+├ ○ /oficina/mi-jornada
+├ ○ /oficina/tareas
+├ ○ /tareas
+├ ƒ /tareas/[id]
+├ ○ /tareas/centro
+└ ○ /tareas/nueva
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

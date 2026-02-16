@@ -369,6 +369,9 @@ model MantenimientoRealizado {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  
+  proximoKmPrevisto Int?
+  notificado        Boolean @default(false)
 }
 
 model Auditoria {
@@ -851,4 +854,23 @@ model RolPermiso {
   assignedBy Int?     // ID del admin que asignó el permiso
   
   @@unique([rolId, permisoId])
+}
+
+// =======================
+// MÓDULO FLOTA INTELIGENTE (FASE 3)
+// =======================
+
+model ConfiguracionMantenimiento {
+  id        Int      @id @default(autoincrement())
+  
+  tipo      String   @unique // "ACEITE_MOTOR", "RUEDAS_DELANTERAS", "ITV", etc.
+  
+  intervaloKm    Int?      // KM entre mantenimientos (ej: 30000)
+  intervaloMeses Int?      // Meses entre mantenimientos (ej: 12)
+  avisoAntelacionKm Int    @default(1000)
+  
+  activo    Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: "Control horario SEL",
   description:
     "Aplicación de control horario para administración y conductores.",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

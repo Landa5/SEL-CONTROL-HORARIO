@@ -18,7 +18,7 @@ export async function GET(request: Request) {
             where: whereClause,
             include: {
                 empleado: {
-                    select: { id: true, nombre: true, apellidos: true, foto: false } // Avoid fetching large data
+                    select: { id: true, nombre: true, apellidos: true } // Avoid fetching large data
                 },
                 evaluador: {
                     select: { id: true, nombre: true, apellidos: true }

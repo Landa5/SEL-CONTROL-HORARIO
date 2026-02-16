@@ -1,10 +1,10 @@
 
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { TareaEstado, TareaPrioridad, TareaTipo } from '@prisma/client';
 
-export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     }
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params;
     const session = await getSession();
     if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });

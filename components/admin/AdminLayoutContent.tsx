@@ -115,6 +115,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
                 { href: '/admin/tareas', label: 'Taller y Mantenimiento', icon: Wrench },
                 { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
+                { href: '/admin/flota/inteligencia', label: 'Inteligencia de Flota', icon: BarChart2 },
                 { href: '/admin/informes/operativos', label: 'Informe Operativo', icon: FileText },
             ]
         },

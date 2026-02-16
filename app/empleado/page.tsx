@@ -21,8 +21,12 @@ import {
     ChevronRight,
     ChevronLeft,
     Droplet,
-    User
+    User,
+    Wifi,
+    WifiOff
 } from 'lucide-react';
+import SyncManager from '@/lib/pwa/SyncManager';
+import { toast } from 'sonner';
 import EmployeeAbsenceView from '@/components/empleado/EmployeeAbsenceView';
 import EmployeeAbsenceSummary from '@/components/empleado/EmployeeAbsenceSummary';
 import MainDashboardLayout from '@/components/layout/MainDashboardLayout';
@@ -35,6 +39,39 @@ export default function EmpleadoDashboard() {
     const [loading, setLoading] = useState(true);
     const [camiones, setCamiones] = useState<any[]>([]);
     const [tareas, setTareas] = useState<any[]>([]);
+    const [isOnline, setIsOnline] = useState(true);
+
+    useEffect(() => {
+        // Hydration fix for online status
+        setIsOnline(typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+        const handleOnline = () => {
+            setIsOnline(true);
+            toast.success('Conexión recuperada. Sincronizando...');
+            SyncManager.sync().then(() => {
+                toast.success('Sincronización completada');
+                fetchData();
+            });
+        };
+
+        const handleOffline = () => {
+            setIsOnline(false);
+            toast.warning('Modo Offline activado. Los datos se guardarán localmente.');
+        };
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        // Try to sync on mount if online and has pending items
+        if (navigator.onLine && SyncManager.hasPendingItems()) {
+            SyncManager.sync();
+        }
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
 
     // Monthly View States (Conductor)
     const [monthlyStats, setMonthlyStats] = useState<any[]>([]);
@@ -214,10 +251,25 @@ export default function EmpleadoDashboard() {
     };
 
     const handleClockIn = async () => {
+        const payload = { fecha: new Date(), horaEntrada: new Date(), estado: 'TRABAJANDO' };
+
+        if (!isOnline) {
+            SyncManager.enqueue('/api/jornadas', 'POST', payload);
+            toast.info('Fichaje guardado offline');
+            // Optimistic update
+            setJornada({ ...payload, id: 'temp-offline' });
+            if (session?.rol === 'CONDUCTOR') {
+                setActiveSection('vehiculo');
+            } else {
+                setActiveSection('summary');
+            }
+            return;
+        }
+
         const res = await fetch('/api/jornadas', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fecha: new Date(), horaEntrada: new Date(), estado: 'TRABAJANDO' })
+            body: JSON.stringify(payload)
         });
         if (res.ok) {
             await fetchData();
@@ -233,10 +285,21 @@ export default function EmpleadoDashboard() {
 
     const handleClockOut = async () => {
         if (!jornada) return;
+        const payload = { id: jornada.id, horaSalida: new Date(), observaciones };
+
+        if (!isOnline) {
+            SyncManager.enqueue('/api/jornadas', 'PUT', payload);
+            toast.info('Salida guardada offline');
+            setJornada({ ...jornada, horaSalida: new Date(), observaciones });
+            setObservaciones('');
+            setActiveSection('summary');
+            return;
+        }
+
         const res = await fetch('/api/jornadas', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: jornada.id, horaSalida: new Date(), observaciones })
+            body: JSON.stringify(payload)
         });
         if (res.ok) {
             setObservaciones('');
@@ -411,6 +474,14 @@ export default function EmpleadoDashboard() {
             }}
             onLogout={handleLogout}
         >
+            {/* OFFLINE BANNER */}
+            {!isOnline && (
+                <div className="bg-orange-500 text-white p-2 text-center text-sm font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
+                    <WifiOff className="w-4 h-4" />
+                    MODO OFFLINE - Los datos se guardarán localmente
+                </div>
+            )}
+
             {/* CONTENT INJECTION */}
             {activeSection === 'summary' && (
                 <div className="space-y-6">
@@ -725,9 +796,9 @@ export default function EmpleadoDashboard() {
                                             <p className="text-xs text-gray-500">{t.camion?.matricula}</p>
                                         </div>
                                         <div className={`px-2 py-1 rounded text-xs font-bold ${t.estado === 'PENDIENTE' ? 'bg-yellow-100 text-yellow-800' :
-                                                t.estado === 'EN_CURSO' ? 'bg-blue-100 text-blue-800' :
-                                                    t.estado === 'REVISION' ? 'bg-purple-100 text-purple-800' :
-                                                        'bg-gray-100'
+                                            t.estado === 'EN_CURSO' ? 'bg-blue-100 text-blue-800' :
+                                                t.estado === 'REVISION' ? 'bg-purple-100 text-purple-800' :
+                                                    'bg-gray-100'
                                             }`}>{t.estado}</div>
                                     </div>
                                 ))}

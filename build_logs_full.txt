@@ -1,0 +1,27 @@
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.7 (webpack)
+   - Environments: .env
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+ ✓ (pwa) Compiling for server...
+ ✓ (pwa) Compiling for server...
+ ✓ (pwa) Compiling for client (static)...
+ ○ (pwa) Service worker: C:\Users\Usuario.Usuario-PC\sel-control-horario\public\sw.js
+ ○ (pwa)   URL: /sw.js
+ ○ (pwa)   Scope: /
+ ✓ Compiled successfully in 10.4s
+   Running TypeScript ...
+Failed to compile.
+
+./app/admin/flota/inteligencia/page.tsx:120:35
+Type error: Cannot find name 'Gauge'.
+
+[0m [90m 118 |[39m                             value[33m=[39m{[32m`${avgCostPerKm.toFixed(3)} €/km`[39m}
+ [90m 119 |[39m                             sub[33m=[39m[32m"Media de la flota"[39m
+[31m[1m>[22m[39m[90m 120 |[39m                             icon[33m=[39m{[33mGauge[39m}
+ [90m     |[39m                                   [31m[1m^[22m[39m
+ [90m 121 |[39m                             color[33m=[39m{avgCostPerKm [33m>[39m [35m1.5[39m [33m?[39m [32m"bg-red-500"[39m [33m:[39m [32m"bg-blue-600"[39m}
+ [90m 122 |[39m                         [33m/[39m[33m>[39m
+ [90m 123 |[39m                         [33m<[39m[33mKPICard[39m[0m
+Next.js build worker exited with code: 1 and signal: null

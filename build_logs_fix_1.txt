@@ -1,0 +1,31 @@
+
+> sel-control-horario@0.1.0 build
+> next build --webpack
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+   ▲ Next.js 16.0.7 (webpack)
+   - Environments: .env
+
+ ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+   Creating an optimized production build ...
+ ✓ (pwa) Compiling for server...
+ ✓ (pwa) Compiling for server...
+ ✓ (pwa) Compiling for client (static)...
+ ○ (pwa) Service worker: C:\Users\Usuario.Usuario-PC\sel-control-horario\public\sw.js
+ ○ (pwa)   URL: /sw.js
+ ○ (pwa)   Scope: /
+ ✓ Compiled successfully in 14.9s
+   Running TypeScript ...
+Failed to compile.
+
+./app/api/admin/evaluaciones/route.ts:21:72
+Type error: Object literal may only specify known properties, and 'foto' does not exist in type 'EmpleadoSelect<DefaultArgs>'.
+
+[0m [90m 19 |[39m             include[33m:[39m {
+ [90m 20 |[39m                 empleado[33m:[39m {
+[31m[1m>[22m[39m[90m 21 |[39m                     select[33m:[39m { id[33m:[39m [36mtrue[39m[33m,[39m nombre[33m:[39m [36mtrue[39m[33m,[39m apellidos[33m:[39m [36mtrue[39m[33m,[39m foto[33m:[39m [36mfalse[39m } [90m// Avoid fetching large data[39m
+ [90m    |[39m                                                                        [31m[1m^[22m[39m
+ [90m 22 |[39m                 }[33m,[39m
+ [90m 23 |[39m                 evaluador[33m:[39m {
+ [90m 24 |[39m                     select[33m:[39m { id[33m:[39m [36mtrue[39m[33m,[39m nombre[33m:[39m [36mtrue[39m[33m,[39m apellidos[33m:[39m [36mtrue[39m }[0m
+Next.js build worker exited with code: 1 and signal: null
