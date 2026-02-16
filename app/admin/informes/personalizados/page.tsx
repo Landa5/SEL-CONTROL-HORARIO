@@ -244,7 +244,7 @@ export default function CustomReportsPage() {
                                                 </td>}
                                                 {metrics.km && <td className="p-4 text-center font-mono text-gray-600">{row.totalKm}</td>}
                                                 {metrics.fuel && <td className="p-4 text-center font-mono text-purple-700">{row.totalLitros} L</td>}
-                                                {metrics.punctuality && <td className={`p-4 text-center font-bold ${row.puntualidadMedia > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                                                {metrics.punctuality && <td className={`p-4 text-center font-bold ${row.puntualidadMedia > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                                     {row.puntualidadMedia > 0 ? `+${row.puntualidadMedia}m` : `${row.puntualidadMedia}m`}
                                                 </td>}
                                             </tr>

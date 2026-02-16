@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { startOfDay, endOfDay, parseISO, differenceInMinutes, isSameDay, isWeekend, eachDayOfInterval } from 'date-fns';
+import { startOfDay, endOfDay, parseISO, differenceInMinutes, isSameDay, isWeekend, eachDayOfInterval, format } from 'date-fns';
 
 export async function POST(request: Request) {
     try {
@@ -63,12 +63,6 @@ export async function POST(request: Request) {
             const empShifts = shifts.filter(s => s.empleadoId === emp.id);
             const empAbsences = absences.filter(a => a.empleadoId === emp.id);
 
-            let totalWorkedMinutes = 0;
-            let totalOvertimeMinutes = 0;
-            let totalKm = 0;
-            let totalLiter = 0;
-            let daysWorked = 0;
-            let punctualityScore = 0;
             let expectedMinutesTotal = 0;
 
             // Helper to parse "HH:MM"
@@ -104,10 +98,8 @@ export async function POST(request: Request) {
             // Iterate days to calculate expected vs actual
             // Note: For custom ranges spanning many months, iterating every day might be heavy if range is huge.
             // But for typical reporting (months/year), it's fine.
-            const daysInterval = eachDayOfInterval({ start, end });
-
-            daysInterval.forEach(day => {
-                // Check if it's a working day
+            // Iterate days to calculate expected vs actual and store details
+            const dailyDetails = eachDayOfInterval({ start, end }).map(day => {
                 const isWeekendDay = isWeekend(day);
 
                 // Check Holiday
@@ -133,19 +125,16 @@ export async function POST(request: Request) {
                 if (!isWeekendDay && !isHoliday && !absence) {
                     expectedMinutes = standardDailyHours * 60;
                 }
-                expectedMinutesTotal += expectedMinutes;
+
+                let workedMinutes = 0;
+                let overtime = 0;
+                let punctuality = 0;
+                let dailyKm = 0;
+                let dailyLiter = 0;
 
                 if (shift) {
-                    daysWorked++;
-
-                    // Basic aggregations from DB (assuming standardized via triggers or previous logic)
-                    // For custom report, reusing the raw worked logic is safer if we want consistency with monthly report
-                    // But iterating complete logic again here is code duplication.
-                    // For this V1, we will trust strict schedule logic implies valid data or close enough approximation
-                    // We will re-implement the basic net calculation for accuracy
-
                     const startShift = new Date(shift.horaEntrada);
-                    const endShift = shift.horaSalida ? new Date(shift.horaSalida) : new Date(); // approximate if running
+                    const endShift = shift.horaSalida ? new Date(shift.horaSalida) : new Date();
 
                     // Strict Start Logic
                     let effectiveStart = startShift;
@@ -172,35 +161,57 @@ export async function POST(request: Request) {
                         }
                     }
 
-                    minutes = Math.max(0, minutes);
-                    totalWorkedMinutes += minutes;
-
-                    const overtime = Math.max(0, minutes - expectedMinutes);
-                    totalOvertimeMinutes += overtime;
-
-                    // Calculate KM from Truck Uses
-                    const dailyKm = shift.usosCamion?.reduce((acc, u) => {
-                        const dist = (u.kmFinal || u.kmInicial) - u.kmInicial;
-                        return acc + Math.max(0, dist);
-                    }, 0) || 0;
-                    totalKm += dailyKm;
-
-                    // Calculate Liters
-                    totalLiter += shift.usosCamion?.reduce((acc, u) => acc + (u.litrosRepostados || 0), 0) || 0;
+                    workedMinutes = Math.max(0, minutes);
+                    overtime = Math.max(0, workedMinutes - expectedMinutes);
 
                     // Punctuality
                     if (expectedMinutes > 0 && emp.horaEntradaPrevista) {
                         const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
-                        // shift actual start vs expected
-                        // simple minutes comparison
-                        const shiftH = startShift.getHours();
-                        const shiftM = startShift.getMinutes();
-                        const shiftMinOfDay = shiftH * 60 + shiftM;
+                        const shiftMinOfDay = startShift.getHours() * 60 + startShift.getMinutes();
                         const expMinOfDay = h * 60 + m;
-                        punctualityScore += (shiftMinOfDay - expMinOfDay);
+                        punctuality = shiftMinOfDay - expMinOfDay;
                     }
+
+                    // KM & Fuel
+                    dailyKm = shift.usosCamion?.reduce((acc, u) => {
+                        const dist = (u.kmFinal || u.kmInicial) - u.kmInicial;
+                        return acc + Math.max(0, dist);
+                    }, 0) || 0;
+
+                    dailyLiter = shift.usosCamion?.reduce((acc, u) => acc + (u.litrosRepostados || 0), 0) || 0;
                 }
+
+                return {
+                    date: format(day, 'yyyy-MM-dd'),
+                    isWeekend: isWeekendDay,
+                    isHoliday,
+                    absenceType: absence?.tipo,
+                    hasShift: !!shift,
+                    start: shift ? format(new Date(shift.horaEntrada), 'HH:mm') : '-',
+                    end: shift?.horaSalida ? format(new Date(shift.horaSalida), 'HH:mm') : '-',
+                    workedMinutes,
+                    overtime,
+                    punctuality,
+                    km: dailyKm,
+                    liters: dailyLiter,
+                    expectedMinutes
+                };
             });
+
+            // Aggregate results
+            const totalWorkedMinutes = dailyDetails.reduce((acc, d) => acc + d.workedMinutes, 0);
+            const totalOvertimeMinutes = dailyDetails.reduce((acc, d) => acc + d.overtime, 0);
+            const totalKm = dailyDetails.reduce((acc, d) => acc + d.km, 0);
+            const totalLiter = dailyDetails.reduce((acc, d) => acc + d.liters, 0);
+            const daysWorked = dailyDetails.filter(d => d.hasShift).length;
+
+            // Average Punctuality (only days worked and expected to work)
+            const punctualityDays = dailyDetails.filter(d => d.hasShift && d.expectedMinutes > 0);
+            const punctualityScoreTotal = punctualityDays.reduce((acc, d) => acc + d.punctuality, 0);
+            const punctualityMedia = punctualityDays.length > 0 ? Math.round(punctualityScoreTotal / punctualityDays.length) : 0;
+
+            // Days Late (> 5 min tolerance)
+            const diasRetraso = dailyDetails.filter(d => d.hasShift && d.expectedMinutes > 0 && d.punctuality > 5).length;
 
             return {
                 id: emp.id,
@@ -212,7 +223,9 @@ export async function POST(request: Request) {
                 totalKm,
                 totalLitros: totalLiter,
                 diasTrabajados: daysWorked,
-                puntualidadMedia: daysWorked > 0 ? Math.round(punctualityScore / daysWorked) : 0
+                diasRetraso,
+                puntualidadMedia: punctualityMedia,
+                detalles: dailyDetails
             };
         });
 
