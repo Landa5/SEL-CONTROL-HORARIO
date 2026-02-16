@@ -19,8 +19,11 @@ export default function CustomReportsPage() {
         km: true,
         fuel: true,
         punctuality: true,
-        days: true
+        days: true,
+        daysLate: true
     });
+
+    const [selectedEmployee, setSelectedEmployee] = useState<any>(null); // For drill down modal
 
     // State for Data
     const [reportData, setReportData] = useState<any[]>([]);
@@ -63,6 +66,7 @@ export default function CustomReportsPage() {
         // Headers
         const headers = ['Empleado', 'Rol'];
         if (metrics.days) headers.push('Días Trab.');
+        if (metrics.daysLate) headers.push('Días Retraso');
         if (metrics.hours) headers.push('Total Horas');
         if (metrics.overtime) headers.push('Horas Extra');
         if (metrics.km) headers.push('Total KM');
@@ -73,6 +77,7 @@ export default function CustomReportsPage() {
         const rows = reportData.map(row => {
             const r = [row.nombre + ' ' + row.apellidos, row.rol];
             if (metrics.days) r.push(row.diasTrabajados);
+            if (metrics.daysLate) r.push(row.diasRetraso);
             if (metrics.hours) r.push(row.totalHoras.toString().replace('.', ','));
             if (metrics.overtime) r.push(row.totalExtras.toString().replace('.', ','));
             if (metrics.km) r.push(row.totalKm);
@@ -165,6 +170,10 @@ export default function CustomReportsPage() {
                                 <span>Días Trab.</span>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" checked={metrics.daysLate} onChange={e => setMetrics({ ...metrics, daysLate: e.target.checked })} className="rounded text-blue-600 focus:ring-blue-500" />
+                                <span>Días Retraso</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
                                 <input type="checkbox" checked={metrics.hours} onChange={e => setMetrics({ ...metrics, hours: e.target.checked })} className="rounded text-blue-600 focus:ring-blue-500" />
                                 <span>Total Horas</span>
                             </label>
@@ -220,6 +229,7 @@ export default function CustomReportsPage() {
                                         <th className="p-4 uppercase font-bold tracking-wider">Empleado</th>
                                         <th className="p-4 uppercase font-bold tracking-wider">Rol</th>
                                         {metrics.days && <th className="p-4 uppercase font-bold tracking-wider text-center">Días</th>}
+                                        {metrics.daysLate && <th className="p-4 uppercase font-bold tracking-wider text-center bg-red-900/50">Retrasos</th>}
                                         {metrics.hours && <th className="p-4 uppercase font-bold tracking-wider text-center">Horas</th>}
                                         {metrics.overtime && <th className="p-4 uppercase font-bold tracking-wider text-center bg-gray-700">Extras</th>}
                                         {metrics.km && <th className="p-4 uppercase font-bold tracking-wider text-center">KM</th>}
@@ -234,10 +244,14 @@ export default function CustomReportsPage() {
                                         </tr>
                                     ) : (
                                         reportData.map((row) => (
-                                            <tr key={row.id} className="hover:bg-blue-50/30 transition-colors">
-                                                <td className="p-4 font-bold text-gray-900">{row.nombre} {row.apellidos}</td>
+                                            <tr key={row.id}
+                                                className="hover:bg-blue-50/50 transition-colors cursor-pointer group"
+                                                onClick={() => setSelectedEmployee(row)}
+                                            >
+                                                <td className="p-4 font-bold text-gray-900 group-hover:text-blue-600">{row.nombre} {row.apellidos}</td>
                                                 <td className="p-4 text-xs font-bold text-gray-500 uppercase">{row.rol}</td>
                                                 {metrics.days && <td className="p-4 text-center font-mono">{row.diasTrabajados}</td>}
+                                                {metrics.daysLate && <td className="p-4 text-center font-bold text-red-600 bg-red-50/30">{row.diasRetraso}</td>}
                                                 {metrics.hours && <td className="p-4 text-center font-bold text-blue-700">{row.totalHoras} h</td>}
                                                 {metrics.overtime && <td className="p-4 text-center font-bold text-orange-600 bg-orange-50/30">
                                                     {row.totalExtras > 0 ? `+${row.totalExtras}` : '-'}
@@ -254,6 +268,74 @@ export default function CustomReportsPage() {
                             </table>
                         </div>
                     </Card>
+                </div>
+            )}
+
+            {/* DETAIL MODAL */}
+            {selectedEmployee && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in slide-in-from-bottom-10">
+                        <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+                            <div>
+                                <h3 className="text-lg font-black uppercase text-gray-800">{selectedEmployee.nombre} {selectedEmployee.apellidos}</h3>
+                                <p className="text-xs text-gray-500">Detalle Diario ({startDate} - {endDate})</p>
+                            </div>
+                            <button onClick={() => setSelectedEmployee(null)} className="p-2 hover:bg-gray-200 rounded-full text-gray-500">
+                                <span className="sr-only">Cerrar</span>
+                                ✕
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4">
+                            <table className="w-full text-sm">
+                                <thead className="text-xs font-bold text-gray-500 uppercase bg-gray-50 sticky top-0">
+                                    <tr>
+                                        <th className="p-3 text-left">Fecha</th>
+                                        <th className="p-3 text-center">Entrada</th>
+                                        <th className="p-3 text-center">Salida</th>
+                                        <th className="p-3 text-center">Total</th>
+                                        <th className="p-3 text-center">Puntualidad</th>
+                                        <th className="p-3 text-center">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {selectedEmployee.detalles?.map((day: any, idx: number) => {
+                                        // Formatting Punctuality Color
+                                        let punctColor = 'text-gray-400';
+                                        if (day.hasShift && day.expectedMinutes > 0) {
+                                            punctColor = day.punctuality > 5 ? 'text-red-600 font-bold' : 'text-green-600 font-bold';
+                                        }
+
+                                        return (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="p-3 font-mono text-gray-600">
+                                                    {day.date}
+                                                    {day.isWeekend && <span className="ml-2 text-[10px] bg-gray-200 px-1 rounded">FINDE</span>}
+                                                    {day.isHoliday && <span className="ml-2 text-[10px] bg-purple-100 text-purple-700 px-1 rounded">FESTIVO</span>}
+                                                </td>
+                                                <td className="p-3 text-center font-mono">{day.start}</td>
+                                                <td className="p-3 text-center font-mono">{day.end}</td>
+                                                <td className="p-3 text-center font-bold text-blue-700">
+                                                    {day.workedMinutes > 0 ? (day.workedMinutes / 60).toFixed(2) + 'h' : '-'}
+                                                </td>
+                                                <td className={`p-3 text-center ${punctColor}`}>
+                                                    {day.hasShift && day.expectedMinutes > 0 ? (day.punctuality > 0 ? `+${day.punctuality}m` : `${day.punctuality}m`) : '-'}
+                                                </td>
+                                                <td className="p-3 text-center">
+                                                    {day.absenceType ? (
+                                                        <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-1 rounded-full">{day.absenceType}</span>
+                                                    ) : !day.hasShift && !day.isWeekend && !day.isHoliday ? (
+                                                        <span className="text-[10px] text-red-400">Absence?</span>
+                                                    ) : (
+                                                        <span className="text-gray-400">-</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>
