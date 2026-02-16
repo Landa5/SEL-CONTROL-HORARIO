@@ -70,6 +70,12 @@ model Empleado {
   alertasDocumento  AlertaDocumento[]
   documentos        Documento[]
   documentosSubidos Documento[] @relation("SubidoPor")
+
+  evaluacionesRecibidas Evaluacion[] @relation("Evaluado")
+  evaluacionesRealizadas Evaluacion[] @relation("Evaluador")
+
+  rolPersonalizadoId Int?
+  rolPersonalizado   Rol?   @relation(fields: [rolPersonalizadoId], references: [id])
 }
 
 model Camion {
@@ -768,4 +774,81 @@ model ConfiguracionNegocio {
 
   updatedAt DateTime @updatedAt
   updatedBy Int?
+}
+
+// =======================
+// MÓDULO EVALUACIÓN DE DESEMPEÑO
+// =======================
+
+enum EstadoEvaluacion {
+  BORRADOR
+  COMPLETADA
+}
+
+model Evaluacion {
+  id                Int              @id @default(autoincrement())
+  
+  empleadoId        Int
+  empleado          Empleado         @relation("Evaluado", fields: [empleadoId], references: [id])
+  
+  evaluadorId       Int
+  evaluador         Empleado         @relation("Evaluador", fields: [evaluadorId], references: [id])
+  
+  periodo           String           // Ej: "2026-Q1", "2026-ANUAL"
+  fecha             DateTime         @default(now())
+  
+  puntuacionGeneral Int              @default(0) // 1-10
+  comentarios       String?          // Texto libre
+  objetivos         String?          // JSON o Lista de objetivos para el siguiente periodo
+  
+  estado            EstadoEvaluacion @default(BORRADOR)
+  
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  
+  @@unique([empleadoId, periodo]) // Un empleado solo puede tener una evaluación por periodo
+}
+
+// =======================
+// MÓDULO ROLES Y PERMISOS (FASE 2)
+// =======================
+
+model Rol {
+  id          Int       @id @default(autoincrement())
+  nombre      String    @unique // "ADMIN", "OFICINA", "SUPERVISOR"
+  descripcion String?
+  esSistema   Boolean   @default(false) // Si es true, no se puede borrar (ej: ADMIN)
+  
+  permisos    RolPermiso[]
+  empleados   Empleado[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Permiso {
+  id          Int       @id @default(autoincrement())
+  codigo      String    @unique // "empleados.ver", "nominas.editar"
+  descripcion String
+  categoria   String    // "RRHH", "FLOTA", "SISTEMA"
+  
+  roles       RolPermiso[]
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model RolPermiso {
+  id        Int      @id @default(autoincrement())
+  
+  rolId     Int
+  rol       Rol      @relation(fields: [rolId], references: [id], onDelete: Cascade)
+  
+  permisoId Int
+  permiso   Permiso  @relation(fields: [permisoId], references: [id], onDelete: Cascade)
+  
+  assignedAt DateTime @default(now())
+  assignedBy Int?     // ID del admin que asignó el permiso
+  
+  @@unique([rolId, permisoId])
 }

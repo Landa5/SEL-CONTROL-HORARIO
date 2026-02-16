@@ -30,7 +30,8 @@ import {
     Filter,
     ChevronDown,
     ChevronRight,
-    Car
+    Car,
+    CheckCircle
 } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
@@ -102,6 +103,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
                 { href: '/admin/jornadas', label: 'Jornada / Fichajes', icon: Clock },
                 { href: '/admin/formacion', label: 'Formación', icon: BookOpen },
                 { href: '/admin/nominas', label: 'Nóminas', icon: Euro },
+                { href: '/admin/evaluaciones', label: 'Evaluaciones', icon: CheckCircle }, // Changed icon to CheckCircle or similar
                 { href: '/admin/informes/operativos?tab=personnel', label: 'Informe Operativo RRHH', icon: FileText },
             ]
         },
@@ -141,7 +143,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
                 { href: '/admin/fiestas', label: 'Fiestas Locales', icon: PartyPopper },
                 { href: '/admin/configuracion/parametros', label: 'Parámetros Productividad', icon: Settings },
                 { href: '/admin/incentivos', label: 'Tarifas Incentivos', icon: Coins },
-                { href: '/admin/construccion?modulo=Roles y Permisos', label: 'Roles y Permisos', icon: UserCog },
+                { href: '/admin/roles', label: 'Roles y Permisos', icon: UserCog },
             ]
         }
     ];
