@@ -122,7 +122,65 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                         <p className="text-xs text-green-500 mt-1">Días con actividad</p>
                     </CardContent>
                 </Card>
+
+                {/* INCENTIVES SUMMARY CARD */}
+                <Card className="bg-white border-purple-100 shadow-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-10"><span className="text-4xl text-purple-500 font-black">€</span></div>
+                    <CardHeader className="pb-2"><CardTitle className="text-xs font-bold text-gray-400 uppercase">Incentivos Est.</CardTitle></CardHeader>
+                    <CardContent>
+                        <div className="text-3xl font-black text-purple-700">{(reportData.incentivesTotal || 0).toFixed(2)} €</div>
+                        <p className="text-xs text-purple-500 mt-1">Estimación bruta</p>
+                    </CardContent>
+                </Card>
             </div>
+
+            {/* INCENTIVES TABLE DETAIL */}
+            {reportData.incentives && reportData.incentives.length > 0 && (
+                <div className="bg-white p-6 rounded-xl border shadow-sm">
+                    <h3 className="text-lg font-black text-gray-800 uppercase tracking-tight mb-4 flex items-center gap-2">
+                        <span className="bg-purple-100 text-purple-600 p-1 rounded"><CalendarIcon className="w-4 h-4" /></span>
+                        Estimación Económica e Incentivos
+                    </h3>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left text-sm">
+                            <thead className="bg-gray-50 uppercase text-xs font-bold text-gray-500">
+                                <tr>
+                                    <th className="px-4 py-3">Concepto</th>
+                                    <th className="px-4 py-3 text-center">Tipo</th>
+                                    <th className="px-4 py-3 text-right">Cantidad / Base</th>
+                                    <th className="px-4 py-3 text-right">Precio Unitario</th>
+                                    <th className="px-4 py-3 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {reportData.incentives.map((inc: any, idx: number) => (
+                                    <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3">
+                                            <p className="font-bold text-gray-900">{inc.nombre}</p>
+                                            {inc.meta && <p className="text-xs text-green-600">{inc.meta}</p>}
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase
+                                                ${inc.tipo === 'FIJO' ? 'bg-blue-100 text-blue-700' :
+                                                    inc.tipo === 'VARIABLE' ? 'bg-orange-100 text-orange-700' :
+                                                        'bg-purple-100 text-purple-700'}`}>
+                                                {inc.tipo}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-right font-mono text-gray-600">{inc.cantidad}</td>
+                                        <td className="px-4 py-3 text-right font-mono text-gray-600">{inc.precio} €</td>
+                                        <td className="px-4 py-3 text-right font-black text-gray-900">{inc.total.toFixed(2)} €</td>
+                                    </tr>
+                                ))}
+                                <tr className="bg-gray-50 border-t-2 border-gray-100">
+                                    <td colSpan={4} className="px-4 py-3 text-right font-bold text-gray-500 uppercase">Total Estimado</td>
+                                    <td className="px-4 py-3 text-right font-black text-xl text-purple-700">{(reportData.incentivesTotal || 0).toFixed(2)} €</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* CALENDAR VIEW */}
             <Card className="border-0 shadow-none bg-transparent">

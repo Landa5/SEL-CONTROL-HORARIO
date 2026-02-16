@@ -259,6 +259,163 @@ export async function GET(request: Request) {
             };
         });
 
+        // ... (previous logic for stats)
+
+        // 5. Fetch Tariffs to Calculate Incentives
+        // We need both GLOBAL tariffs (empleadoId: null) and SPECIFIC tariffs (empleadoId: this employee)
+        // Specific generally overrides global. But simpler logic: Fetch all matching this employee OR global, then map.
+        const activeTariffs = await prisma.tarifaNomina.findMany({
+            where: {
+                activo: true,
+                OR: [
+                    { empleadoId: parseInt(employeeId) },
+                    { empleadoId: null } // Global
+                ]
+            },
+            include: {
+                concepto: true
+            }
+        });
+
+        // Resolve active tariff per concept (prefer active specific over global)
+        const relevantTariffs = new Map<string, number>(); // code -> value
+        activeTariffs.forEach(t => {
+            const code = t.concepto.codigo;
+            // If specific, always set. If global, set only if not set (or overwrite if we processed global first? No, we process list.)
+            // Logic: Store specific separate from global, then merge.
+        });
+
+        const globalTariffs: Record<string, number> = {};
+        const specificTariffs: Record<string, number> = {};
+
+        activeTariffs.forEach(t => {
+            const code = t.concepto.codigo;
+            if (t.empleadoId) {
+                specificTariffs[code] = t.valor;
+            } else {
+                globalTariffs[code] = t.valor;
+            }
+        });
+
+        // Merge: Specific overrides Global
+        const tariffs = { ...globalTariffs, ...specificTariffs };
+
+        // 6. Calculate Incentives
+        // Variables
+        // Calculated below from UsosCamion
+
+        // Wait, 'jornadaLaboral' in schema has 'kmRecorridos'? NO.
+        // It has relations 'usosCamion'.
+        // Let's recalculate KM from UsosCamion
+        let verifiedKm = 0;
+        shifts.forEach(s => {
+            if (s.usosCamion && s.usosCamion.length > 0) {
+                s.usosCamion.forEach((u: any) => verifiedKm += (u.kmRecorridos || 0));
+            }
+        });
+
+        // Trips / Downloads logic? 
+        // We lack a direct "Viajes" field in JornadaLaboral but let's assume specific logic or placeholders.
+        // For now, we'll assume 0 if not tracked, or try to infer.
+        // 'Viajes' usually in 'RegistroViaje' but that table might not be linked here directly.
+        // Simplification: We will only calculate what we have data for: KM, Punctuality, etc.
+
+        const incentives = [];
+
+        // --- A. PRECIO_KM ---
+        if (tariffs['PRECIO_KM']) {
+            incentives.push({
+                codigo: 'PRECIO_KM',
+                nombre: 'Kilometraje',
+                cantidad: verifiedKm,
+                precio: tariffs['PRECIO_KM'],
+                total: verifiedKm * tariffs['PRECIO_KM'],
+                tipo: 'VARIABLE'
+            });
+        }
+
+        // --- B. PLUS_ANTIGUEDAD ---
+        if (tariffs['PLUS_ANTIGUEDAD']) {
+            incentives.push({
+                codigo: 'PLUS_ANTIGUEDAD',
+                nombre: 'Plus Antigüedad',
+                cantidad: 1,
+                precio: tariffs['PLUS_ANTIGUEDAD'],
+                total: tariffs['PLUS_ANTIGUEDAD'],
+                tipo: 'FIJO'
+            });
+        }
+
+        // --- C. BONUS_SEGURIDAD ---
+        // Logic: active unless there is an "Incidencia" or "Accidente"? 
+        // We don't have that data fully linked yet. Assume 100% for estimation.
+        if (tariffs['BONUS_SEGURIDAD']) {
+            incentives.push({
+                codigo: 'BONUS_SEGURIDAD',
+                nombre: 'Prima Seguridad',
+                cantidad: 1,
+                precio: tariffs['BONUS_SEGURIDAD'],
+                total: tariffs['BONUS_SEGURIDAD'],
+                tipo: 'BONUS'
+            });
+        }
+
+        // --- D. PLUS_DISPONIBILIDAD ---
+        if (tariffs['PLUS_DISPONIBILIDAD']) {
+            incentives.push({
+                codigo: 'PLUS_DISPONIBILIDAD',
+                nombre: 'Plus Disponibilidad',
+                cantidad: 1,
+                precio: tariffs['PLUS_DISPONIBILIDAD'],
+                total: tariffs['PLUS_DISPONIBILIDAD'], // Could be daily? Usually monthly fixed.
+                tipo: 'FIJO'
+            });
+        }
+
+        // --- E. BONUS_PUNTUALIDAD ---
+        // Logic: avgPunctuality <= 5 mins late? 
+        // Let's say if avgPunctuality <= 5 (meaning late by 5 mins or less, or early)
+        const isPunctual = (daysWorkedCount > 0 && (punctualityScore / daysWorkedCount) <= 15); // 15 min courtesy?
+        if (tariffs['BONUS_PUNTUALIDAD']) {
+            incentives.push({
+                codigo: 'BONUS_PUNTUALIDAD',
+                nombre: 'Prima Puntualidad',
+                cantidad: isPunctual ? 1 : 0,
+                precio: tariffs['BONUS_PUNTUALIDAD'],
+                total: isPunctual ? tariffs['BONUS_PUNTUALIDAD'] : 0,
+                tipo: 'BONUS',
+                meta: isPunctual ? 'Objetivo Cumplido' : 'No cumplido (>15m media)'
+            });
+        }
+
+        // --- F. BONUS_CONSUMO (Eficiente) ---
+        // If we had consumption data...
+        // Placeholder
+        if (tariffs['BONUS_CONSUMO']) {
+            incentives.push({
+                codigo: 'BONUS_CONSUMO',
+                nombre: 'Conducción Eficiente',
+                cantidad: 1, // Assume OK
+                precio: tariffs['BONUS_CONSUMO'],
+                total: tariffs['BONUS_CONSUMO'],
+                tipo: 'BONUS'
+            });
+        }
+
+        // --- G. DIETAS ---
+        // If shifts have "Dietas" flag?
+        // Let's assume Dietas = Days Worked * Price (simple approach)
+        if (tariffs['DIETA_NACION']) {
+            incentives.push({
+                codigo: 'DIETA_NACION',
+                nombre: 'Dietas (Estimado)',
+                cantidad: daysWorkedCount,
+                precio: tariffs['DIETA_NACION'],
+                total: daysWorkedCount * tariffs['DIETA_NACION'],
+                tipo: 'VARIABLE'
+            });
+        }
+
         // Summary
         const stats = {
             employee,
@@ -268,9 +425,12 @@ export async function GET(request: Request) {
                 totalOvertime: totalOvertimeMinutes / 60,
                 daysWorked: daysWorkedCount, // Days physically present
                 avgPunctuality: daysWorkedCount > 0 ? Math.round(punctualityScore / daysWorkedCount) : 0,
-                expectedHours: totalExpectedMinutes / 60
+                expectedHours: totalExpectedMinutes / 60,
+                totalKm: verifiedKm
             },
-            shifts: shiftDetails
+            shifts: shiftDetails,
+            incentives: incentives, // NEW FIELD
+            incentivesTotal: incentives.reduce((acc, i) => acc + i.total, 0)
         };
 
         return NextResponse.json(stats);
