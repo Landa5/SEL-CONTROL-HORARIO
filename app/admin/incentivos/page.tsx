@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Save, Coins, ArrowLeft, SaveAll, TrendingUp, Shield, GraduationCap, Clock, user } from 'lucide-react';
+import { Save, Coins, ArrowLeft, SaveAll, TrendingUp, Shield, GraduationCap, Clock, User } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
