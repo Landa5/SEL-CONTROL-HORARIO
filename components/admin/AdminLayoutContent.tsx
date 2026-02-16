@@ -27,6 +27,7 @@ import {
     LogOut,
     Menu,
     X,
+    Filter,
     ChevronDown,
     ChevronRight,
     Car
@@ -127,6 +128,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
             label: 'Control y Auditoría',
             items: [
                 { href: '/admin/informes/mensuales', label: 'Informes Mensuales', icon: BarChart2 },
+                { href: '/admin/informes/personalizados', label: 'Informes Personalizados', icon: Filter },
                 { href: '/admin/informes/gestoria', label: 'Exportaciones Gestoría', icon: Download },
                 { href: '/admin/informes/legal', label: 'Registro Jornada Legal', icon: FileCheck },
                 { href: '/admin/auditoria', label: 'Auditoría Interna', icon: ShieldCheck },
