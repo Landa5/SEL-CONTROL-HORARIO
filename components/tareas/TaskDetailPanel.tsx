@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Calendar, User, Truck, MapPin, AlertCircle, Phone, ArrowRight } from 'lucide-react';
+import { X, Calendar, User, Truck, MapPin, AlertCircle, Phone, ArrowRight, Pencil, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import TaskCRM from './TaskCRM';
+import TaskForm from './TaskForm';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -19,6 +20,8 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
     const [loading, setLoading] = useState(false);
     const [employees, setEmployees] = useState<any[]>([]);
     const [isAdminOrOffice, setIsAdminOrOffice] = useState(false);
+    const [userRole, setUserRole] = useState<string>('');
+    const [isEditing, setIsEditing] = useState(false);
 
     // Fetch employees for assignment
     useEffect(() => {
@@ -34,15 +37,13 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
             }
         };
 
-        // Check session role for permissions (Simplified check, ideally passed from parent or context)
-        // For now, we'll fetch employees regardless, and UI logic can hide/show based on role if we had it.
-        // We'll trust the API to handle permissions or just allow it if the user can see the detailed view.
         fetchEmployees();
 
         // Get session to check role
         fetch('/api/auth/session')
             .then(res => res.json())
             .then(session => {
+                if (session?.rol) setUserRole(session.rol);
                 if (session?.rol === 'ADMIN' || session?.rol === 'OFICINA') {
                     setIsAdminOrOffice(true);
                 }
@@ -54,8 +55,10 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
     useEffect(() => {
         if (taskId) {
             fetchTaskDetails(taskId);
+            setIsEditing(false); // Reset edit mode when opening new task
         } else {
             setTask(null);
+            setIsEditing(false);
         }
     }, [taskId]);
 
@@ -126,35 +129,74 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
             <div className={`relative w-full max-w-2xl bg-white h-full shadow-2xl transform transition-transform duration-300 flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
 
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b">
+                <div className="flex items-center justify-between p-4 border-b bg-white z-10">
                     <div className="flex items-center gap-3">
                         <Button variant="ghost" size="icon" onClick={onClose}>
                             <X className="w-5 h-5 text-gray-500" />
                         </Button>
                         <div>
-                            <p className="text-xs font-bold text-gray-400 uppercase">
-                                #{task?.id} • {task?.tipo}
-                            </p>
-                            <h2 className="text-lg font-bold text-gray-900 leading-tight">
-                                {task?.titulo || 'Cargando...'}
-                            </h2>
+                            {loading ? (
+                                <p className="text-sm font-medium text-gray-400">Cargando...</p>
+                            ) : isEditing ? (
+                                <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} className="p-0 h-auto">
+                                        <ArrowLeft className="w-4 h-4 mr-1" /> Volver
+                                    </Button>
+                                    <h2 className="text-lg font-bold text-gray-900">Editar Tarea</h2>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-xs font-bold text-gray-400 uppercase">
+                                        #{task?.id} • {task?.tipo}
+                                    </p>
+                                    <h2 className="text-lg font-bold text-gray-900 leading-tight">
+                                        {task?.titulo || '...'}
+                                    </h2>
+                                </>
+                            )}
                         </div>
                     </div>
-                    {task && (
+
+                    {!loading && task && (
                         <div className="flex gap-2">
-                            <select
-                                className="text-xs font-bold uppercase bg-gray-100 border-none rounded-lg p-2 cursor-pointer hover:bg-gray-200"
-                                value={task.estado}
-                                onChange={(e) => handleStatusChange(e.target.value)}
-                            >
-                                <option value="PENDIENTE">Pendiente</option>
-                                <option value="ABIERTA">Abierta</option>
-                                <option value="EN_CURSO">En Curso</option>
-                                <option value="BLOQUEADA">Bloqueada</option>
-                                <option value="REVISION">Revisión</option>
-                                <option value="COMPLETADA">Completada</option>
-                                <option value="CERRADA">Cerrada</option>
-                            </select>
+                            {!isEditing && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setIsEditing(true)}
+                                    className="hidden sm:flex"
+                                >
+                                    <Pencil className="w-4 h-4 mr-2" /> Editar
+                                </Button>
+                            )}
+
+                            {/* Mobile Edit Icon */}
+                            {!isEditing && (
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    onClick={() => setIsEditing(true)}
+                                    className="sm:hidden"
+                                >
+                                    <Pencil className="w-4 h-4" />
+                                </Button>
+                            )}
+
+                            {!isEditing && (
+                                <select
+                                    className="text-xs font-bold uppercase bg-gray-100 border-none rounded-lg p-2 cursor-pointer hover:bg-gray-200"
+                                    value={task.estado}
+                                    onChange={(e) => handleStatusChange(e.target.value)}
+                                >
+                                    <option value="PENDIENTE">Pendiente</option>
+                                    <option value="ABIERTA">Abierta</option>
+                                    <option value="EN_CURSO">En Curso</option>
+                                    <option value="BLOQUEADA">Bloqueada</option>
+                                    <option value="REVISION">Revisión</option>
+                                    <option value="COMPLETADA">Completada</option>
+                                    <option value="CERRADA">Cerrada</option>
+                                </select>
+                            )}
                         </div>
                     )}
                 </div>
@@ -163,6 +205,18 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                 {loading || !task ? (
                     <div className="flex-1 flex items-center justify-center">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                    </div>
+                ) : isEditing ? (
+                    <div className="flex-1 overflow-y-auto bg-gray-50">
+                        <TaskForm
+                            rol={userRole}
+                            initialData={task}
+                            onSuccess={() => {
+                                setIsEditing(false);
+                                fetchTaskDetails(task.id);
+                                onUpdate();
+                            }}
+                        />
                     </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto bg-gray-50/50">

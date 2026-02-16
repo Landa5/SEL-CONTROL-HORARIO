@@ -8,9 +8,10 @@ import { Truck, MapPin, Building2, AlertTriangle, Save, Loader2, UserPlus, Alert
 interface TaskFormProps {
     rol: string; // 'ADMIN', 'CONDUCTOR', etc.
     onSuccess: () => void;
+    initialData?: any;
 }
 
-export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
+export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -18,27 +19,32 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
     const [empleados, setEmpleados] = useState<any[]>([]);
 
     // Form State
-    const [tipo, setTipo] = useState(rol === 'ADMIN' ? 'TAREA_INTERNA' : 'AVERIA');
-    const [activoTipo, setActivoTipo] = useState(rol === 'ADMIN' ? '' : 'CAMION');
-    const [titulo, setTitulo] = useState('');
-    const [descripcion, setDescripcion] = useState('');
-    const [prioridad, setPrioridad] = useState('MEDIA');
-    const [asignadoAId, setAsignadoAId] = useState('');
+    const [tipo, setTipo] = useState(initialData?.tipo || (rol === 'ADMIN' ? 'TAREA_INTERNA' : 'AVERIA'));
+    const [activoTipo, setActivoTipo] = useState(initialData?.activoTipo || (rol === 'ADMIN' ? '' : 'CAMION'));
+    const [titulo, setTitulo] = useState(initialData?.titulo || '');
+    const [descripcion, setDescripcion] = useState(initialData?.descripcion || '');
+    const [prioridad, setPrioridad] = useState(initialData?.prioridad || 'MEDIA');
+    const [asignadoAId, setAsignadoAId] = useState(initialData?.asignadoAId || '');
 
     // Conditional Fields
-    const [matricula, setMatricula] = useState('');
-    const [kilometros, setKilometros] = useState('');
-    const [descargas, setDescargas] = useState('');
-    const [clienteNombre, setClienteNombre] = useState('');
-    const [ubicacionTexto, setUbicacionTexto] = useState('');
-    const [contactoNombre, setContactoNombre] = useState('');
-    const [contactoTelefono, setContactoTelefono] = useState('');
+    const [matricula, setMatricula] = useState(initialData?.matricula || '');
+    // Handle specific cases where data might be mixed or need parsing
+    const [kilometros, setKilometros] = useState(initialData?.kmRecorridos || ''); // Note: API might allow kmRecorridos or similar
+    const [descargas, setDescargas] = useState(initialData?.descargas || '');
+    const [clienteNombre, setClienteNombre] = useState(initialData?.clienteNombre || '');
+    const [ubicacionTexto, setUbicacionTexto] = useState(initialData?.ubicacionTexto || '');
+    const [contactoNombre, setContactoNombre] = useState(initialData?.contactoNombre || '');
+    const [contactoTelefono, setContactoTelefono] = useState(initialData?.contactoTelefono || '');
 
     const [camiones, setCamiones] = useState<any[]>([]);
 
     useEffect(() => {
         fetchCamiones();
-        if (rol === 'ADMIN') {
+        // Always fetch employees if checking edit mode or if ADMIN, to allow reassignment
+        // Or keep current logic: if ADMIN. 
+        // For editing, it's useful to see names even if you can't reassign easily without admin, 
+        // but let's stick to the prop 'rol' logic for now to avoid breaking permissions.
+        if (rol === 'ADMIN' || rol === 'OFICINA') {
             fetchEmpleados();
         }
     }, [rol]);
@@ -83,17 +89,28 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                 asignadoAId: asignadoAId ? Number(asignadoAId) : undefined
             };
 
-            const res = await fetch('/api/tareas', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
+            let res;
+            if (initialData?.id) {
+                // UPDATE / PATCH
+                res = await fetch(`/api/tareas/${initialData.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                // CREATE / POST
+                res = await fetch('/api/tareas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
 
             if (res.ok) {
                 onSuccess();
             } else {
                 const data = await res.json();
-                setError(data.error || 'Error al crear la tarea');
+                setError(data.error || 'Error al guardar la tarea');
             }
         } catch (err) {
             setError('Error de conexión');
@@ -102,12 +119,14 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
         }
     };
 
+    const isEditing = !!initialData?.id;
+
     return (
         <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
 
             {/* TIPO Y PRIORIDAD */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {rol === 'ADMIN' && (
+                {(rol === 'ADMIN' || rol === 'OFICINA') && (
                     <div className="space-y-4">
                         <div className="space-y-2">
                             <label className="text-sm font-bold text-gray-700">Tipo de Tarea</label>
@@ -142,7 +161,7 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                 )}
 
                 {/* VISIBLE PARA TODOS EXCEPTO ADMIN */}
-                {rol !== 'ADMIN' && (
+                {rol !== 'ADMIN' && rol !== 'OFICINA' && (
                     <div className="md:col-span-2">
                         <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
                             Tipo de Registro
@@ -252,7 +271,8 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                             <label className="text-xs font-bold text-gray-500 uppercase">Kilómetros</label>
                             <input
                                 type="number"
-                                required
+                                // required only for new breakdowns on trucks? maybe optional on edit
+                                required={!isEditing}
                                 placeholder="Ej: 150000"
                                 className="w-full p-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-orange-500"
                                 value={kilometros}
@@ -366,7 +386,7 @@ export default function TaskForm({ rol, onSuccess }: TaskFormProps) {
                 disabled={loading}
             >
                 {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
-                {loading ? 'Creando...' : 'REGISTRAR INCIDENCIA'}
+                {loading ? 'Guardando...' : (isEditing ? 'GUARDAR CAMBIOS' : 'REGISTRAR INCIDENCIA')}
             </Button>
         </form >
     );

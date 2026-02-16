@@ -53,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // Status Change
         if (body.estado && body.estado !== currentTarea.estado) {
             updateData.estado = body.estado as TareaEstado;
-            historialMensaje += `Estado cambiado a ${body.estado}.`;
+            historialMensaje += `Estado cambiado a ${body.estado}. `;
 
             // Handle closing dates
             if (body.estado === 'COMPLETADA' || body.estado === 'CANCELADA') {
@@ -65,7 +65,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             if (body.estado === 'BLOQUEADA') {
                 if (body.motivoBloqueo) {
                     updateData.motivoBloqueo = body.motivoBloqueo;
-                    historialMensaje += `Motivo: ${body.motivoBloqueo}.`;
+                    historialMensaje += `Motivo: ${body.motivoBloqueo}. `;
                 }
             } else {
                 updateData.motivoBloqueo = null;
@@ -75,7 +75,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // Priority Change
         if (body.prioridad && body.prioridad !== currentTarea.prioridad) {
             updateData.prioridad = body.prioridad as TareaPrioridad;
-            historialMensaje += `Prioridad cambiada a ${body.prioridad}.`;
+            historialMensaje += `Prioridad cambiada a ${body.prioridad}. `;
         }
 
         // Assignment Change
@@ -87,10 +87,54 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             }
         }
 
-        // Other fields
-        if (body.titulo) updateData.titulo = body.titulo;
-        if (body.descripcion) updateData.descripcion = body.descripcion;
+        // Core Fields
+        if (body.titulo && body.titulo !== currentTarea.titulo) {
+            updateData.titulo = body.titulo;
+            historialMensaje += `Título actualizado. `;
+        }
+        if (body.descripcion && body.descripcion !== currentTarea.descripcion) {
+            updateData.descripcion = body.descripcion;
+            historialMensaje += `Descripción actualizada. `;
+        }
         if (body.fechaLimite) updateData.fechaLimite = new Date(body.fechaLimite);
+        if (body.tipo && body.tipo !== currentTarea.tipo) {
+            updateData.tipo = body.tipo as TareaTipo;
+            historialMensaje += `Tipo cambiado a ${body.tipo}. `;
+        }
+
+        // Context Fields
+        if (body.activoTipo && body.activoTipo !== currentTarea.activoTipo) {
+            updateData.activoTipo = body.activoTipo;
+        }
+
+        // Validar matricula y actualizar camionId si cambia
+        if (body.matricula !== undefined && body.matricula !== currentTarea.matricula) {
+            updateData.matricula = body.matricula;
+            if (body.matricula) {
+                const camion = await prisma.camion.findUnique({ where: { matricula: body.matricula } });
+                updateData.camionId = camion ? camion.id : null;
+            } else {
+                updateData.camionId = null;
+            }
+            historialMensaje += `Matrícula/Activo actualizado. `;
+        }
+
+        // Other Context Fields
+        if (body.clienteNombre !== undefined && body.clienteNombre !== currentTarea.clienteNombre) {
+            updateData.clienteNombre = body.clienteNombre;
+        }
+        if (body.ubicacionTexto !== undefined && body.ubicacionTexto !== currentTarea.ubicacionTexto) {
+            updateData.ubicacionTexto = body.ubicacionTexto;
+        }
+        if (body.contactoNombre !== undefined && body.contactoNombre !== currentTarea.contactoNombre) {
+            updateData.contactoNombre = body.contactoNombre;
+        }
+        if (body.contactoTelefono !== undefined && body.contactoTelefono !== currentTarea.contactoTelefono) {
+            updateData.contactoTelefono = body.contactoTelefono;
+        }
+        if (body.descargas !== undefined && Number(body.descargas) !== currentTarea.descargas) {
+            updateData.descargas = Number(body.descargas);
+        }
 
         // Update
         const updatedTarea = await prisma.tarea.update({
