@@ -198,6 +198,25 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                     </div>
                 )}
 
+                {/* PROTOCOLO RECLAMACION */}
+                {tipo === 'RECLAMACION' && (
+                    <div className="md:col-span-2 bg-blue-50 border border-blue-200 rounded-lg p-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="flex items-start gap-3">
+                            <div className="bg-blue-100 p-2 rounded-full">
+                                <AlertTriangle className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-blue-900 text-sm uppercase">Protocolo de Atención al Cliente</h4>
+                                <ul className="mt-2 space-y-1 text-sm text-blue-800 list-disc list-inside">
+                                    <li><strong>Escuchar:</strong> Deja que el cliente explique todo el problema sin interrumpir.</li>
+                                    <li><strong>Empatizar:</strong> Muestra comprensión ("Entiendo su molestia"). No busques culpables ahora.</li>
+                                    <li><strong>Registrar:</strong> Apunta todos los detalles (lugar, hora, personas) en la descripción.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 <div className="space-y-2">
                     <label className="text-sm font-bold text-gray-700">Prioridad</label>
                     <div className="flex gap-2">
