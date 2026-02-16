@@ -745,3 +745,27 @@ model ConfiguracionAusencias {
   updatedBy Int? // ID del admin que modificó
   updatedAt DateTime @updatedAt
 }
+
+// =======================
+// MÓDULO PARAMETROS PRODUCTIVIDAD
+// =======================
+
+model ConfiguracionNegocio {
+  id Int @id @default(autoincrement())
+  
+  // 1. FLOTA
+  consumoObjetivoL100Km Float  @default(30.0) // L/100km
+  costePorKm            Float  @default(1.20) // €/km
+  alertaMantenimientoKm Int    @default(50000) // km
+
+  // 2. PERSONAL
+  cortesiaPuntualidadMin    Int   @default(5)
+  limiteHorasExtraMensual   Float @default(20.0)
+  costeHoraExtraReferencia  Float @default(15.0) // €/hora
+
+  // 3. OPERATIVA
+  tiempoObjetivoCargaDescargaMin Int @default(45)
+
+  updatedAt DateTime @updatedAt
+  updatedBy Int?
+}

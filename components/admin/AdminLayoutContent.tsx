@@ -139,7 +139,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
             label: 'Configuración',
             items: [
                 { href: '/admin/fiestas', label: 'Fiestas Locales', icon: PartyPopper },
-                { href: '/admin/construccion?modulo=Parámetros Productividad', label: 'Parámetros Productividad', icon: Settings },
+                { href: '/admin/configuracion/parametros', label: 'Parámetros Productividad', icon: Settings },
                 { href: '/admin/construccion?modulo=Tarifas Incentivos', label: 'Tarifas Incentivos', icon: Coins },
                 { href: '/admin/construccion?modulo=Roles y Permisos', label: 'Roles y Permisos', icon: UserCog },
             ]
