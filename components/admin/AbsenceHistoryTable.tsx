@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/Table";
-import { format } from 'date-fns';
+import { format, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { FileText, CheckCircle, XCircle, Trash2, Calendar } from 'lucide-react';
 import { Button } from "@/components/ui/Button";
@@ -175,6 +175,9 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                             {abs.fechaInicio !== abs.fechaFin && (
                                                 <> - {format(new Date(abs.fechaFin), 'dd MMM yyyy', { locale: es })}</>
                                             )}
+                                            <span className="ml-2 text-xs font-bold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                                                ({differenceInCalendarDays(new Date(abs.fechaFin), new Date(abs.fechaInicio)) + 1} días)
+                                            </span>
                                         </div>
                                     </TableCell>
                                     <TableCell>
