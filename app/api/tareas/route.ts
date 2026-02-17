@@ -36,7 +36,7 @@ export async function POST(request: Request) {
         // Map Frontend Enums to Backend Enums
         let tipoFinal: TareaTipo = TareaTipo.OPERATIVA;
         if (body.tipo === 'AVERIA' || body.tipo === 'MANTENIMIENTO') {
-            tipoFinal = TareaTipo.OPERATIVA;
+            tipoFinal = TareaTipo.TALLER;
         } else if (body.tipo === 'TAREA_INTERNA') {
             tipoFinal = TareaTipo.ADMINISTRATIVA;
         } else if (Object.values(TareaTipo).includes(body.tipo as TareaTipo)) {

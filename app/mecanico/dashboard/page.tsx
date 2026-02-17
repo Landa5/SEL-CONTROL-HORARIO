@@ -59,7 +59,7 @@ export default function MecanicoDashboard() {
 
     const fetchTareas = async () => {
         try {
-            const res = await fetch('/api/tareas?tipo=AVERIA');
+            const res = await fetch('/api/tareas?tipo=TALLER');
             if (res.ok) {
                 const data = await res.json();
                 setTareas(data);
@@ -122,7 +122,7 @@ export default function MecanicoDashboard() {
 
     if (loading) return <div className="p-4 text-center">Cargando panel...</div>;
 
-    const pendientes = tareas.filter(t => t.estado === 'ABIERTA' || t.estado === 'EN_CURSO');
+    const pendientes = tareas.filter(t => t.estado === 'PENDIENTE' || t.estado === 'BACKLOG' || t.estado === 'EN_CURSO');
 
     return (
         <div className="max-w-5xl mx-auto space-y-6 pb-12">
