@@ -80,15 +80,15 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                 tipo,
                 prioridad,
                 activoTipo: activoTipo || undefined,
-                matricula: activoTipo === 'CAMION' ? matricula : undefined,
-                kilometros: (activoTipo === 'CAMION' && kilometros) ? Number(kilometros) : undefined,
-                descargas: descargas ? Number(descargas) : undefined,
-                clienteNombre: activoTipo === 'DEPOSITO_CLIENTE' ? clienteNombre : undefined,
-                ubicacionTexto: ['BASE', 'DEPOSITO_CLIENTE', 'OTRO'].includes(activoTipo) ? ubicacionTexto : undefined,
-                contactoNombre,
-                contactoTelefono,
-                asignadoAId: asignadoAId ? Number(asignadoAId) : undefined,
-                proyectoId: proyectoId ? Number(proyectoId) : undefined
+                matricula: activoTipo === 'CAMION' ? matricula : null,
+                kilometros: (activoTipo === 'CAMION' && kilometros) ? Number(kilometros) : null,
+                descargas: descargas ? Number(descargas) : null,
+                clienteNombre: activoTipo === 'DEPOSITO_CLIENTE' ? clienteNombre : null,
+                ubicacionTexto: ['BASE', 'DEPOSITO_CLIENTE', 'OTRO'].includes(activoTipo) ? ubicacionTexto : null,
+                contactoNombre: contactoNombre || null,
+                contactoTelefono: contactoTelefono || null,
+                asignadoAId: asignadoAId ? Number(asignadoAId) : null,
+                proyectoId: proyectoId ? Number(proyectoId) : null
             };
 
             let res;

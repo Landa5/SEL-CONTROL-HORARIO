@@ -42,6 +42,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     try {
         const body = await request.json();
+        console.log(`[PATCH Tarea ${id}] Body:`, body);
 
         // Fetch current state
         const currentTarea = await prisma.tarea.findUnique({ where: { id: Number(id) } });
@@ -119,7 +120,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             const newAssignee = body.asignadoAId ? Number(body.asignadoAId) : null;
             if (newAssignee !== currentTarea.asignadoAId) {
                 updateData.asignadoAId = newAssignee;
+                // If assigning to someone, and status is BACKLOG, move to PENDING
+                if (newAssignee && currentTarea.estado === 'BACKLOG') {
+                    updateData.estado = 'PENDIENTE';
+                }
                 historialMensaje += `Asignación actualizada. `;
+            }
+        }
+
+        // Project Change (Handle explicit clearing or updating)
+        if (body.proyectoId !== undefined) {
+            const newProjectId = body.proyectoId ? Number(body.proyectoId) : null;
+            if (newProjectId !== currentTarea.proyectoId) {
+                updateData.proyectoId = newProjectId;
+                historialMensaje += `Proyecto actualizado. `;
             }
         }
 
@@ -141,18 +155,26 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         // Context Fields
         if (body.activoTipo && body.activoTipo !== currentTarea.activoTipo) {
             updateData.activoTipo = body.activoTipo;
+            // If changing context away from CAMION, clear matricula/camionId
+            if (body.activoTipo !== 'CAMION') {
+                updateData.matricula = null;
+                updateData.camionId = null;
+                historialMensaje += `Contexto activo cambiado (Desvinculado de camión). `;
+            }
         }
 
-        // Validar matricula y actualizar camionId si cambia
+        // Matricula Update (Only if active type is CAMION or implicitly)
         if (body.matricula !== undefined && body.matricula !== currentTarea.matricula) {
-            updateData.matricula = body.matricula;
-            if (body.matricula) {
+            // If manual clear (null) or change
+            if (body.matricula === null || body.matricula === '') {
+                updateData.matricula = null;
+                updateData.camionId = null;
+            } else {
+                updateData.matricula = body.matricula;
                 const camion = await prisma.camion.findUnique({ where: { matricula: body.matricula } });
                 updateData.camionId = camion ? camion.id : null;
-            } else {
-                updateData.camionId = null;
             }
-            historialMensaje += `Matrícula/Activo actualizado. `;
+            historialMensaje += `Matrícula actualizada. `;
         }
 
         // Other Context Fields
