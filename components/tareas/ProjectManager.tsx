@@ -32,7 +32,11 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu";
 
-export default function ProjectManager() {
+interface ProjectManagerProps {
+    onSelectProject?: (project: any) => void;
+}
+
+export default function ProjectManager({ onSelectProject }: ProjectManagerProps) {
     const [projects, setProjects] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -129,12 +133,7 @@ export default function ProjectManager() {
     const filterProjects = (status: string) => {
         return projects.filter(p => {
             if (p.estado !== status) return false;
-
-            // For Completed, check 24h rule?
-            // User requested: "hecho (ultimas 24h)"
             if (status === 'COMPLETADA') {
-                // Check updatedAt
-                // Ideally backend sends updatedAt
                 const updated = new Date(p.updatedAt).getTime();
                 const now = new Date().getTime();
                 const diffHours = (now - updated) / (1000 * 60 * 60);
@@ -201,24 +200,28 @@ export default function ProjectManager() {
 
                             <div className="flex-1 overflow-y-auto space-y-3">
                                 {filterProjects(col.id).map(proj => (
-                                    <Card key={proj.id} className="cursor-pointer hover:shadow-md transition-shadow bg-white border-l-4 border-l-blue-500">
+                                    <Card
+                                        key={proj.id}
+                                        className="cursor-pointer hover:shadow-md transition-shadow bg-white border-l-4 border-l-blue-500 hover:scale-[1.02] active:scale-[0.98]"
+                                        onClick={() => onSelectProject && onSelectProject(proj)}
+                                    >
                                         <CardContent className="p-3">
                                             <div className="flex justify-between items-start">
                                                 <h4 className="font-bold text-gray-800">{proj.nombre}</h4>
                                                 <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                        <Button variant="ghost" className="h-6 w-6 p-0">
+                                                        <Button variant="ghost" className="h-6 w-6 p-0" onClick={(e: React.MouseEvent) => e.stopPropagation()}>
                                                             <MoreHorizontal className="h-4 w-4 text-gray-400" />
                                                         </Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end">
                                                         <DropdownMenuLabel>Mover a...</DropdownMenuLabel>
                                                         {columns.map(c => c.id !== proj.estado && (
-                                                            <DropdownMenuItem key={c.id} onClick={() => handleMove(proj.id, c.id)}>
+                                                            <DropdownMenuItem key={c.id} onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleMove(proj.id, c.id); }}>
                                                                 <c.icon className="mr-2 h-4 w-4" /> {c.label}
                                                             </DropdownMenuItem>
                                                         ))}
-                                                        <DropdownMenuItem onClick={() => handleDelete(proj.id)} className="text-red-600">
+                                                        <DropdownMenuItem onClick={(e: React.MouseEvent) => { e.stopPropagation(); handleDelete(proj.id); }} className="text-red-600">
                                                             <Trash2 className="mr-2 h-4 w-4" /> Eliminar
                                                         </DropdownMenuItem>
                                                     </DropdownMenuContent>
@@ -231,9 +234,13 @@ export default function ProjectManager() {
                                                 <span className="text-[10px] text-gray-400">
                                                     {format(new Date(proj.createdAt), 'dd MMM', { locale: es })}
                                                 </span>
-                                                {proj._count?.tareas > 0 && (
+                                                {proj._count?.tareas > 0 ? (
                                                     <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">
                                                         {proj._count.tareas} Tareas
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] text-gray-300 italic">
+                                                        Sin tareas
                                                     </span>
                                                 )}
                                             </div>

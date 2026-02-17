@@ -32,6 +32,7 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
     const [filterText, setFilterText] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
+    const [selectedProject, setSelectedProject] = useState<any | null>(null);
 
     useEffect(() => {
         if (activeTab === 'TAREAS') {
@@ -52,6 +53,8 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
 
                 const activeTasks = data.filter((t: any) => {
                     if (!['COMPLETADA', 'CERRADA', 'CANCELADA'].includes(t.estado)) return true;
+                    // Keep project completed tasks a bit longer? or same rule?
+                    // Same rule applies generally.
                     const updated = new Date(t.updatedAt).getTime();
                     return (now.getTime() - updated) < oneDay;
                 });
@@ -90,12 +93,21 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
     };
 
     // Filter logic
-    const filteredTasks = tasks.filter(t =>
-        t.titulo.toLowerCase().includes(filterText.toLowerCase()) ||
-        t.matricula?.toLowerCase().includes(filterText.toLowerCase()) ||
-        t.id.toString().includes(filterText) ||
-        (t.creadoPor?.nombre && t.creadoPor.nombre.toLowerCase().includes(filterText.toLowerCase()))
-    );
+    const filteredTasks = tasks.filter(t => {
+        if (selectedProject && t.proyectoId !== selectedProject.id) return false;
+
+        return (
+            t.titulo.toLowerCase().includes(filterText.toLowerCase()) ||
+            t.matricula?.toLowerCase().includes(filterText.toLowerCase()) ||
+            t.id.toString().includes(filterText) ||
+            (t.creadoPor?.nombre && t.creadoPor.nombre.toLowerCase().includes(filterText.toLowerCase()))
+        );
+    });
+
+    const handleProjectSelect = (project: any) => {
+        setSelectedProject(project);
+        setActiveTab('TAREAS');
+    };
 
     return (
         <div className="flex flex-col h-[calc(100vh-100px)] relative">
@@ -116,9 +128,22 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
             </div>
 
             {activeTab === 'PROYECTOS' ? (
-                <ProjectManager />
+                <ProjectManager onSelectProject={handleProjectSelect} />
             ) : (
                 <>
+                    {/* Project Context Header */}
+                    {selectedProject && (
+                        <div className="mb-4 p-4 bg-blue-50 border border-blue-100 rounded-lg flex justify-between items-center animate-in fade-in slide-in-from-top-2">
+                            <div>
+                                <h3 className="text-lg font-black text-blue-900">Proyecto: {selectedProject.nombre}</h3>
+                                <p className="text-sm text-blue-700">{selectedProject.descripcion || 'Sin descripción'}</p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedProject(null)} className="text-blue-600 hover:bg-blue-100">
+                                Cerrar Vista de Proyecto
+                            </Button>
+                        </div>
+                    )}
+
                     {/* Toolbar */}
                     <div className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
                         <div className="flex gap-2 items-center w-full md:w-auto">
@@ -157,7 +182,7 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
                         <div className="flex gap-2 w-full md:w-auto">
                             <Button
                                 className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-200 flex-1 md:flex-none"
-                                onClick={() => router.push('/tareas/nueva')}
+                                onClick={() => router.push(selectedProject ? `/tareas/nueva?proyectoId=${selectedProject.id}` : '/tareas/nueva')}
                             >
                                 <Plus className="w-5 h-5 mr-2" />
                                 Nueva Tarea
@@ -167,18 +192,29 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
 
                     {/* Main Content */}
                     <div className="flex-1 overflow-auto">
-                        {view === 'BOARD' ? (
-                            <TaskBoard
-                                tasks={filteredTasks}
-                                onTaskClick={setSelectedTaskId}
-                                onTaskMove={handleTaskMove}
-                            />
-                        ) : (
-                            <TaskList
-                                tasks={filteredTasks}
-                                onTaskClick={setSelectedTaskId}
-                            />
-                        )}
+                        <div className="pb-4">
+                            {filteredTasks.length === 0 && selectedProject ? (
+                                <div className="text-center py-12 bg-white rounded-xl border border-dashed">
+                                    <p className="text-gray-400 mb-2">Este proyecto no tiene tareas aún.</p>
+                                    <Button variant="outline" onClick={() => router.push(`/tareas/nueva?proyectoId=${selectedProject.id}`)}>
+                                        Crear Primera Tarea
+                                    </Button>
+                                </div>
+                            ) : (
+                                view === 'BOARD' ? (
+                                    <TaskBoard
+                                        tasks={filteredTasks}
+                                        onTaskClick={setSelectedTaskId}
+                                        onTaskMove={handleTaskMove}
+                                    />
+                                ) : (
+                                    <TaskList
+                                        tasks={filteredTasks}
+                                        onTaskClick={setSelectedTaskId}
+                                    />
+                                )
+                            )}
+                        </div>
                     </div>
 
                     {/* Side Panel */}

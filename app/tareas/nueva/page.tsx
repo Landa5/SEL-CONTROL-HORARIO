@@ -1,13 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import TaskForm from '@/components/tareas/TaskForm';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
-export default function NuevaIncidenciaPage() {
+function NuevaIncidenciaContent() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const proyectoId = searchParams.get('proyectoId');
+
+    const initialData = proyectoId ? { proyectoId } : undefined;
 
     return (
         <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6">
@@ -23,11 +27,24 @@ export default function NuevaIncidenciaPage() {
 
             <TaskForm
                 rol="CONDUCTOR" // Or detect actual role, but safe default for restrictions
+                initialData={initialData}
                 onSuccess={() => {
-                    // Redirect to where? Maybe dashboard or list
-                    router.push('/empleado'); // or /mecanico/tareas if mechanic
+                    // Redirect back to projects if we came from there
+                    if (proyectoId) {
+                        router.back();
+                    } else {
+                        router.push('/empleado'); // or /mecanico/tareas if mechanic
+                    }
                 }}
             />
         </div>
+    );
+}
+
+export default function NuevaIncidenciaPage() {
+    return (
+        <Suspense fallback={<div>Cargando form...</div>}>
+            <NuevaIncidenciaContent />
+        </Suspense>
     );
 }

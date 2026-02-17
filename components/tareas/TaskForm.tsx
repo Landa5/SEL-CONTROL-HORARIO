@@ -25,6 +25,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
     const [descripcion, setDescripcion] = useState(initialData?.descripcion || '');
     const [prioridad, setPrioridad] = useState(initialData?.prioridad || 'MEDIA');
     const [asignadoAId, setAsignadoAId] = useState(initialData?.asignadoAId || '');
+    const [proyectoId, setProyectoId] = useState(initialData?.proyectoId || '');
 
     // Conditional Fields
     const [matricula, setMatricula] = useState(initialData?.matricula || '');
@@ -86,7 +87,8 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                 ubicacionTexto: ['BASE', 'DEPOSITO_CLIENTE', 'OTRO'].includes(activoTipo) ? ubicacionTexto : undefined,
                 contactoNombre,
                 contactoTelefono,
-                asignadoAId: asignadoAId ? Number(asignadoAId) : undefined
+                asignadoAId: asignadoAId ? Number(asignadoAId) : undefined,
+                proyectoId: proyectoId ? Number(proyectoId) : undefined
             };
 
             let res;
