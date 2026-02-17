@@ -12,10 +12,36 @@ export default function EvaluacionesPage() {
     const [evaluaciones, setEvaluaciones] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
     const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
+    const [selectedEmployee, setSelectedEmployee] = useState<any>(null);
 
-    // ... existing useEffect ...
+    useEffect(() => {
+        fetchEvaluaciones();
+        fetchEmployees();
+    }, []);
 
-    // ... existing fetch functions ...
+    const fetchEvaluaciones = async () => {
+        try {
+            const res = await fetch('/api/admin/evaluaciones');
+            if (res.ok) {
+                const data = await res.json();
+                setEvaluaciones(data);
+            }
+        } catch (error) {
+            console.error('Error fetching evaluaciones:', error);
+        }
+    };
+
+    const fetchEmployees = async () => {
+        try {
+            const res = await fetch('/api/empleados?activo=true');
+            if (res.ok) {
+                const data = await res.json();
+                setEmployees(data);
+            }
+        } catch (error) {
+            console.error('Error fetching employees:', error);
+        }
+    };
 
     const handleEdit = (evaluation: any) => {
         setSelectedEvaluation(evaluation);

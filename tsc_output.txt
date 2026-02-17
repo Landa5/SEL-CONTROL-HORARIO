@@ -1,0 +1,1 @@
+app/admin/evaluaciones/page.tsx(77,33): error TS2552: Cannot find name 'fetchEvaluaciones'. Did you mean 'setEvaluaciones'?

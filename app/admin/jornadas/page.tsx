@@ -183,6 +183,17 @@ function JornadasContent() {
     };
 
 
+    // Helper to get array of dates between start and end
+    const getDatesInRange = (startDate: Date, endDate: Date) => {
+        const date = new Date(startDate.getTime());
+        const dates = [];
+        while (date <= endDate) {
+            dates.push(new Date(date));
+            date.setDate(date.getDate() + 1);
+        }
+        return dates;
+    };
+
     const groupedJornadas = jornadas.reduce((acc: any, jor) => {
         try {
             if (!jor.fecha) return acc;
@@ -197,7 +208,26 @@ function JornadasContent() {
         return acc;
     }, {});
 
-    const sortedDates = Object.keys(groupedJornadas).sort((a, b) => b.localeCompare(a));
+    // Process Absences to Group by Date
+    const groupedAbsences = absences.reduce((acc: any, abs) => {
+        try {
+            if (!abs.fechaInicio || !abs.fechaFin) return acc;
+            const start = new Date(abs.fechaInicio);
+            const end = new Date(abs.fechaFin);
+            if (isNaN(start.getTime()) || isNaN(end.getTime())) return acc;
+
+            const dates = getDatesInRange(start, end);
+            dates.forEach(d => {
+                const dateKey = format(d, 'yyyy-MM-dd');
+                if (!acc[dateKey]) acc[dateKey] = [];
+                acc[dateKey].push(abs);
+            });
+        } catch (e) { }
+        return acc;
+    }, {});
+
+    const sortedDates = Array.from(new Set([...Object.keys(groupedJornadas), ...Object.keys(groupedAbsences)]))
+        .sort((a, b) => b.localeCompare(a));
 
     const [selectedJornada, setSelectedJornada] = useState<any>(null);
     const [editingUso, setEditingUso] = useState<any>(null);
@@ -465,23 +495,67 @@ function JornadasContent() {
                                             <tbody>
                                                 {(() => {
                                                     // 1. Get raw items for this day
-                                                    const rawItems = groupedJornadas[date] || [];
+                                                    const rawJornadas = groupedJornadas[date] || [];
+                                                    const rawAbsences = groupedAbsences[date] || [];
 
-                                                    // 2. Calculate rests using the centralized helper (which implements the 13-16 logic)
-                                                    const itemsWithRest = calculateRest13to16(rawItems);
+                                                    // Merge Logic
+                                                    const employeeMap = new Map();
+                                                    rawJornadas.forEach((j: any) => employeeMap.set(j.empleadoId, { ...j, isAbsence: false }));
 
-                                                    // Map ID -> Rest for quick lookup after sorting
+                                                    rawAbsences.forEach((abs: any) => {
+                                                        if (employeeMap.has(abs.empleadoId)) {
+                                                            const existing = employeeMap.get(abs.empleadoId);
+                                                            existing.absence = abs;
+                                                            employeeMap.set(abs.empleadoId, existing);
+                                                        } else {
+                                                            employeeMap.set(abs.empleadoId, {
+                                                                id: `abs-${abs.id}-${date}`,
+                                                                empleadoId: abs.empleadoId,
+                                                                empleado: abs.empleado,
+                                                                fecha: date,
+                                                                horaEntrada: null,
+                                                                horaSalida: null,
+                                                                totalHoras: null,
+                                                                estado: abs.tipo,
+                                                                isAbsence: true,
+                                                                absence: abs,
+                                                                usosCamion: []
+                                                            });
+                                                        }
+                                                    });
+
+                                                    const combinedItems = Array.from(employeeMap.values());
+
+                                                    // 2. Calculate rests using actual jornadas
+                                                    const itemsWithRest = calculateRest13to16(combinedItems.filter((i: any) => !i.isAbsence));
+
+                                                    // Map ID -> Rest for quick lookup
                                                     const restsMap = new Map();
                                                     itemsWithRest.forEach(i => restsMap.set(i.id, i.descansoPrevio));
 
                                                     // 3. Now apply the User's Sort preferences
-                                                    const sortedAndEnriched = sortJornadas(rawItems).map(j => ({ ...j, descansoPrevio: restsMap.get(j.id) }));
+                                                    const sortedAndEnriched = sortJornadas(combinedItems).map((j: any) => ({
+                                                        ...j,
+                                                        descansoPrevio: restsMap.get(j.id)
+                                                    }));
 
                                                     return sortedAndEnriched.map((jor: any) => {
                                                         const totalKm = jor.usosCamion?.reduce((acc: number, t: any) => acc + ((t.kmFinal || t.kmInicial) - t.kmInicial), 0) || 0;
                                                         const totalDescargas = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.descargasCount || t.descargas?.length || 0), 0) || 0;
                                                         const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
                                                         const totalRepostajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0) || 0;
+
+                                                        const isAbsence = jor.isAbsence;
+                                                        const absence = jor.absence;
+                                                        const requestDate = absence?.createdAt ? new Date(absence.createdAt) : null;
+
+                                                        // Dynamic State Color
+                                                        let stateColor = 'bg-blue-100 text-blue-700';
+                                                        if (isAbsence) {
+                                                            stateColor = jor.estado === 'VACACIONES' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
+                                                        } else {
+                                                            stateColor = jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
+                                                        }
 
                                                         return (
                                                             <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
@@ -501,44 +575,65 @@ function JornadasContent() {
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-4 text-center font-mono text-gray-600">
-                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{safeFormatTime(jor.horaEntrada)}</span>
+                                                                    <span className={`px-2 py-1 rounded ${isAbsence ? 'text-gray-300' : 'bg-gray-100'}`}>
+                                                                        {isAbsence ? '-' : safeFormatTime(jor.horaEntrada)}
+                                                                    </span>
                                                                 </td>
                                                                 <td className="p-4 text-center font-mono text-gray-500">
-                                                                    <span className="bg-gray-100 px-2 py-1 rounded">{jor.horaSalida ? safeFormatTime(jor.horaSalida) : '--:--'}</span>
+                                                                    <span className={`px-2 py-1 rounded ${isAbsence ? 'text-gray-300' : 'bg-gray-100'}`}>
+                                                                        {isAbsence ? '-' : (jor.horaSalida ? safeFormatTime(jor.horaSalida) : '--:--')}
+                                                                    </span>
                                                                 </td>
                                                                 <td className="p-4 font-bold text-blue-700 text-center">
-                                                                    {formatDuration(jor.totalHoras)}
+                                                                    {isAbsence ? '-' : formatDuration(jor.totalHoras)}
                                                                 </td>
                                                                 <td className="p-4 font-bold text-orange-600 text-center text-xs">
                                                                     {jor.descansoPrevio ? formatDuration(jor.descansoPrevio) : '-'}
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    <span className="font-black text-indigo-600">{totalKm} km</span>
-                                                                </td>
-                                                                <td className="p-4 text-center">
-                                                                    <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
-                                                                        {totalDescargas}
+                                                                    <span className={`font-black ${isAbsence ? 'text-gray-300' : 'text-indigo-600'}`}>
+                                                                        {isAbsence ? '-' : `${totalKm} km`}
                                                                     </span>
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
-                                                                        {totalViajes}
-                                                                    </span>
+                                                                    {isAbsence ? '-' : (
+                                                                        <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
+                                                                            {totalDescargas}
+                                                                        </span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
-                                                                        {totalRepostajes} L
-                                                                    </span>
+                                                                    {isAbsence ? '-' : (
+                                                                        <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
+                                                                            {totalViajes}
+                                                                        </span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
-                                                                        {jor.estado}
-                                                                    </span>
+                                                                    {isAbsence ? '-' : (
+                                                                        <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
+                                                                            {totalRepostajes} L
+                                                                        </span>
+                                                                    )}
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
-                                                                        Detalles
-                                                                    </Button>
+                                                                    <div className="flex flex-col items-center gap-1">
+                                                                        <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${stateColor}`}>
+                                                                            {jor.estado}
+                                                                        </span>
+                                                                        {absence && requestDate && (
+                                                                            <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap bg-gray-50 px-1 rounded border border-gray-100">
+                                                                                Solicitado: {format(requestDate, 'dd/MM/yyyy')}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="p-4 text-center">
+                                                                    {!isAbsence && (
+                                                                        <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
+                                                                            Detalles
+                                                                        </Button>
+                                                                    )}
                                                                 </td>
                                                             </tr>
                                                         );

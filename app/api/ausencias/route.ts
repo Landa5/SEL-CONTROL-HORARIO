@@ -25,7 +25,7 @@ export async function GET(request: Request) {
             where: whereClause,
             include: {
                 empleado: {
-                    select: { nombre: true, usuario: true }
+                    select: { nombre: true, usuario: true, rol: true }
                 }
             },
             orderBy: { createdAt: 'desc' }
