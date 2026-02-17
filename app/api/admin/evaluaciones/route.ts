@@ -76,3 +76,39 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
+
+export async function PUT(request: Request) {
+    try {
+        const cookieStore = await cookies();
+        const session = cookieStore.get('session')?.value;
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+        const user: any = await verifyToken(session);
+        if (!user || (user.rol !== 'ADMIN' && user.rol !== 'OFICINA')) {
+            return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+        }
+
+        const body = await request.json();
+        const { id, puntuacionGeneral, comentarios, objetivos, estado } = body;
+
+        if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });
+
+        const existing = await prisma.evaluacion.findUnique({ where: { id: parseInt(id) } });
+        if (!existing) return NextResponse.json({ error: 'Evaluación no encontrada' }, { status: 404 });
+
+        const updated = await prisma.evaluacion.update({
+            where: { id: parseInt(id) },
+            data: {
+                puntuacionGeneral,
+                comentarios,
+                objetivos,
+                estado
+            }
+        });
+
+        return NextResponse.json(updated);
+    } catch (error: any) {
+        console.error('PUT /api/admin/evaluaciones error:', error);
+        return NextResponse.json({ error: 'Error al actualizar evaluación' }, { status: 500 });
+    }
+}

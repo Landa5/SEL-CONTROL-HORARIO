@@ -9,15 +9,16 @@ import { Save, CheckCircle, Plus, Trash2 } from 'lucide-react';
 interface EvaluacionFormProps {
     empleadoId: number;
     periodoInicial?: string;
+    initialData?: any;
     onSuccess: () => void;
     onCancel: () => void;
 }
 
-export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, onCancel }: EvaluacionFormProps) {
-    const [periodo, setPeriodo] = useState(periodoInicial || new Date().getFullYear() + '-Q1');
-    const [puntuacion, setPuntuacion] = useState(5);
-    const [comentarios, setComentarios] = useState('');
-    const [objetivos, setObjetivos] = useState<string[]>(['']);
+export default function EvaluacionForm({ empleadoId, periodoInicial, initialData, onSuccess, onCancel }: EvaluacionFormProps) {
+    const [periodo, setPeriodo] = useState(initialData?.periodo || periodoInicial || new Date().getFullYear() + '-Q1');
+    const [puntuacion, setPuntuacion] = useState(initialData?.puntuacionGeneral || 5);
+    const [comentarios, setComentarios] = useState(initialData?.comentarios || '');
+    const [objetivos, setObjetivos] = useState<string[]>(initialData?.objetivos ? JSON.parse(initialData.objetivos) : ['']);
     const [loading, setLoading] = useState(false);
 
     const handleAddObjetivo = () => setObjetivos([...objetivos, '']);
@@ -29,20 +30,37 @@ export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, 
     };
 
     const handleSubmit = async (estado: 'BORRADOR' | 'COMPLETADA') => {
+        if (estado === 'COMPLETADA' && !confirm('¿Estás seguro de que deseas FINALIZAR esta evaluación? No se podrá editar después.')) {
+            return;
+        }
+
         setLoading(true);
         try {
-            const res = await fetch('/api/admin/evaluaciones', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    empleadoId,
-                    periodo,
-                    puntuacionGeneral: puntuacion,
-                    comentarios,
-                    objetivos: JSON.stringify(objetivos.filter(o => o.trim() !== '')),
-                    estado // Note: Backend defaults to BORRADOR, we might need to update API to accept state or just rely on update later
-                })
-            });
+            const payload = {
+                empleadoId,
+                periodo,
+                puntuacionGeneral: puntuacion,
+                comentarios,
+                objetivos: JSON.stringify(objetivos.filter(o => o.trim() !== '')),
+                estado
+            };
+
+            let res;
+            if (initialData?.id) {
+                // UPDATE
+                res = await fetch('/api/admin/evaluaciones', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...payload, id: initialData.id })
+                });
+            } else {
+                // CREATE
+                res = await fetch('/api/admin/evaluaciones', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            }
 
             if (res.ok) {
                 onSuccess();
@@ -57,10 +75,12 @@ export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, 
         setLoading(false);
     };
 
+    const isReadOnly = initialData?.estado === 'COMPLETADA';
+
     return (
         <Card className="w-full max-w-2xl mx-auto">
             <CardHeader>
-                <CardTitle>Nueva Evaluación de Desempeño</CardTitle>
+                <CardTitle>{initialData ? 'Editar Evaluación' : 'Nueva Evaluación de Desempeño'}</CardTitle>
                 <CardDescription>Define objetivos y valora el rendimiento del periodo.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -70,6 +90,7 @@ export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, 
                         value={periodo}
                         onChange={e => setPeriodo(e.target.value)}
                         placeholder="Ej: 2026-Q1"
+                        disabled={isReadOnly}
                     />
                 </div>
 
@@ -84,6 +105,7 @@ export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, 
                         value={puntuacion}
                         onChange={e => setPuntuacion(parseInt(e.target.value))}
                         className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                        disabled={isReadOnly}
                     />
                     <div className="flex justify-between text-xs text-gray-400 mt-1">
                         <span>Bajo</span>
@@ -100,6 +122,7 @@ export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, 
                         placeholder="Describe los puntos fuertes y áreas de mejora..."
                         value={comentarios}
                         onChange={e => setComentarios(e.target.value)}
+                        disabled={isReadOnly}
                     />
                 </div>
 
@@ -112,34 +135,49 @@ export default function EvaluacionForm({ empleadoId, periodoInicial, onSuccess, 
                                     value={obj}
                                     onChange={e => handleObjetivoChange(idx, e.target.value)}
                                     placeholder={`Objetivo ${idx + 1}...`}
+                                    disabled={isReadOnly}
+                                    className={isReadOnly ? "bg-gray-50" : ""}
                                 />
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="text-red-500 hover:bg-red-50"
-                                    onClick={() => handleRemoveObjetivo(idx)}
-                                >
-                                    <Trash2 className="w-4 h-4" />
-                                </Button>
+                                {!isReadOnly && (
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-red-500 hover:bg-red-50"
+                                        onClick={() => handleRemoveObjetivo(idx)}
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                )}
                             </div>
                         ))}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleAddObjetivo}
-                            className="mt-2 text-blue-600 border-blue-200 hover:bg-blue-50"
-                        >
-                            <Plus className="w-4 h-4 mr-2" /> Añadir Objetivo
-                        </Button>
+                        {!isReadOnly && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAddObjetivo}
+                                className="mt-2 text-blue-600 border-blue-200 hover:bg-blue-50"
+                            >
+                                <Plus className="w-4 h-4 mr-2" /> Añadir Objetivo
+                            </Button>
+                        )}
                     </div>
                 </div>
 
                 <div className="flex justify-end gap-3 pt-4 border-t">
-                    <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-                    <Button onClick={() => handleSubmit('BORRADOR')} disabled={loading}>
-                        <Save className="w-4 h-4 mr-2" /> Guardar Borrador
+                    <Button variant="ghost" onClick={onCancel}>
+                        {isReadOnly ? 'Cerrar' : 'Cancelar'}
                     </Button>
-                    {/* Add Complete button logic later if needed via PUT */}
+
+                    {!isReadOnly && (
+                        <>
+                            <Button onClick={() => handleSubmit('BORRADOR')} disabled={loading} variant="outline" className="border-gray-300">
+                                <Save className="w-4 h-4 mr-2" /> Guardar Borrador
+                            </Button>
+                            <Button onClick={() => handleSubmit('COMPLETADA')} disabled={loading} className="bg-green-600 hover:bg-green-700 text-white">
+                                <CheckCircle className="w-4 h-4 mr-2" /> Finalizar y Cerrar
+                            </Button>
+                        </>
+                    )}
                 </div>
             </CardContent>
         </Card>

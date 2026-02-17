@@ -11,22 +11,16 @@ export default function EvaluacionesPage() {
     const [view, setView] = useState<'LIST' | 'CREATE'>('LIST');
     const [evaluaciones, setEvaluaciones] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
-    const [selectedEmployee, setSelectedEmployee] = useState<number | null>(null);
+    const [selectedEvaluation, setSelectedEvaluation] = useState<any>(null);
 
-    useEffect(() => {
-        fetchEvaluaciones();
-        fetchEmployees();
-    }, []);
+    // ... existing useEffect ...
 
-    const fetchEvaluaciones = async () => {
-        const res = await fetch('/api/admin/evaluaciones');
-        if (res.ok) setEvaluaciones(await res.json());
-    };
+    // ... existing fetch functions ...
 
-    const fetchEmployees = async () => {
-        // reuse existing endpoint or create a lightweight one
-        const res = await fetch('/api/admin/roles');
-        if (res.ok) setEmployees(await res.json());
+    const handleEdit = (evaluation: any) => {
+        setSelectedEvaluation(evaluation);
+        setSelectedEmployee(evaluation.empleadoId); // To skip employee selection step if needed, or just pass initialData
+        setView('CREATE');
     };
 
     return (
@@ -37,7 +31,7 @@ export default function EvaluacionesPage() {
                     <p className="text-gray-500 text-sm">Gestiona el feedback y objetivos del equipo.</p>
                 </div>
                 {view === 'LIST' && (
-                    <Button onClick={() => setView('CREATE')} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    <Button onClick={() => { setSelectedEvaluation(null); setSelectedEmployee(null); setView('CREATE'); }} className="bg-blue-600 hover:bg-blue-700 text-white">
                         <Plus className="w-4 h-4 mr-2" /> Nueva Evaluación
                     </Button>
                 )}
@@ -45,7 +39,7 @@ export default function EvaluacionesPage() {
 
             {view === 'CREATE' && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    {!selectedEmployee ? (
+                    {!selectedEmployee && !selectedEvaluation ? (
                         <Card>
                             <CardHeader><CardTitle>Selecciona un Empleado</CardTitle></CardHeader>
                             <CardContent>
@@ -73,15 +67,18 @@ export default function EvaluacionesPage() {
                         </Card>
                     ) : (
                         <EvaluacionForm
-                            empleadoId={selectedEmployee}
+                            empleadoId={selectedEmployee || selectedEvaluation.empleadoId}
+                            initialData={selectedEvaluation}
                             onSuccess={() => {
                                 setView('LIST');
                                 setSelectedEmployee(null);
+                                setSelectedEvaluation(null);
                                 fetchEvaluaciones();
                             }}
                             onCancel={() => {
                                 setView('LIST');
                                 setSelectedEmployee(null);
+                                setSelectedEvaluation(null);
                             }}
                         />
                     )}
@@ -91,7 +88,11 @@ export default function EvaluacionesPage() {
             {view === 'LIST' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {evaluaciones.map(ev => (
-                        <Card key={ev.id} className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500">
+                        <Card
+                            key={ev.id}
+                            onClick={() => handleEdit(ev)}
+                            className="hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-blue-500"
+                        >
                             <CardContent className="p-6">
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex items-center gap-3">
@@ -119,11 +120,12 @@ export default function EvaluacionesPage() {
                                     <span className="flex items-center gap-1">
                                         <Target className="w-3 h-3" /> {ev.objetivos ? JSON.parse(ev.objetivos).length : 0} Objetivos
                                     </span>
-                                    <span>{format(new Date(ev.createdAt), 'dd MMM yyyy')}</span>
+                                    <span>{format(new Date(ev.createdAt || new Date()), 'dd MMM yyyy')}</span>
                                 </div>
                             </CardContent>
                         </Card>
                     ))}
+                    {/* ... empty state ... */}
 
                     {evaluaciones.length === 0 && (
                         <div className="col-span-full py-12 text-center text-gray-400 border-2 border-dashed rounded-xl">
