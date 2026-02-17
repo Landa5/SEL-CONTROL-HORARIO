@@ -19,12 +19,14 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 function JornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
+    const [absences, setAbsences] = useState<any[]>([]);
     const searchParams = useSearchParams();
     const currentTab = searchParams.get('tab') || 'list';
 
     useEffect(() => {
         fetchJornadas();
         fetchEmployees();
+        fetchAbsences();
     }, [searchParams]);
 
     const fetchEmployees = async () => {
@@ -41,6 +43,23 @@ function JornadasContent() {
             }
         } catch (error) {
             console.error("Error fetching employees:", error);
+        }
+    };
+
+    const fetchAbsences = async () => {
+        try {
+            const res = await fetch('/api/ausencias?view=all');
+            if (res.ok) {
+                const data = await res.json();
+                if (Array.isArray(data)) {
+                    setAbsences(data);
+                } else {
+                    console.error("Absences API returned non-array:", data);
+                    setAbsences([]);
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching absences:", error);
         }
     };
 
@@ -549,7 +568,7 @@ function JornadasContent() {
                         <div className="text-center p-12 text-gray-400">No hay datos de personal para mostrar</div>
                     ) : (
                         sortedDates.map(date => (
-                            <TimelinePeopleView key={date} date={date} jornadas={groupedJornadas[date]} employees={employees} />
+                            <TimelinePeopleView key={date} date={date} jornadas={groupedJornadas[date]} employees={employees} absences={absences} />
                         ))
                     )}
                 </TabsContent>
