@@ -214,6 +214,7 @@ enum TareaTipo {
   RECURRENTE
   AUTOMATICA
   RECLAMACION
+  TALLER
 }
 
 enum TareaPrioridad {

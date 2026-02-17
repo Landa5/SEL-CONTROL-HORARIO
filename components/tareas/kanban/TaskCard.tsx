@@ -35,9 +35,20 @@ export function TaskCard({ task, onMove, onClick }: TaskCardProps) {
     const isUrgent = task.prioridad === 'URGENTE';
 
     // Derived state for visual coding
-    const borderColor = isUrgent ? 'border-l-red-500' :
-        task.prioridad === 'ALTA' ? 'border-l-orange-500' :
+    // Derived state for visual coding
+    let borderColor = 'border-l-blue-500'; // Default
+
+    if (isUrgent) {
+        borderColor = 'border-l-red-600';
+    } else if (task.tipo === 'TALLER') {
+        borderColor = 'border-l-orange-500';
+    } else if (task.tipo === 'RECLAMACION') {
+        borderColor = 'border-l-purple-600';
+    } else {
+        // Fallback to priority for standard tasks
+        borderColor = task.prioridad === 'ALTA' ? 'border-l-orange-400' :
             task.prioridad === 'MEDIA' ? 'border-l-blue-500' : 'border-l-green-500';
+    }
 
     return (
         <Card

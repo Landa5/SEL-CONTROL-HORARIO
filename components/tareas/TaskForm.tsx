@@ -137,8 +137,9 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                             >
                                 <option value="TAREA_INTERNA">Tarea Interna / Gestión</option>
                                 <option value="AVERIA">Avería / Incidencia</option>
-                                <option value="MANTENIMIENTO">Mantenimiento</option>
+                                <option value="MANTENIMIENTO">Mantenimiento (Legacy)</option>
                                 <option value="RECLAMACION">Reclamación (Privado)</option>
+                                <option value="TALLER">Taller / Mecánica</option>
                             </select>
                         </div>
 
@@ -166,22 +167,39 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                         <label className="text-sm font-bold text-gray-700 flex items-center gap-2">
                             Tipo de Registro
                         </label>
-                        <div className="flex gap-4 mt-2">
-                            <label className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo !== 'RECLAMACION' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                        <div className="flex gap-4 mt-2 overflow-x-auto pb-2">
+                            <label className={`flex-1 min-w-[200px] p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo === 'AVERIA' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
                                 <input
                                     type="radio"
                                     name="tipo_incidencia"
                                     className="hidden"
-                                    checked={tipo !== 'RECLAMACION'}
+                                    checked={tipo === 'AVERIA'}
                                     onChange={() => setTipo('AVERIA')}
                                 />
                                 <div className="text-center">
                                     <span className="block font-black text-blue-900">AVERÍA / INCIDENCIA</span>
-                                    <span className="text-xs text-blue-700">Problemas con vehículos o instalaciones</span>
+                                    <span className="text-xs text-blue-700">Problemas generales / Instalaciones</span>
                                 </div>
                             </label>
 
-                            <label className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo === 'RECLAMACION' ? 'border-purple-500 bg-purple-50' : 'border-gray-200'}`}>
+                            <label className={`flex-1 min-w-[200px] p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo === 'TALLER' ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}>
+                                <input
+                                    type="radio"
+                                    name="tipo_incidencia"
+                                    className="hidden"
+                                    checked={tipo === 'TALLER'}
+                                    onChange={() => {
+                                        setTipo('TALLER');
+                                        setActivoTipo('CAMION'); // Auto-select vehicle context
+                                    }}
+                                />
+                                <div className="text-center">
+                                    <span className="block font-black text-orange-900">TALLER / MECÁNICA</span>
+                                    <span className="text-xs text-orange-700">Reparaciones de vehículos</span>
+                                </div>
+                            </label>
+
+                            <label className={`flex-1 min-w-[200px] p-3 rounded-xl border-2 cursor-pointer transition-all ${tipo === 'RECLAMACION' ? 'border-purple-500 bg-purple-50' : 'border-gray-200'}`}>
                                 <input
                                     type="radio"
                                     name="tipo_incidencia"
@@ -190,8 +208,8 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                                     onChange={() => setTipo('RECLAMACION')}
                                 />
                                 <div className="text-center">
-                                    <span className="block font-black text-purple-900">RECLAMACIÓN / SUGERENCIA</span>
-                                    <span className="text-xs text-purple-700">Privado: Solo visible por Administración</span>
+                                    <span className="block font-black text-purple-900">RECLAMACIÓN</span>
+                                    <span className="text-xs text-purple-700">Privado: Solo Admins</span>
                                 </div>
                             </label>
                         </div>
@@ -255,10 +273,12 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                             key={opt.id}
                             type="button"
                             onClick={() => setActivoTipo(opt.id)}
-                            className={`p-4 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-3 transition-all duration-300 ${activoTipo === opt.id
-                                ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-lg shadow-orange-100 scale-[1.05]'
-                                : 'border-gray-50 bg-white text-gray-400 hover:border-gray-200 hover:text-gray-600'
-                                }`}
+                            disabled={tipo === 'TALLER' && opt.id !== 'CAMION'} // Lock to CAMION if TALLER
+                            className={`p-4 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-3 transition-all duration-300 
+                                ${activoTipo === opt.id
+                                    ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-lg shadow-orange-100 scale-[1.05]'
+                                    : 'border-gray-50 bg-white text-gray-400 hover:border-gray-200 hover:text-gray-600'
+                                } ${tipo === 'TALLER' && opt.id !== 'CAMION' ? 'opacity-50 cursor-not-allowed hidden' : ''}`}
                         >
                             <opt.icon className={`w-8 h-8 ${activoTipo === opt.id ? 'animate-bounce' : ''}`} />
                             <span className="text-[10px] font-black uppercase tracking-tighter text-center leading-tight">{opt.label}</span>

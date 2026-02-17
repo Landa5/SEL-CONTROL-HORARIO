@@ -59,6 +59,42 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             if (body.estado === 'COMPLETADA' || body.estado === 'CANCELADA') {
                 updateData.fechaCierre = new Date();
                 if (body.resumenCierre) updateData.resumenCierre = body.resumenCierre;
+
+                // AUTOMATIC MAINTENANCE CREATION (Only for TALLER/Truck tasks being Completed)
+                if (body.estado === 'COMPLETADA' && (currentTarea.tipo as string) === 'TALLER' && currentTarea.camionId && body.mantenimientoData) {
+                    try {
+                        const { kmActual, coste } = body.mantenimientoData;
+                        await prisma.mantenimientoRealizado.create({
+                            data: {
+                                fecha: new Date(),
+                                camionId: currentTarea.camionId,
+                                kmEnEseMomento: kmActual ? Number(kmActual) : (await prisma.camion.findUnique({ where: { id: currentTarea.camionId }, select: { kmActual: true } }))?.kmActual || 0,
+                                tipo: 'CORRECTIVO',
+                                descripcion: `Resolución Tarea #${currentTarea.id}: ${currentTarea.titulo}`,
+                                piezasCambiadas: body.resumenCierre || 'Sin detalles',
+                                costo: coste ? parseFloat(coste) : 0,
+                                taller: 'Taller Interno', // Default to internal, could be customizable later
+                                tareaId: currentTarea.id
+                            }
+                        });
+
+                        // Update Truck KM if provided and greater than current
+                        if (kmActual) {
+                            const newKm = Number(kmActual);
+                            const truck = await prisma.camion.findUnique({ where: { id: currentTarea.camionId } });
+                            if (truck && newKm > truck.kmActual) {
+                                await prisma.camion.update({
+                                    where: { id: currentTarea.camionId },
+                                    data: { kmActual: newKm }
+                                });
+                            }
+                        }
+
+                    } catch (maintError) {
+                        console.error("Error creating maintenance record:", maintError);
+                        // Don't block task closure, but log error
+                    }
+                }
             }
 
             // Handle Bloqueo

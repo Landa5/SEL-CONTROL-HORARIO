@@ -11,6 +11,10 @@ export function TaskTypeBadge({ type }: { type: string }) {
             return <Badge variant="secondary" className="flex items-center gap-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200"><Repeat className="w-3 h-3" /> Recurrente</Badge>;
         case 'AUTOMATICA':
             return <Badge variant="secondary" className="flex items-center gap-1 bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200"><Zap className="w-3 h-3" /> Auto</Badge>;
+        case 'TALLER':
+            return <Badge variant="secondary" className="flex items-center gap-1 bg-orange-100 text-orange-800 hover:bg-orange-200 border-orange-200"><Wrench className="w-3 h-3" /> Taller</Badge>;
+        case 'RECLAMACION':
+            return <Badge variant="secondary" className="flex items-center gap-1 bg-purple-100 text-purple-800 hover:bg-purple-200 border-purple-200"><AlertCircle className="w-3 h-3" /> Reclamación</Badge>;
         default:
             return <Badge variant="secondary">{type}</Badge>;
     }

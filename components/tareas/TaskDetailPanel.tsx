@@ -15,6 +15,90 @@ interface TaskDetailPanelProps {
     onUpdate: () => void;
 }
 
+// Simple Resolution Modal Component
+function ResolutionModal({ isOpen, onClose, onConfirm, loading, taskType }: any) {
+    const [resultado, setResultado] = useState('SOLUCIONADO');
+    const [conclusion, setConclusion] = useState('');
+
+    // TALLER specific fields
+    const [coste, setCoste] = useState('');
+    const [kmActual, setKmActual] = useState('');
+
+    if (!isOpen) return null;
+
+    const isTaller = taskType === 'TALLER';
+
+    return (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-gray-900">
+                    {isTaller ? 'Finalizar Reparación / Taller' : 'Finalizar Tarea'}
+                </h3>
+
+                <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700">Resultado</label>
+                    <select
+                        className="w-full p-2 border rounded-lg"
+                        value={resultado}
+                        onChange={(e) => setResultado(e.target.value)}
+                    >
+                        <option value="SOLUCIONADO">Solucionado / Reparado</option>
+                        <option value="NO_PROCEDE">No Procede / Falsa Alarma</option>
+                        <option value="PARCIAL">Solución Parcial (Pendiente Piezas)</option>
+                    </select>
+                </div>
+
+                {isTaller && (
+                    <div className="grid grid-cols-2 gap-4 bg-orange-50 p-3 rounded-lg border border-orange-100">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-orange-800 uppercase">Coste Final (€)</label>
+                            <input
+                                type="number"
+                                placeholder="0.00"
+                                className="w-full p-2 border border-orange-200 rounded-lg text-sm"
+                                value={coste}
+                                onChange={(e) => setCoste(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-orange-800 uppercase">Kms Actuales</label>
+                            <input
+                                type="number"
+                                placeholder="Ej: 150000"
+                                className="w-full p-2 border border-orange-200 rounded-lg text-sm"
+                                value={kmActual}
+                                onChange={(e) => setKmActual(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                <div className="space-y-2">
+                    <label className="text-sm font-bold text-gray-700">Conclusión / Detalles</label>
+                    <textarea
+                        className="w-full p-2 border rounded-lg"
+                        rows={3}
+                        placeholder={isTaller ? "Detalla las piezas cambiadas y el trabajo realizado..." : "Explica brevemente la solución aplicada..."}
+                        value={conclusion}
+                        onChange={(e) => setConclusion(e.target.value)}
+                    />
+                </div>
+
+                <div className="flex gap-2 justify-end pt-2">
+                    <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
+                    <Button
+                        onClick={() => onConfirm(resultado, conclusion, { coste, kmActual })}
+                        disabled={loading || !conclusion.trim()}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                    >
+                        {loading ? 'Guardando...' : 'Confirmar Cierre'}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetailPanelProps) {
     const [task, setTask] = useState<any>(null);
     const [loading, setLoading] = useState(false);
@@ -22,6 +106,7 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
     const [isAdminOrOffice, setIsAdminOrOffice] = useState(false);
     const [userRole, setUserRole] = useState<string>('');
     const [isEditing, setIsEditing] = useState(false);
+    const [showResolutionModal, setShowResolutionModal] = useState(false);
 
     // Fetch employees for assignment
     useEffect(() => {
@@ -113,6 +198,43 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
         }
     };
 
+    const handleCloseTask = async (resultado: string, conclusion: string, extraData?: { coste?: string, kmActual?: string }) => {
+        if (!task) return;
+        setLoading(true);
+        try {
+            // 1. Add History/Comment
+            await fetch(`/api/tareas/${task.id}/historial`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    tipoAccion: 'CIERRE',
+                    mensaje: `TAREA FINALIZADA. Resultado: ${resultado}. Detalles: ${conclusion}`
+                })
+            });
+
+            // 2. Update Status to COMPLETADA
+            const res = await fetch(`/api/tareas/${task.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    estado: 'COMPLETADA',
+                    resumenCierre: conclusion,
+                    mantenimientoData: extraData // Send extra data to backend to create MantenimientoRealizado if needed
+                })
+            });
+
+            if (res.ok) {
+                setShowResolutionModal(false);
+                fetchTaskDetails(task.id);
+                onUpdate();
+            }
+        } catch (error) {
+            console.error("Error closing task:", error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     if (!taskId) return null;
 
     const isOpen = !!taskId;
@@ -127,6 +249,14 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
 
             {/* Panel */}
             <div className={`relative w-full max-w-2xl bg-white h-full shadow-2xl transform transition-transform duration-300 flex flex-col ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+
+                <ResolutionModal
+                    isOpen={showResolutionModal}
+                    onClose={() => setShowResolutionModal(false)}
+                    onConfirm={handleCloseTask}
+                    loading={loading}
+                    taskType={task?.tipo}
+                />
 
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b bg-white z-10">
@@ -198,6 +328,17 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                                 </select>
                             )}
                         </div>
+                    )}
+
+                    {/* CLOSE BUTTON - Only if Active */}
+                    {!loading && task && task.estado !== 'COMPLETADA' && task.estado !== 'CERRADA' && !isEditing && (
+                        <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white shadow-sm animate-in fade-in"
+                            onClick={() => setShowResolutionModal(true)}
+                        >
+                            Finalizar Tarea
+                        </Button>
                     )}
                 </div>
 

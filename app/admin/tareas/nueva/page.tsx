@@ -2,12 +2,23 @@
 
 import React from 'react';
 import TaskForm from '@/components/tareas/TaskForm';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 
 export default function NuevaTareaAdminPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+
+    // Get pre-filled data from URL
+    const initialTipo = searchParams.get('tipo');
+    const initialMatricula = searchParams.get('matricula');
+
+    const initialData = {
+        tipo: initialTipo || undefined,
+        matricula: initialMatricula || undefined,
+        activoTipo: initialMatricula ? 'CAMION' : undefined
+    };
 
     return (
         <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-6">
@@ -23,8 +34,11 @@ export default function NuevaTareaAdminPage() {
 
             <TaskForm
                 rol="ADMIN"
+                initialData={initialData}
                 onSuccess={() => {
-                    router.push('/admin/dashboard');
+                    // unexpected error here if I just go back?
+                    // Safe default: go to dashboard
+                    router.push('/admin/tareas');
                 }}
             />
         </div>

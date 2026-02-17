@@ -19,14 +19,12 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 function JornadasContent() {
     const [jornadas, setJornadas] = useState<any[]>([]);
     const [employees, setEmployees] = useState<any[]>([]);
-    const [absences, setAbsences] = useState<any[]>([]);
     const searchParams = useSearchParams();
     const currentTab = searchParams.get('tab') || 'list';
 
     useEffect(() => {
         fetchJornadas();
         fetchEmployees();
-        fetchAbsences();
     }, [searchParams]);
 
     const fetchEmployees = async () => {
@@ -46,22 +44,7 @@ function JornadasContent() {
         }
     };
 
-    const fetchAbsences = async () => {
-        try {
-            const res = await fetch('/api/ausencias?view=all');
-            if (res.ok) {
-                const data = await res.json();
-                if (Array.isArray(data)) {
-                    setAbsences(data);
-                } else {
-                    console.error("Absences API returned non-array:", data);
-                    setAbsences([]);
-                }
-            }
-        } catch (error) {
-            console.error("Error fetching absences:", error);
-        }
-    };
+
 
     const fetchJornadas = async () => {
         try {
@@ -208,25 +191,9 @@ function JornadasContent() {
         return acc;
     }, {});
 
-    // Process Absences to Group by Date
-    const groupedAbsences = absences.reduce((acc: any, abs) => {
-        try {
-            if (!abs.fechaInicio || !abs.fechaFin) return acc;
-            const start = new Date(abs.fechaInicio);
-            const end = new Date(abs.fechaFin);
-            if (isNaN(start.getTime()) || isNaN(end.getTime())) return acc;
 
-            const dates = getDatesInRange(start, end);
-            dates.forEach(d => {
-                const dateKey = format(d, 'yyyy-MM-dd');
-                if (!acc[dateKey]) acc[dateKey] = [];
-                acc[dateKey].push(abs);
-            });
-        } catch (e) { }
-        return acc;
-    }, {});
 
-    const sortedDates = Array.from(new Set([...Object.keys(groupedJornadas), ...Object.keys(groupedAbsences)]))
+    const sortedDates = Array.from(new Set([...Object.keys(groupedJornadas)]))
         .sort((a, b) => b.localeCompare(a));
 
     const [selectedJornada, setSelectedJornada] = useState<any>(null);
@@ -496,45 +463,16 @@ function JornadasContent() {
                                                 {(() => {
                                                     // 1. Get raw items for this day
                                                     const rawJornadas = groupedJornadas[date] || [];
-                                                    const rawAbsences = groupedAbsences[date] || [];
-
-                                                    // Merge Logic
-                                                    const employeeMap = new Map();
-                                                    rawJornadas.forEach((j: any) => employeeMap.set(j.empleadoId, { ...j, isAbsence: false }));
-
-                                                    rawAbsences.forEach((abs: any) => {
-                                                        if (employeeMap.has(abs.empleadoId)) {
-                                                            const existing = employeeMap.get(abs.empleadoId);
-                                                            existing.absence = abs;
-                                                            employeeMap.set(abs.empleadoId, existing);
-                                                        } else {
-                                                            employeeMap.set(abs.empleadoId, {
-                                                                id: `abs-${abs.id}-${date}`,
-                                                                empleadoId: abs.empleadoId,
-                                                                empleado: abs.empleado,
-                                                                fecha: date,
-                                                                horaEntrada: null,
-                                                                horaSalida: null,
-                                                                totalHoras: null,
-                                                                estado: abs.tipo,
-                                                                isAbsence: true,
-                                                                absence: abs,
-                                                                usosCamion: []
-                                                            });
-                                                        }
-                                                    });
-
-                                                    const combinedItems = Array.from(employeeMap.values());
 
                                                     // 2. Calculate rests using actual jornadas
-                                                    const itemsWithRest = calculateRest13to16(combinedItems.filter((i: any) => !i.isAbsence));
+                                                    const itemsWithRest = calculateRest13to16(rawJornadas);
 
                                                     // Map ID -> Rest for quick lookup
                                                     const restsMap = new Map();
                                                     itemsWithRest.forEach(i => restsMap.set(i.id, i.descansoPrevio));
 
                                                     // 3. Now apply the User's Sort preferences
-                                                    const sortedAndEnriched = sortJornadas(combinedItems).map((j: any) => ({
+                                                    const sortedAndEnriched = sortJornadas(rawJornadas).map((j: any) => ({
                                                         ...j,
                                                         descansoPrevio: restsMap.get(j.id)
                                                     }));
@@ -545,17 +483,9 @@ function JornadasContent() {
                                                         const totalViajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.viajesCount || 0), 0) || 0;
                                                         const totalRepostajes = jor.usosCamion?.reduce((acc: number, t: any) => acc + (t.litrosRepostados || 0), 0) || 0;
 
-                                                        const isAbsence = jor.isAbsence;
-                                                        const absence = jor.absence;
-                                                        const requestDate = absence?.createdAt ? new Date(absence.createdAt) : null;
-
                                                         // Dynamic State Color
                                                         let stateColor = 'bg-blue-100 text-blue-700';
-                                                        if (isAbsence) {
-                                                            stateColor = jor.estado === 'VACACIONES' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700';
-                                                        } else {
-                                                            stateColor = jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
-                                                        }
+                                                        stateColor = jor.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700';
 
                                                         return (
                                                             <tr key={jor.id} className="border-b last:border-0 hover:bg-gray-50/50 transition-colors">
@@ -575,65 +505,52 @@ function JornadasContent() {
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-4 text-center font-mono text-gray-600">
-                                                                    <span className={`px-2 py-1 rounded ${isAbsence ? 'text-gray-300' : 'bg-gray-100'}`}>
-                                                                        {isAbsence ? '-' : safeFormatTime(jor.horaEntrada)}
+                                                                    <span className="bg-gray-100 px-2 py-1 rounded">
+                                                                        {safeFormatTime(jor.horaEntrada)}
                                                                     </span>
                                                                 </td>
                                                                 <td className="p-4 text-center font-mono text-gray-500">
-                                                                    <span className={`px-2 py-1 rounded ${isAbsence ? 'text-gray-300' : 'bg-gray-100'}`}>
-                                                                        {isAbsence ? '-' : (jor.horaSalida ? safeFormatTime(jor.horaSalida) : '--:--')}
+                                                                    <span className="bg-gray-100 px-2 py-1 rounded">
+                                                                        {jor.horaSalida ? safeFormatTime(jor.horaSalida) : '--:--'}
                                                                     </span>
                                                                 </td>
                                                                 <td className="p-4 font-bold text-blue-700 text-center">
-                                                                    {isAbsence ? '-' : formatDuration(jor.totalHoras)}
+                                                                    {formatDuration(jor.totalHoras)}
                                                                 </td>
                                                                 <td className="p-4 font-bold text-orange-600 text-center text-xs">
                                                                     {jor.descansoPrevio ? formatDuration(jor.descansoPrevio) : '-'}
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    <span className={`font-black ${isAbsence ? 'text-gray-300' : 'text-indigo-600'}`}>
-                                                                        {isAbsence ? '-' : `${totalKm} km`}
+                                                                    <span className="font-black text-indigo-600">
+                                                                        {totalKm} km
                                                                     </span>
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    {isAbsence ? '-' : (
-                                                                        <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
-                                                                            {totalDescargas}
-                                                                        </span>
-                                                                    )}
+                                                                    <span className="bg-orange-50 text-orange-700 font-bold px-2 py-1 rounded text-xs">
+                                                                        {totalDescargas}
+                                                                    </span>
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    {isAbsence ? '-' : (
-                                                                        <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
-                                                                            {totalViajes}
-                                                                        </span>
-                                                                    )}
+                                                                    <span className="bg-green-50 text-green-700 font-bold px-2 py-1 rounded text-xs">
+                                                                        {totalViajes}
+                                                                    </span>
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    {isAbsence ? '-' : (
-                                                                        <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
-                                                                            {totalRepostajes} L
-                                                                        </span>
-                                                                    )}
+                                                                    <span className="bg-purple-50 text-purple-700 font-bold px-2 py-1 rounded text-xs">
+                                                                        {totalRepostajes} L
+                                                                    </span>
                                                                 </td>
                                                                 <td className="p-4 text-center">
                                                                     <div className="flex flex-col items-center gap-1">
                                                                         <span className={`px-2 py-1 rounded-full text-[10px] font-bold ${stateColor}`}>
                                                                             {jor.estado}
                                                                         </span>
-                                                                        {absence && requestDate && (
-                                                                            <span className="text-[10px] text-gray-400 font-mono whitespace-nowrap bg-gray-50 px-1 rounded border border-gray-100">
-                                                                                Solicitado: {format(requestDate, 'dd/MM/yyyy')}
-                                                                            </span>
-                                                                        )}
                                                                     </div>
                                                                 </td>
                                                                 <td className="p-4 text-center">
-                                                                    {!isAbsence && (
-                                                                        <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
-                                                                            Detalles
-                                                                        </Button>
-                                                                    )}
+                                                                    <Button onClick={() => setSelectedJornada(jor)} variant="outline" size="sm" className="h-7 text-xs">
+                                                                        Detalles
+                                                                    </Button>
                                                                 </td>
                                                             </tr>
                                                         );
@@ -663,7 +580,7 @@ function JornadasContent() {
                         <div className="text-center p-12 text-gray-400">No hay datos de personal para mostrar</div>
                     ) : (
                         sortedDates.map(date => (
-                            <TimelinePeopleView key={date} date={date} jornadas={groupedJornadas[date]} employees={employees} absences={absences} />
+                            <TimelinePeopleView key={date} date={date} jornadas={groupedJornadas[date]} employees={employees} />
                         ))
                     )}
                 </TabsContent>

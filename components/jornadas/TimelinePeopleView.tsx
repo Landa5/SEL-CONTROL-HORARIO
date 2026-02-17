@@ -12,10 +12,9 @@ interface TimelinePeopleViewProps {
     jornadas: any[];
     date: string;
     employees?: any[];
-    absences?: any[];
 }
 
-export default function TimelinePeopleView({ jornadas, date, employees = [], absences = [] }: TimelinePeopleViewProps) {
+export default function TimelinePeopleView({ jornadas, date, employees = [] }: TimelinePeopleViewProps) {
     const [viewMode, setViewMode] = useState<'expanded' | 'compact'>('expanded');
     const [currentTime, setCurrentTime] = useState(new Date());
     const [showAllEmployees, setShowAllEmployees] = useState(false); // Default: Show only active
@@ -95,48 +94,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [], abs
             });
         }
 
-        // Merge Absences
-        if (Array.isArray(absences)) {
-            const targetDate = parseISO(date);
-            absences.forEach(abs => {
-                const absStart = new Date(abs.fechaInicio);
-                const absEnd = new Date(abs.fechaFin);
 
-                // Check if absence overlaps with target Date
-                // Simple check: start <= target <= end
-                // Note: Dates in DB might be ISO with time, or pure dates.
-                // We compare YYYY-MM-DD
-                const dStart = format(absStart, 'yyyy-MM-dd');
-                const dEnd = format(absEnd, 'yyyy-MM-dd');
-                const dTarget = date; // date prop is yyyy-MM-dd
-
-                if (dTarget >= dStart && dTarget <= dEnd) {
-                    const empId = String(abs.empleadoId);
-                    let existingKey = Object.keys(employeeData).find(k => String(k) === empId);
-
-                    if (!existingKey && showAllEmployees && employees) {
-                        // Try to find employee info from employees list if not already in map
-                        const emp = employees.find(e => String(e.id) === empId);
-                        if (emp) {
-                            employeeData[empId] = {
-                                employee: emp,
-                                role: getRole(emp),
-                                shifts: [],
-                                absence: null,
-                                totalMinutes: 0,
-                                status: 'inactive'
-                            };
-                            existingKey = empId;
-                        }
-                    }
-
-                    if (existingKey) {
-                        employeeData[existingKey].absence = abs;
-                        employeeData[existingKey].status = 'absent';
-                    }
-                }
-            });
-        }
 
 
         // Grouping
@@ -162,7 +120,7 @@ export default function TimelinePeopleView({ jornadas, date, employees = [], abs
         });
 
         return { sortedRoles: sortedRoleKeys, groupedByRole: grouped, statsByRole: stats };
-    }, [jornadas, employees, date, showAllEmployees, absences]);
+    }, [jornadas, employees, date, showAllEmployees]);
 
     // 2. RENDERING HELPERS
     const startOfDayDate = startOfDay(parseISO(date));
@@ -299,148 +257,102 @@ export default function TimelinePeopleView({ jornadas, date, employees = [], abs
                                             } catch (e) { return '--:--'; }
                                         };
 
-                                        // 1. Check if Absent
-                                        if (absence) {
-                                            const isVacation = absence.tipo === 'VACACIONES';
-                                            const requestDate = absence.createdAt ? new Date(absence.createdAt) : null;
 
+                                        // 2. Normal Shifts
+                                        for (let i = 0; i < shifts.length; i++) {
+                                            const shift = shifts[i];
+                                            const startPct = getPercent(shift.start);
+                                            const endPct = getPercent(shift.end);
+                                            const width = Math.max(endPct - startPct, 0.4);
+
+                                            // WORK SEGMENT
                                             segments.push(
-                                                <TooltipProvider key={`absence-${idx}`}>
+                                                <TooltipProvider key={`work-${i}`}>
                                                     <Tooltip delayDuration={0}>
                                                         <TooltipTrigger asChild>
                                                             <div
-                                                                className={`absolute top-1 bottom-1 left-0 right-0 m-1 rounded border-2 border-dashed flex items-center justify-center opacity-80 cursor-help
-                                                                    ${isVacation
-                                                                        ? 'bg-yellow-50 border-yellow-300 text-yellow-700'
-                                                                        : 'bg-red-50 border-red-300 text-red-700'}
-                                                                `}
-                                                            >
-                                                                <span className="font-bold text-xs uppercase tracking-wider flex items-center gap-2">
-                                                                    {absence.tipo}
-                                                                    {isVacation && requestDate && (
-                                                                        <span className="text-[10px] bg-white/50 px-1.5 py-0.5 rounded border border-yellow-200">
-                                                                            Solicitado: {format(requestDate, 'dd/MM/yyyy')}
-                                                                        </span>
-                                                                    )}
-                                                                </span>
-                                                            </div>
+                                                                className={`absolute top-1.5 bottom-1.5 rounded-sm shadow-sm transition-all hover:scale-y-110 hover:brightness-110 hover:z-20 cursor-pointer
+                                                                        ${shift.isActive ? 'bg-gradient-to-r from-green-500 to-green-400 ring-1 ring-green-600' : 'bg-blue-400 ring-1 ring-blue-500'}
+                                                                    `}
+                                                                style={{ left: `${startPct}%`, width: `${width}%` }}
+                                                            />
                                                         </TooltipTrigger>
-                                                        <TooltipContent className="bg-white text-gray-900 border shadow-xl p-3">
-                                                            <p className="font-black text-sm mb-1">{employee.nombre}</p>
-                                                            <div className="text-xs space-y-1">
-                                                                <p><span className="font-bold text-gray-500">Tipo:</span> {absence.tipo}</p>
-                                                                <p><span className="font-bold text-gray-500">Estado:</span> {absence.estado}</p>
-                                                                <p><span className="font-bold text-gray-500">Desde:</span> {format(new Date(absence.fechaInicio), 'dd/MM/yyyy')}</p>
-                                                                <p><span className="font-bold text-gray-500">Hasta:</span> {format(new Date(absence.fechaFin), 'dd/MM/yyyy')}</p>
-                                                                {requestDate && (
-                                                                    <p className="pt-1 mt-1 border-t border-gray-100">
-                                                                        <span className="font-bold text-gray-500">Solicitado el:</span> {format(requestDate, 'dd/MM/yyyy HH:mm')}
-                                                                    </p>
-                                                                )}
-                                                                {absence.observaciones && (
-                                                                    <p className="italic text-gray-500 mt-2">"{absence.observaciones}"</p>
-                                                                )}
+                                                        <TooltipContent className="bg-gray-900 text-white text-xs border-0">
+                                                            <p className="font-bold">{employee.nombre}</p>
+                                                            <p className="font-mono text-gray-300 mb-2 border-b border-gray-700 pb-1">
+                                                                {safeFormatTimestamp(shift.start)} - {shift.isActive ? 'En curso' : safeFormatTimestamp(shift.end)}
+                                                                <span className="ml-2 text-gray-400">
+                                                                    ({differenceInMinutes(shift.isActive ? new Date() : shift.end, shift.start)}m)
+                                                                </span>
+                                                            </p>
+
+                                                            {/* Daily Stats */}
+                                                            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">KM:</span>
+                                                                    <span className="font-mono font-bold text-indigo-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + ((u.kmFinal || u.kmInicial) - u.kmInicial), 0) || 0}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">Viajes:</span>
+                                                                    <span className="font-mono font-bold text-green-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.viajesCount || 0), 0) || 0}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">Descargas:</span>
+                                                                    <span className="font-mono font-bold text-orange-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.descargasCount || u.descargas?.length || 0), 0) || 0}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="flex justify-between gap-2">
+                                                                    <span className="text-gray-400">Gasoil:</span>
+                                                                    <span className="font-mono font-bold text-purple-300">
+                                                                        {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.litrosRepostados || 0), 0) || 0} L
+                                                                    </span>
+                                                                </div>
                                                             </div>
+
+                                                            {shift.isActive && <p className="text-green-400 font-bold uppercase text-[10px] mt-2 border-t border-gray-700 pt-1">Activo ahora</p>}
                                                         </TooltipContent>
                                                     </Tooltip>
                                                 </TooltipProvider>
                                             );
-                                        } else {
-                                            // 2. Normal Shifts
-                                            for (let i = 0; i < shifts.length; i++) {
-                                                const shift = shifts[i];
-                                                const startPct = getPercent(shift.start);
-                                                const endPct = getPercent(shift.end);
-                                                const width = Math.max(endPct - startPct, 0.4);
 
-                                                // WORK SEGMENT
-                                                segments.push(
-                                                    <TooltipProvider key={`work-${i}`}>
-                                                        <Tooltip delayDuration={0}>
-                                                            <TooltipTrigger asChild>
-                                                                <div
-                                                                    className={`absolute top-1.5 bottom-1.5 rounded-sm shadow-sm transition-all hover:scale-y-110 hover:brightness-110 hover:z-20 cursor-pointer
-                                                                        ${shift.isActive ? 'bg-gradient-to-r from-green-500 to-green-400 ring-1 ring-green-600' : 'bg-blue-400 ring-1 ring-blue-500'}
-                                                                    `}
-                                                                    style={{ left: `${startPct}%`, width: `${width}%` }}
-                                                                />
-                                                            </TooltipTrigger>
-                                                            <TooltipContent className="bg-gray-900 text-white text-xs border-0">
-                                                                <p className="font-bold">{employee.nombre}</p>
-                                                                <p className="font-mono text-gray-300 mb-2 border-b border-gray-700 pb-1">
-                                                                    {safeFormatTimestamp(shift.start)} - {shift.isActive ? 'En curso' : safeFormatTimestamp(shift.end)}
-                                                                    <span className="ml-2 text-gray-400">
-                                                                        ({differenceInMinutes(shift.isActive ? new Date() : shift.end, shift.start)}m)
-                                                                    </span>
-                                                                </p>
+                                            // BREAK SEGMENT (Gap to next shift)
+                                            if (i < shifts.length - 1) {
+                                                const nextShift = shifts[i + 1];
+                                                const gapStartPct = endPct;
+                                                const gapEndPct = getPercent(nextShift.start);
+                                                const gapWidth = gapEndPct - gapStartPct;
 
-                                                                {/* Daily Stats */}
-                                                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[10px]">
-                                                                    <div className="flex justify-between gap-2">
-                                                                        <span className="text-gray-400">KM:</span>
-                                                                        <span className="font-mono font-bold text-indigo-300">
-                                                                            {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + ((u.kmFinal || u.kmInicial) - u.kmInicial), 0) || 0}
-                                                                        </span>
+                                                if (gapWidth > 0.5) { // Only show significant gaps
+                                                    const isLunch = (gapWidth > (30 / (24 * 60)) * 100); // Rough heuristic: >30min is visual break
+
+                                                    segments.push(
+                                                        <TooltipProvider key={`gap-${i}`}>
+                                                            <Tooltip delayDuration={0}>
+                                                                <TooltipTrigger asChild>
+                                                                    <div
+                                                                        className={`absolute top-3 bottom-3 bg-orange-100/50 border-t border-b border-orange-200 cursor-help z-0 flex items-center justify-center`}
+                                                                        style={{ left: `${gapStartPct}%`, width: `${gapWidth}%` }}
+                                                                    >
+                                                                        {viewMode === 'expanded' && gapWidth > 2 && <span className="text-[8px] text-orange-400 font-bold opacity-0 hover:opacity-100">PAUSA</span>}
                                                                     </div>
-                                                                    <div className="flex justify-between gap-2">
-                                                                        <span className="text-gray-400">Viajes:</span>
-                                                                        <span className="font-mono font-bold text-green-300">
-                                                                            {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.viajesCount || 0), 0) || 0}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex justify-between gap-2">
-                                                                        <span className="text-gray-400">Descargas:</span>
-                                                                        <span className="font-mono font-bold text-orange-300">
-                                                                            {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.descargasCount || u.descargas?.length || 0), 0) || 0}
-                                                                        </span>
-                                                                    </div>
-                                                                    <div className="flex justify-between gap-2">
-                                                                        <span className="text-gray-400">Gasoil:</span>
-                                                                        <span className="font-mono font-bold text-purple-300">
-                                                                            {shift.original?.usosCamion?.reduce((acc: number, u: any) => acc + (u.litrosRepostados || 0), 0) || 0} L
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-
-                                                                {shift.isActive && <p className="text-green-400 font-bold uppercase text-[10px] mt-2 border-t border-gray-700 pt-1">Activo ahora</p>}
-                                                            </TooltipContent>
-                                                        </Tooltip>
-                                                    </TooltipProvider>
-                                                );
-
-                                                // BREAK SEGMENT (Gap to next shift)
-                                                if (i < shifts.length - 1) {
-                                                    const nextShift = shifts[i + 1];
-                                                    const gapStartPct = endPct;
-                                                    const gapEndPct = getPercent(nextShift.start);
-                                                    const gapWidth = gapEndPct - gapStartPct;
-
-                                                    if (gapWidth > 0.5) { // Only show significant gaps
-                                                        const isLunch = (gapWidth > (30 / (24 * 60)) * 100); // Rough heuristic: >30min is visual break
-
-                                                        segments.push(
-                                                            <TooltipProvider key={`gap-${i}`}>
-                                                                <Tooltip delayDuration={0}>
-                                                                    <TooltipTrigger asChild>
-                                                                        <div
-                                                                            className={`absolute top-3 bottom-3 bg-orange-100/50 border-t border-b border-orange-200 cursor-help z-0 flex items-center justify-center`}
-                                                                            style={{ left: `${gapStartPct}%`, width: `${gapWidth}%` }}
-                                                                        >
-                                                                            {viewMode === 'expanded' && gapWidth > 2 && <span className="text-[8px] text-orange-400 font-bold opacity-0 hover:opacity-100">PAUSA</span>}
-                                                                        </div>
-                                                                    </TooltipTrigger>
-                                                                    <TooltipContent className="bg-orange-50 text-orange-900 border-orange-200 text-xs">
-                                                                        <p className="font-bold uppercase">Pausa / Descanso</p>
-                                                                        <p className="font-mono">{safeFormatTimestamp(shift.end)} ➔ {safeFormatTimestamp(nextShift.start)}</p>
-                                                                        <p className="font-black">{differenceInMinutes(nextShift.start, shift.end)} min</p>
-                                                                    </TooltipContent>
-                                                                </Tooltip>
-                                                            </TooltipProvider>
-                                                        );
-                                                    }
+                                                                </TooltipTrigger>
+                                                                <TooltipContent className="bg-orange-50 text-orange-900 border-orange-200 text-xs">
+                                                                    <p className="font-bold uppercase">Pausa / Descanso</p>
+                                                                    <p className="font-mono">{safeFormatTimestamp(shift.end)} ➔ {safeFormatTimestamp(nextShift.start)}</p>
+                                                                    <p className="font-black">{differenceInMinutes(nextShift.start, shift.end)} min</p>
+                                                                </TooltipContent>
+                                                            </Tooltip>
+                                                        </TooltipProvider>
+                                                    );
                                                 }
                                             }
                                         }
+
 
                                         return (
                                             <div

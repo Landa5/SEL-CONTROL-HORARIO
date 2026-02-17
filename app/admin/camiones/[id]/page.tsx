@@ -13,7 +13,8 @@ import {
     MapPin,
     Download,
     Fuel,
-    TrendingUp
+    TrendingUp,
+    Wrench
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -75,21 +76,31 @@ export default function DetalleCamionPage() {
                     </div>
                 </div>
 
-                {/* DATE FILTERS */}
-                <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border">
-                    <input
-                        type="date"
-                        value={fromDate}
-                        onChange={(e) => setFromDate(e.target.value)}
-                        className="p-2 border rounded text-sm"
-                    />
-                    <span className="text-gray-400">➡️</span>
-                    <input
-                        type="date"
-                        value={toDate}
-                        onChange={(e) => setToDate(e.target.value)}
-                        className="p-2 border rounded text-sm"
-                    />
+                <div className="flex items-center gap-2">
+                    <Button
+                        className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
+                        onClick={() => router.push(`/admin/tareas/nueva?tipo=TALLER&matricula=${camion.matricula}`)}
+                    >
+                        <Wrench className="w-4 h-4 mr-2" />
+                        Reportar Avería
+                    </Button>
+
+                    {/* DATE FILTERS */}
+                    <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border">
+                        <input
+                            type="date"
+                            value={fromDate}
+                            onChange={(e) => setFromDate(e.target.value)}
+                            className="p-2 border rounded text-sm"
+                        />
+                        <span className="text-gray-400">➡️</span>
+                        <input
+                            type="date"
+                            value={toDate}
+                            onChange={(e) => setToDate(e.target.value)}
+                            className="p-2 border rounded text-sm"
+                        />
+                    </div>
                 </div>
             </div>
 
