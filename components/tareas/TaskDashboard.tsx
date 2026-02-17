@@ -21,18 +21,23 @@ interface TaskDashboardProps {
     userId: number;
 }
 
+import ProjectManager from './ProjectManager';
+
 export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
     const router = useRouter();
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState<'BOARD' | 'LIST'>('BOARD');
+    const [activeTab, setActiveTab] = useState<'TAREAS' | 'PROYECTOS'>('TAREAS');
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
     const [filterText, setFilterText] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
 
     useEffect(() => {
-        fetchTasks();
-    }, [refreshTrigger]);
+        if (activeTab === 'TAREAS') {
+            fetchTasks();
+        }
+    }, [refreshTrigger, activeTab]);
 
     const fetchTasks = async () => {
         setLoading(true);
@@ -94,74 +99,96 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
 
     return (
         <div className="flex flex-col h-[calc(100vh-100px)] relative">
-            {/* Toolbar */}
-            <div className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
-                <div className="flex gap-2 items-center w-full md:w-auto">
-                    <div className="relative flex-1 md:w-64">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <Input
-                            placeholder="Buscar tarea, matrícula, usuario..."
-                            className="pl-9 bg-white"
-                            value={filterText}
-                            onChange={e => setFilterText(e.target.value)}
-                        />
-                    </div>
-
-                    <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-                        <button
-                            onClick={() => setView('BOARD')}
-                            className={`p-2 rounded-md transition-all ${view === 'BOARD' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                            title="Vista Tablero"
-                        >
-                            <LayoutGrid className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => setView('LIST')}
-                            className={`p-2 rounded-md transition-all ${view === 'LIST' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
-                            title="Vista Lista"
-                        >
-                            <List className="w-4 h-4" />
-                        </button>
-                    </div>
-
-                    <Button variant="outline" size="icon" onClick={() => setRefreshTrigger(p => p + 1)} title="Recargar">
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    </Button>
-                </div>
-
-                <div className="flex gap-2 w-full md:w-auto">
-                    <Button
-                        className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-200 flex-1 md:flex-none"
-                        onClick={() => router.push('/tareas/nueva')}
-                    >
-                        <Plus className="w-5 h-5 mr-2" />
-                        Nueva Tarea
-                    </Button>
-                </div>
+            {/* Tabs */}
+            <div className="flex gap-1 mb-4 border-b border-gray-200">
+                <button
+                    onClick={() => setActiveTab('TAREAS')}
+                    className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'TAREAS' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    Tareas
+                </button>
+                <button
+                    onClick={() => setActiveTab('PROYECTOS')}
+                    className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'PROYECTOS' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                    Proyectos
+                </button>
             </div>
 
-            {/* Main Content */}
-            <div className="flex-1 overflow-auto">
-                {view === 'BOARD' ? (
-                    <TaskBoard
-                        tasks={filteredTasks}
-                        onTaskClick={setSelectedTaskId}
-                        onTaskMove={handleTaskMove}
-                    />
-                ) : (
-                    <TaskList
-                        tasks={filteredTasks}
-                        onTaskClick={setSelectedTaskId}
-                    />
-                )}
-            </div>
+            {activeTab === 'PROYECTOS' ? (
+                <ProjectManager />
+            ) : (
+                <>
+                    {/* Toolbar */}
+                    <div className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
+                        <div className="flex gap-2 items-center w-full md:w-auto">
+                            <div className="relative flex-1 md:w-64">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                                <Input
+                                    placeholder="Buscar tarea, matrícula, usuario..."
+                                    className="pl-9 bg-white"
+                                    value={filterText}
+                                    onChange={e => setFilterText(e.target.value)}
+                                />
+                            </div>
 
-            {/* Side Panel */}
-            <TaskDetailPanel
-                taskId={selectedTaskId}
-                onClose={() => setSelectedTaskId(null)}
-                onUpdate={() => setRefreshTrigger(p => p + 1)}
-            />
+                            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                                <button
+                                    onClick={() => setView('BOARD')}
+                                    className={`p-2 rounded-md transition-all ${view === 'BOARD' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    title="Vista Tablero"
+                                >
+                                    <LayoutGrid className="w-4 h-4" />
+                                </button>
+                                <button
+                                    onClick={() => setView('LIST')}
+                                    className={`p-2 rounded-md transition-all ${view === 'LIST' ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                                    title="Vista Lista"
+                                >
+                                    <List className="w-4 h-4" />
+                                </button>
+                            </div>
+
+                            <Button variant="outline" size="icon" onClick={() => setRefreshTrigger(p => p + 1)} title="Recargar">
+                                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                            </Button>
+                        </div>
+
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <Button
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg shadow-blue-200 flex-1 md:flex-none"
+                                onClick={() => router.push('/tareas/nueva')}
+                            >
+                                <Plus className="w-5 h-5 mr-2" />
+                                Nueva Tarea
+                            </Button>
+                        </div>
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="flex-1 overflow-auto">
+                        {view === 'BOARD' ? (
+                            <TaskBoard
+                                tasks={filteredTasks}
+                                onTaskClick={setSelectedTaskId}
+                                onTaskMove={handleTaskMove}
+                            />
+                        ) : (
+                            <TaskList
+                                tasks={filteredTasks}
+                                onTaskClick={setSelectedTaskId}
+                            />
+                        )}
+                    </div>
+
+                    {/* Side Panel */}
+                    <TaskDetailPanel
+                        taskId={selectedTaskId}
+                        onClose={() => setSelectedTaskId(null)}
+                        onUpdate={() => setRefreshTrigger(p => p + 1)}
+                    />
+                </>
+            )}
         </div>
     );
 }

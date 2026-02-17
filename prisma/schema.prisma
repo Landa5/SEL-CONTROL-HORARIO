@@ -291,11 +291,18 @@ model Tarea {
   updatedAt DateTime @updatedAt
 }
 
+enum ProyectoEstado {
+  PENDIENTE
+  EN_CURSO
+  COMPLETADA
+}
+
 model Proyecto {
-  id          Int     @id @default(autoincrement())
+  id          Int            @id @default(autoincrement())
   nombre      String
   descripcion String?
-  activo      Boolean @default(true)
+  activo      Boolean        @default(true)
+  estado      ProyectoEstado @default(PENDIENTE)
 
   tareas Tarea[]
 
