@@ -73,6 +73,8 @@ export async function POST(request: Request) {
                 parentId: body.parentId ? Number(body.parentId) : undefined,
                 proyectoId: body.proyectoId ? Number(body.proyectoId) : undefined,
 
+                privada: body.privada || false, // Handle private tasks
+
                 camionId: camionId,
                 descargas: body.descargas ? Number(body.descargas) : undefined,
 
@@ -87,7 +89,7 @@ export async function POST(request: Request) {
                 tareaId: tarea.id,
                 autorId: Number(session.id),
                 tipoAccion: 'CREACION',
-                mensaje: `Tarea creada. Tipo: ${tarea.tipo}, Prioridad: ${tarea.prioridad}`
+                mensaje: `Tarea creada. Tipo: ${tarea.tipo}, Prioridad: ${tarea.prioridad}${tarea.privada ? ', Privada' : ''}`
             }
         });
 
@@ -126,31 +128,52 @@ export async function GET(request: Request) {
         else if (parentId) where.parentId = Number(parentId);
 
         // VISIBILITY RULES
-        // VISIBILITY RULES
         const isGlobalAdmin = session.rol === 'ADMIN';
 
         if (!isGlobalAdmin) {
+            // BASIC RULE: Non-admins cannot see PRIVATE tasks unless they are the creator or assignee
+            // Since we want strict privacy for Admins, we might even exclude "asignadoAId" if it was assigned by mistake,
+            // but standard logic is: if assigned to you, you see it.
+
+            const privacyFilter = {
+                OR: [
+                    { privada: false },
+                    { creadoPorId: Number(session.id) },
+                    { asignadoAId: Number(session.id) }
+                ]
+            };
+
             const isStaff = ['MECANICO', 'OFICINA'].includes(session.rol as string);
 
             if (isStaff) {
                 // Staff: Can see their own, assigned to them, OR unassigned (pool) BUT NOT RECLAMACION
                 // They CANNOT see tasks assigned to others.
-                where.OR = [
-                    { creadoPorId: Number(session.id) },
-                    { asignadoAId: Number(session.id) },
+                where.AND = [
+                    privacyFilter,
                     {
-                        AND: [
-                            { asignadoAId: null },
-                            { tipo: { not: 'RECLAMACION' } }
+                        OR: [
+                            { creadoPorId: Number(session.id) },
+                            { asignadoAId: Number(session.id) },
+                            {
+                                AND: [
+                                    { asignadoAId: null },
+                                    { tipo: { not: 'RECLAMACION' } }
+                                ]
+                            },
+                            { tipo: 'TALLER' } // Mechanics and Office should see ALL workshop tasks (breakdowns)
                         ]
-                    },
-                    { tipo: 'TALLER' } // Mechanics and Office should see ALL workshop tasks (breakdowns)
+                    }
                 ];
             } else {
                 // Regular Employee: Can only see their own or assigned to them
-                where.OR = [
-                    { creadoPorId: Number(session.id) },
-                    { asignadoAId: Number(session.id) }
+                where.AND = [
+                    privacyFilter,
+                    {
+                        OR: [
+                            { creadoPorId: Number(session.id) },
+                            { asignadoAId: Number(session.id) }
+                        ]
+                    }
                 ];
             }
         }

@@ -158,13 +158,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         if (body.tipo && body.tipo !== currentTarea.tipo) {
             let tipoFinal = body.tipo;
             if (body.tipo === 'AVERIA' || body.tipo === 'MANTENIMIENTO') {
-                tipoFinal = TareaTipo.TALLER;
+                tipoFinal = TareaTipo.TALLER as any; // Cast to avoid stale type error
             } else if (body.tipo === 'TAREA_INTERNA') {
                 tipoFinal = TareaTipo.ADMINISTRATIVA;
             }
 
             updateData.tipo = tipoFinal as TareaTipo;
             historialMensaje += `Tipo cambiado a ${tipoFinal}. `;
+        }
+
+        // Private Status Change
+        if (body.privada !== undefined && body.privada !== currentTarea.privada) {
+            updateData.privada = body.privada;
+            historialMensaje += body.privada ? 'Marcada como PRIVADA. ' : 'Marcada como PÚBLICA. ';
         }
 
         // Context Fields

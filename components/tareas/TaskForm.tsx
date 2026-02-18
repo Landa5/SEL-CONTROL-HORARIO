@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/Button";
 import { format } from 'date-fns';
-import { Truck, MapPin, Building2, AlertTriangle, Save, Loader2, UserPlus, AlertCircle } from 'lucide-react';
+import { Truck, MapPin, Building2, AlertTriangle, Save, Loader2, UserPlus, AlertCircle, Lock } from 'lucide-react';
 
 interface TaskFormProps {
     rol: string; // 'ADMIN', 'CONDUCTOR', etc.
@@ -26,6 +26,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
     const [prioridad, setPrioridad] = useState(initialData?.prioridad || 'MEDIA');
     const [asignadoAId, setAsignadoAId] = useState(initialData?.asignadoAId || '');
     const [proyectoId, setProyectoId] = useState(initialData?.proyectoId || '');
+    const [privada, setPrivada] = useState(initialData?.privada || false);
 
     // Conditional Fields
     const [matricula, setMatricula] = useState(initialData?.matricula || '');
@@ -79,6 +80,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                 descripcion,
                 tipo,
                 prioridad,
+                privada,
                 activoTipo: activoTipo || undefined,
                 matricula: activoTipo === 'CAMION' ? matricula : null,
                 kilometros: (activoTipo === 'CAMION' && kilometros) ? Number(kilometros) : null,
@@ -160,6 +162,26 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                                 ))}
                             </select>
                         </div>
+
+                        {/* PRIVATE TOGGLE (ADMIN ONLY) */}
+                        {rol === 'ADMIN' && (
+                            <div className="bg-red-50 border border-red-100 p-3 rounded-lg animate-in fade-in">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="w-5 h-5 text-red-600 rounded focus:ring-red-500 border-gray-300"
+                                        checked={privada}
+                                        onChange={(e) => setPrivada(e.target.checked)}
+                                    />
+                                    <div className="flex-1">
+                                        <span className="block text-sm font-bold text-red-900 flex items-center gap-2">
+                                            <Lock className="w-4 h-4" /> Tarea Privada
+                                        </span>
+                                        <span className="text-xs text-red-700">Solo visible para Admins</span>
+                                    </div>
+                                </label>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -237,6 +259,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                     </div>
                 )}
 
+
                 <div className="space-y-2">
                     <label className="text-sm font-bold text-gray-700">Prioridad</label>
                     <div className="flex gap-2">
@@ -277,7 +300,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                             onClick={() => setActivoTipo(opt.id)}
                             disabled={tipo === 'TALLER' && opt.id !== 'CAMION'} // Lock to CAMION if TALLER
                             className={`p-4 rounded-[2rem] border-2 flex flex-col items-center justify-center gap-3 transition-all duration-300 
-                                ${activoTipo === opt.id
+                                            ${activoTipo === opt.id
                                     ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-lg shadow-orange-100 scale-[1.05]'
                                     : 'border-gray-50 bg-white text-gray-400 hover:border-gray-200 hover:text-gray-600'
                                 } ${tipo === 'TALLER' && opt.id !== 'CAMION' ? 'opacity-50 cursor-not-allowed hidden' : ''}`}
@@ -391,32 +414,30 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
             </div>
 
             {/* CONTACTO */}
-            {
-                ['DEPOSITO_CLIENTE', 'OTRO'].includes(activoTipo) && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4 animate-in fade-in slide-in-from-top-2">
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Persona de Contacto (Opcional)</label>
-                            <input
-                                type="text"
-                                placeholder="Nombre..."
-                                className="w-full p-2 rounded-lg border border-gray-300"
-                                value={contactoNombre}
-                                onChange={(e) => setContactoNombre(e.target.value)}
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono (Opcional)</label>
-                            <input
-                                type="tel"
-                                placeholder="600 000 000"
-                                className="w-full p-2 rounded-lg border border-gray-300"
-                                value={contactoTelefono}
-                                onChange={(e) => setContactoTelefono(e.target.value)}
-                            />
-                        </div>
+            {['DEPOSITO_CLIENTE', 'OTRO'].includes(activoTipo) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-t border-gray-100 pt-4 animate-in fade-in slide-in-from-top-2">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Persona de Contacto (Opcional)</label>
+                        <input
+                            type="text"
+                            placeholder="Nombre..."
+                            className="w-full p-2 rounded-lg border border-gray-300"
+                            value={contactoNombre}
+                            onChange={(e) => setContactoNombre(e.target.value)}
+                        />
                     </div>
-                )
-            }
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Teléfono (Opcional)</label>
+                        <input
+                            type="tel"
+                            placeholder="600 000 000"
+                            className="w-full p-2 rounded-lg border border-gray-300"
+                            value={contactoTelefono}
+                            onChange={(e) => setContactoTelefono(e.target.value)}
+                        />
+                    </div>
+                </div>
+            )}
 
             {error && <p className="text-red-600 text-sm font-bold text-center bg-red-50 p-3 rounded-lg">{error}</p>}
 
@@ -429,6 +450,6 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                 {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
                 {loading ? 'Guardando...' : (isEditing ? 'GUARDAR CAMBIOS' : 'REGISTRAR INCIDENCIA')}
             </Button>
-        </form >
+        </form>
     );
 }

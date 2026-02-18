@@ -239,6 +239,8 @@ model Tarea {
   tipo      TareaTipo      @default(OPERATIVA)
   estado    TareaEstado    @default(BACKLOG)
   prioridad TareaPrioridad @default(MEDIA)
+  
+  privada   Boolean        @default(false)
 
   // Contexto
   activoTipo     String? // "CAMION", "DEPOSITO_CLIENTE", "BASE", "OTRO"
@@ -739,6 +741,8 @@ model AlquilerPlaza {
   
   plazaId       Int
   plaza         PlazaGaraje @relation(fields: [plazaId], references: [id])
+  
+
   
   matricula     String
   fechaInicio   DateTime
