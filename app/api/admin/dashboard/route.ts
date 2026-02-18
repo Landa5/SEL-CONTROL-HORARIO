@@ -124,6 +124,34 @@ export async function GET(request: Request) {
             }
         });
 
+        // 1.4 Active Breakdowns (Added for Office Visibility)
+        const activeBreakdowns = await prisma.tarea.findMany({
+            where: {
+                tipo: 'TALLER' as any,
+                estado: { notIn: ['COMPLETADA', 'CANCELADA'] }
+            },
+            include: { camion: { select: { matricula: true, modelo: true } } },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        activeBreakdowns.forEach((b: any) => {
+            // Explicitly cast 'b' to any to avoid 'camion' property missing error if types are stale
+            const isUrgent = b.prioridad === 'ALTA' || b.prioridad === 'URGENTE';
+
+            criticalAlerts.push({
+                id: b.id,
+                type: 'AVERIA',
+                alertType: 'AVERÍA',
+                message: b.titulo,
+                entity: b.camion ? b.camion.matricula : 'General',
+                entityName: b.camion ? b.camion.matricula : 'Taller',
+                entityType: 'TRUCK',
+                severity: isUrgent ? 'CRITICAL' : 'WARNING',
+                date: b.createdAt,
+                isExpired: true
+            });
+        });
+
         // ==========================================
         // SECTION 2: OPERATION TODAY
         // ==========================================
