@@ -14,7 +14,7 @@ export async function PATCH(
         }
 
         const body = await request.json();
-        const { estado } = body;
+        const { estado, fechaInicio, fechaFin, tipo, observaciones } = body;
         const { id } = await params;
 
         const ausencia = await prisma.ausencia.findUnique({
@@ -24,25 +24,37 @@ export async function PATCH(
 
         if (!ausencia) return NextResponse.json({ error: 'No encontrado' }, { status: 404 });
 
-        // Logic for vacation balance subtraction removed. 
-        // We now calculate balance dynamically in stats API based on approved absences.
+        // Build update data
+        const updateData: any = {
+            fechaResolucion: new Date(),
+            aprobadoPorId: Number(session.id)
+        };
+
+        if (estado) updateData.estado = estado;
+        if (fechaInicio) updateData.fechaInicio = new Date(fechaInicio);
+        if (fechaFin) updateData.fechaFin = new Date(fechaFin);
+        if (tipo) updateData.tipo = tipo;
+        if (observaciones !== undefined) updateData.observaciones = observaciones;
 
         const updated = await prisma.ausencia.update({
             where: { id: parseInt(id) },
-            data: {
-                estado,
-                fechaResolucion: new Date(),
-                aprobadoPorId: Number(session.id)
-            }
+            data: updateData
         });
 
         // AUDITORÍA
         await registrarAuditoria(
             Number(session.id),
-            `AUSENCIA_${estado}`,
+            estado ? `AUSENCIA_${estado}` : 'EDITAR_AUSENCIA',
             'Ausencia',
             parseInt(id),
-            { estadoAnterior: ausencia.estado, estadoNuevo: estado }
+            {
+                estadoAnterior: ausencia.estado,
+                estadoNuevo: estado || ausencia.estado,
+                cambios: {
+                    fechas: fechaInicio ? `${fechaInicio} - ${fechaFin}` : undefined,
+                    tipo: tipo !== ausencia.tipo ? tipo : undefined
+                }
+            }
         );
 
         return NextResponse.json(updated);

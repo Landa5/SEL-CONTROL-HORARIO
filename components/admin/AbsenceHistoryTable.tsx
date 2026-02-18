@@ -8,6 +8,11 @@ import { FileText, CheckCircle, XCircle, Trash2, Calendar } from 'lucide-react';
 import { Button } from "@/components/ui/Button";
 import { toast } from "sonner";
 import { useRouter } from 'next/navigation';
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from "@/components/ui/Dialog";
+import { Input } from "@/components/ui/Input";
+import { Textarea } from "@/components/ui/Textarea";
 
 interface EmployeeSimple {
     id: number;
@@ -30,12 +35,21 @@ interface Absence {
 interface AbsenceHistoryTableProps {
     history: Absence[];
 }
-
 export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProps) {
     const router = useRouter();
     const [filterType, setFilterType] = useState<string>('TODOS');
     const [filterState, setFilterState] = useState<string>('TODOS');
     const [processingId, setProcessingId] = useState<number | null>(null);
+
+    // Edit State
+    const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
+    const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+    const [editForm, setEditForm] = useState({
+        fechaInicio: '',
+        fechaFin: '',
+        tipo: 'VACACIONES',
+        observaciones: ''
+    });
 
     const filteredHistory = history.filter(abs => {
         if (filterType !== 'TODOS' && abs.tipo !== filterType) return false;
@@ -54,10 +68,6 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
 
             if (res.ok) {
                 toast.success(`Solicitud ${newStatus.toLowerCase()} correctamente`);
-                router.refresh(); // Refresh data
-                // Ideally trigger a parent refetch, but router.refresh works for server components or if page handles it.
-                // Since this is a client component inside a client view that fetches data, we might need a callback or just rely on state update if we had it.
-                // For now, let's assume the parent view will re-render or we force a reload.
                 window.location.reload();
             } else {
                 toast.error("Error al actualizar la solicitud");
@@ -84,6 +94,48 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                 window.location.reload();
             } else {
                 toast.error("Error al eliminar");
+            }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error de conexión");
+        } finally {
+            setProcessingId(null);
+        }
+    };
+
+    const openEditDialog = (absence: Absence) => {
+        setEditingAbsence(absence);
+        setEditForm({
+            fechaInicio: format(new Date(absence.fechaInicio), 'yyyy-MM-dd'),
+            fechaFin: format(new Date(absence.fechaFin), 'yyyy-MM-dd'),
+            tipo: absence.tipo,
+            observaciones: '' // We don't have this in the interface yet, strictly speaking, but okay
+        });
+        setIsEditDialogOpen(true);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingAbsence) return;
+        setProcessingId(editingAbsence.id);
+
+        try {
+            const res = await fetch(`/api/ausencias/${editingAbsence.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fechaInicio: editForm.fechaInicio,
+                    fechaFin: editForm.fechaFin,
+                    tipo: editForm.tipo,
+                    observaciones: editForm.observaciones || undefined
+                })
+            });
+
+            if (res.ok) {
+                toast.success("Ausencia actualizada");
+                setIsEditDialogOpen(false);
+                window.location.reload();
+            } else {
+                toast.error("Error al actualizar");
             }
         } catch (error) {
             console.error(error);
@@ -195,39 +247,51 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right">
-                                        {abs.estado === 'PENDIENTE' && (
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="outline"
-                                                    onClick={() => router.push(`/admin/ausencias?view=CALENDAR&date=${abs.fechaInicio}`)}
-                                                    className="h-7 px-2 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50"
-                                                    title="Ver en Calendario Global"
-                                                >
-                                                    <Calendar className="w-3 h-3" />
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    disabled={processingId === abs.id}
-                                                    onClick={() => handleUpdateStatus(abs.id, 'APROBADA')}
-                                                    className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 text-xs"
-                                                    title="Aprobar"
-                                                >
-                                                    {processingId === abs.id ? '...' : <CheckCircle className="w-4 h-4" />}
-                                                </Button>
-                                                <Button
-                                                    size="sm"
-                                                    variant="danger"
-                                                    disabled={processingId === abs.id}
-                                                    onClick={() => handleUpdateStatus(abs.id, 'DENEGADA')}
-                                                    className="h-7 px-2 text-xs"
-                                                    title="Denegar"
-                                                >
-                                                    {processingId === abs.id ? '...' : <XCircle className="w-4 h-4" />}
-                                                </Button>
-                                            </div>
-                                        )}
-                                        <div className="flex justify-end mt-1">
+                                        <div className="flex justify-end gap-1 items-center">
+                                            {abs.estado === 'PENDIENTE' && (
+                                                <>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        onClick={() => router.push(`/admin/ausencias?view=CALENDAR&date=${abs.fechaInicio}`)}
+                                                        className="h-7 px-2 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50"
+                                                        title="Ver en Calendario Global"
+                                                    >
+                                                        <Calendar className="w-3 h-3" />
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        disabled={processingId === abs.id}
+                                                        onClick={() => handleUpdateStatus(abs.id, 'APROBADA')}
+                                                        className="bg-green-600 hover:bg-green-700 text-white h-7 px-2 text-xs"
+                                                        title="Aprobar"
+                                                    >
+                                                        {processingId === abs.id ? '...' : <CheckCircle className="w-4 h-4" />}
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="danger"
+                                                        disabled={processingId === abs.id}
+                                                        onClick={() => handleUpdateStatus(abs.id, 'DENEGADA')}
+                                                        className="h-7 px-2 text-xs"
+                                                        title="Denegar"
+                                                    >
+                                                        {processingId === abs.id ? '...' : <XCircle className="w-4 h-4" />}
+                                                    </Button>
+                                                </>
+                                            )}
+
+                                            {/* Edit Button - Available for all or based on policy. Let's allow for all for now or PENDING/APPROVED */}
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => openEditDialog(abs)}
+                                                className="h-7 px-2 text-xs text-blue-600 border-blue-200 hover:bg-blue-50 ml-1"
+                                                title="Editar"
+                                            >
+                                                <FileText className="w-4 h-4" />
+                                            </Button>
+
                                             <Button
                                                 size="sm"
                                                 variant="ghost"
@@ -246,6 +310,65 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                     </TableBody>
                 </Table>
             </div>
+
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Editar Ausencia</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                            <label htmlFor="tipo" className="text-sm font-medium">Tipo</label>
+                            <select
+                                id="tipo"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                value={editForm.tipo}
+                                onChange={(e) => setEditForm({ ...editForm, tipo: e.target.value })}
+                            >
+                                <option value="VACACIONES">Vacaciones</option>
+                                <option value="BAJA">Baja Médica</option>
+                                <option value="PERMISO">Permiso Retribuido</option>
+                                <option value="OTROS">Otros</option>
+                            </select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                                <label htmlFor="fechaInicio" className="text-sm font-medium">Desde</label>
+                                <Input
+                                    id="fechaInicio"
+                                    type="date"
+                                    value={editForm.fechaInicio}
+                                    onChange={(e) => setEditForm({ ...editForm, fechaInicio: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid gap-2">
+                                <label htmlFor="fechaFin" className="text-sm font-medium">Hasta</label>
+                                <Input
+                                    id="fechaFin"
+                                    type="date"
+                                    value={editForm.fechaFin}
+                                    onChange={(e) => setEditForm({ ...editForm, fechaFin: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="grid gap-2">
+                            <label htmlFor="observaciones" className="text-sm font-medium">Observaciones (Opcional)</label>
+                            <Textarea
+                                id="observaciones"
+                                value={editForm.observaciones}
+                                onChange={(e) => setEditForm({ ...editForm, observaciones: e.target.value })}
+                                placeholder="Motivo del cambio..."
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancelar</Button>
+                        <Button onClick={handleSaveEdit} disabled={processingId === editingAbsence?.id}>
+                            {processingId === editingAbsence?.id ? 'Guardando...' : 'Guardar Cambios'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
