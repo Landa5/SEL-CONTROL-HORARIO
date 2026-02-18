@@ -111,8 +111,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
         // Priority Change
         if (body.prioridad && body.prioridad !== currentTarea.prioridad) {
-            updateData.prioridad = body.prioridad as TareaPrioridad;
-            historialMensaje += `Prioridad cambiada a ${body.prioridad}. `;
+            let prioridadFinal = body.prioridad;
+            if (body.prioridad === 'URGENTE') {
+                prioridadFinal = TareaPrioridad.ALTA;
+            }
+            // Verify if it's a valid enum value, otherwise ignore or default?
+            // Assuming frontend sends valid mapped values or 'URGENTE'
+
+            updateData.prioridad = prioridadFinal as TareaPrioridad;
+            historialMensaje += `Prioridad cambiada a ${prioridadFinal}. `;
         }
 
         // Assignment Change
@@ -147,9 +154,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             historialMensaje += `Descripción actualizada. `;
         }
         if (body.fechaLimite) updateData.fechaLimite = new Date(body.fechaLimite);
+
         if (body.tipo && body.tipo !== currentTarea.tipo) {
-            updateData.tipo = body.tipo as TareaTipo;
-            historialMensaje += `Tipo cambiado a ${body.tipo}. `;
+            let tipoFinal = body.tipo;
+            if (body.tipo === 'AVERIA' || body.tipo === 'MANTENIMIENTO') {
+                tipoFinal = TareaTipo.TALLER;
+            } else if (body.tipo === 'TAREA_INTERNA') {
+                tipoFinal = TareaTipo.ADMINISTRATIVA;
+            }
+
+            updateData.tipo = tipoFinal as TareaTipo;
+            historialMensaje += `Tipo cambiado a ${tipoFinal}. `;
         }
 
         // Context Fields
