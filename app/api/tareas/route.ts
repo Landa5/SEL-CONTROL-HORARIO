@@ -143,7 +143,8 @@ export async function GET(request: Request) {
                             { asignadoAId: null },
                             { tipo: { not: 'RECLAMACION' } }
                         ]
-                    }
+                    },
+                    { tipo: 'TALLER' } // Mechanics and Office should see ALL workshop tasks (breakdowns)
                 ];
             } else {
                 // Regular Employee: Can only see their own or assigned to them
