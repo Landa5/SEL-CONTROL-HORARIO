@@ -285,6 +285,11 @@ export default function EmpleadoDashboard() {
 
     const handleClockOut = async () => {
         if (!jornada) return;
+        if (activeTurno) {
+            alert('Debes terminar la ruta del vehículo antes de poder cerrar tu jornada. Ve a la pestaña "Vehículo" y completa los KM finales.');
+            return;
+        }
+
         const payload = { id: jornada.id, horaSalida: new Date(), observaciones };
 
         if (!isOnline) {
