@@ -31,7 +31,8 @@ import {
     ChevronDown,
     ChevronRight,
     Car,
-    CheckCircle
+    CheckCircle,
+    Package
 } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
@@ -113,6 +114,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
             items: [
                 { href: '/admin/camiones', label: 'Camiones', icon: Truck },
                 { href: '/admin/tareas', label: 'Taller y Mantenimiento', icon: Wrench },
+                { href: '/admin/inventario', label: 'Inventario de Taller', icon: Package },
                 { href: '/admin/tareas?tab=incidencias', label: 'Incidencias', icon: AlertTriangle },
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
                 { href: '/admin/flota/inteligencia', label: 'Inteligencia de Flota', icon: BarChart2 },
