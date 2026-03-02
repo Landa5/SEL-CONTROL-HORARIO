@@ -16,6 +16,7 @@ export default function MecanicoLayout({ children }: { children: React.ReactNode
         { href: '/mecanico/tareas', label: 'Gestión Averías', icon: AlertCircle },
         { href: '/mecanico/jornada', label: 'Mi Jornada y KM', icon: Clock },
         { href: '/mecanico/vacaciones', label: 'Mis Vacaciones', icon: Calendar },
+        { href: '/mecanico/inventario', label: 'Inventario Taller', icon: Wrench },
         { href: '/mecanico/dashboard?section=formacion', label: 'Formación', icon: BookOpen },
         { href: '/mecanico/perfil', label: 'Mi Perfil', icon: User },
     ];

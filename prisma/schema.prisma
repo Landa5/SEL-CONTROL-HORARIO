@@ -69,13 +69,16 @@ model Empleado {
   perfilProfesional PerfilProfesional?
   alertasDocumento  AlertaDocumento[]
   documentos        Documento[]
-  documentosSubidos Documento[] @relation("SubidoPor")
+  documentosSubidos Documento[]        @relation("SubidoPor")
 
-  evaluacionesRecibidas Evaluacion[] @relation("Evaluado")
+  evaluacionesRecibidas  Evaluacion[] @relation("Evaluado")
   evaluacionesRealizadas Evaluacion[] @relation("Evaluador")
 
   rolPersonalizadoId Int?
-  rolPersonalizado   Rol?   @relation(fields: [rolPersonalizadoId], references: [id])
+  rolPersonalizado   Rol? @relation(fields: [rolPersonalizadoId], references: [id])
+
+  // Inventario
+  movimientosInventario MovimientoInventario[] @relation("RegistraMovimiento")
 }
 
 model Camion {
@@ -102,9 +105,10 @@ model Camion {
   tareas                     Tarea[]
   mantenimientosPlanificados MantenimientoProximo[]
   historialMantenimientos    MantenimientoRealizado[]
+  movimientosInventario      MovimientoInventario[]
 
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @default(now()) @updatedAt
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @default(now()) @updatedAt
   documentos Documento[]
 }
 
@@ -189,7 +193,7 @@ model Ausencia {
   fechaResolucion DateTime?
 
   justificanteUrl String?
-  horas           Float? @default(0) // 0 or null = Full day
+  horas           Float?  @default(0) // 0 or null = Full day
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -239,8 +243,8 @@ model Tarea {
   tipo      TareaTipo      @default(OPERATIVA)
   estado    TareaEstado    @default(BACKLOG)
   prioridad TareaPrioridad @default(MEDIA)
-  
-  privada   Boolean        @default(false)
+
+  privada Boolean @default(false)
 
   // Contexto
   activoTipo     String? // "CAMION", "DEPOSITO_CLIENTE", "BASE", "OTRO"
@@ -285,6 +289,8 @@ model Tarea {
   descargas Int?
 
   mantenimientosRealizados MantenimientoRealizado[]
+
+  movimientosInventario MovimientoInventario[]
 
   proyectoId Int?
   proyecto   Proyecto? @relation(fields: [proyectoId], references: [id])
@@ -379,7 +385,7 @@ model MantenimientoRealizado {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
+
   proximoKmPrevisto Int?
   notificado        Boolean @default(false)
 }
@@ -706,63 +712,61 @@ model Documento {
 // =======================
 
 model ClienteAlquiler {
-  id        Int      @id @default(autoincrement())
-  nombre    String
-  telefono  String
-  email     String?
-  nif       String?
-  direccion String?
-  poblacion String?
-  provincia String?
+  id           Int     @id @default(autoincrement())
+  nombre       String
+  telefono     String
+  email        String?
+  nif          String?
+  direccion    String?
+  poblacion    String?
+  provincia    String?
   codigoPostal String?
-  
+
   alquileres AlquilerPlaza[]
   documentos Documento[]
-  
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model PlazaGaraje {
-  id          Int      @id @default(autoincrement())
-  numero      Int      @unique // 1 to 9
-  
-  alquileres  AlquilerPlaza[]
-  
+  id     Int @id @default(autoincrement())
+  numero Int @unique // 1 to 9
+
+  alquileres AlquilerPlaza[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model AlquilerPlaza {
-  id            Int      @id @default(autoincrement())
-  
-  clienteId     Int
-  cliente       ClienteAlquiler @relation(fields: [clienteId], references: [id])
-  
-  plazaId       Int
-  plaza         PlazaGaraje @relation(fields: [plazaId], references: [id])
-  
+  id Int @id @default(autoincrement())
 
-  
+  clienteId Int
+  cliente   ClienteAlquiler @relation(fields: [clienteId], references: [id])
+
+  plazaId Int
+  plaza   PlazaGaraje @relation(fields: [plazaId], references: [id])
+
   matricula     String
   fechaInicio   DateTime
   fechaFin      DateTime?
   precioMensual Float
-  
-  activo        Boolean @default(true)
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+
+  activo Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model ConfiguracionAusencias {
   id Int @id @default(autoincrement())
-  
+
   // Reglas de Auto-aprobación
   habilitarAutoAprobacion Boolean @default(false)
   autoAprobarDias         Int     @default(1) // Duración máxima en días para auto-aprobar
   diasAntelacion          Int     @default(7) // Días mínimos de antelación
-  
+
   updatedBy Int? // ID del admin que modificó
   updatedAt DateTime @updatedAt
 }
@@ -773,16 +777,16 @@ model ConfiguracionAusencias {
 
 model ConfiguracionNegocio {
   id Int @id @default(autoincrement())
-  
+
   // 1. FLOTA
-  consumoObjetivoL100Km Float  @default(30.0) // L/100km
-  costePorKm            Float  @default(1.20) // €/km
-  alertaMantenimientoKm Int    @default(50000) // km
+  consumoObjetivoL100Km Float @default(30.0) // L/100km
+  costePorKm            Float @default(1.20) // €/km
+  alertaMantenimientoKm Int   @default(50000) // km
 
   // 2. PERSONAL
-  cortesiaPuntualidadMin    Int   @default(5)
-  limiteHorasExtraMensual   Float @default(20.0)
-  costeHoraExtraReferencia  Float @default(15.0) // €/hora
+  cortesiaPuntualidadMin   Int   @default(5)
+  limiteHorasExtraMensual  Float @default(20.0)
+  costeHoraExtraReferencia Float @default(15.0) // €/hora
 
   // 3. OPERATIVA
   tiempoObjetivoCargaDescargaMin Int @default(45)
@@ -801,26 +805,26 @@ enum EstadoEvaluacion {
 }
 
 model Evaluacion {
-  id                Int              @id @default(autoincrement())
-  
-  empleadoId        Int
-  empleado          Empleado         @relation("Evaluado", fields: [empleadoId], references: [id])
-  
-  evaluadorId       Int
-  evaluador         Empleado         @relation("Evaluador", fields: [evaluadorId], references: [id])
-  
-  periodo           String           // Ej: "2026-Q1", "2026-ANUAL"
-  fecha             DateTime         @default(now())
-  
-  puntuacionGeneral Int              @default(0) // 1-10
-  comentarios       String?          // Texto libre
-  objetivos         String?          // JSON o Lista de objetivos para el siguiente periodo
-  
-  estado            EstadoEvaluacion @default(BORRADOR)
-  
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
-  
+  id Int @id @default(autoincrement())
+
+  empleadoId Int
+  empleado   Empleado @relation("Evaluado", fields: [empleadoId], references: [id])
+
+  evaluadorId Int
+  evaluador   Empleado @relation("Evaluador", fields: [evaluadorId], references: [id])
+
+  periodo String // Ej: "2026-Q1", "2026-ANUAL"
+  fecha   DateTime @default(now())
+
+  puntuacionGeneral Int     @default(0) // 1-10
+  comentarios       String? // Texto libre
+  objetivos         String? // JSON o Lista de objetivos para el siguiente periodo
+
+  estado EstadoEvaluacion @default(BORRADOR)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([empleadoId, periodo]) // Un empleado solo puede tener una evaluación por periodo
 }
 
@@ -829,42 +833,42 @@ model Evaluacion {
 // =======================
 
 model Rol {
-  id          Int       @id @default(autoincrement())
-  nombre      String    @unique // "ADMIN", "OFICINA", "SUPERVISOR"
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique // "ADMIN", "OFICINA", "SUPERVISOR"
   descripcion String?
-  esSistema   Boolean   @default(false) // Si es true, no se puede borrar (ej: ADMIN)
-  
-  permisos    RolPermiso[]
-  empleados   Empleado[]
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  esSistema   Boolean @default(false) // Si es true, no se puede borrar (ej: ADMIN)
+
+  permisos  RolPermiso[]
+  empleados Empleado[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Permiso {
-  id          Int       @id @default(autoincrement())
-  codigo      String    @unique // "empleados.ver", "nominas.editar"
+  id          Int    @id @default(autoincrement())
+  codigo      String @unique // "empleados.ver", "nominas.editar"
   descripcion String
-  categoria   String    // "RRHH", "FLOTA", "SISTEMA"
-  
-  roles       RolPermiso[]
-  
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  categoria   String // "RRHH", "FLOTA", "SISTEMA"
+
+  roles RolPermiso[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model RolPermiso {
-  id        Int      @id @default(autoincrement())
-  
-  rolId     Int
-  rol       Rol      @relation(fields: [rolId], references: [id], onDelete: Cascade)
-  
+  id Int @id @default(autoincrement())
+
+  rolId Int
+  rol   Rol @relation(fields: [rolId], references: [id], onDelete: Cascade)
+
   permisoId Int
-  permiso   Permiso  @relation(fields: [permisoId], references: [id], onDelete: Cascade)
-  
+  permiso   Permiso @relation(fields: [permisoId], references: [id], onDelete: Cascade)
+
   assignedAt DateTime @default(now())
-  assignedBy Int?     // ID del admin que asignó el permiso
-  
+  assignedBy Int? // ID del admin que asignó el permiso
+
   @@unique([rolId, permisoId])
 }
 
@@ -873,16 +877,84 @@ model RolPermiso {
 // =======================
 
 model ConfiguracionMantenimiento {
-  id        Int      @id @default(autoincrement())
-  
-  tipo      String   @unique // "ACEITE_MOTOR", "RUEDAS_DELANTERAS", "ITV", etc.
-  
-  intervaloKm    Int?      // KM entre mantenimientos (ej: 30000)
-  intervaloMeses Int?      // Meses entre mantenimientos (ej: 12)
-  avisoAntelacionKm Int    @default(1000)
-  
-  activo    Boolean  @default(true)
-  
+  id Int @id @default(autoincrement())
+
+  tipo String @unique // "ACEITE_MOTOR", "RUEDAS_DELANTERAS", "ITV", etc.
+
+  intervaloKm       Int? // KM entre mantenimientos (ej: 30000)
+  intervaloMeses    Int? // Meses entre mantenimientos (ej: 12)
+  avisoAntelacionKm Int  @default(1000)
+
+  activo Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// =======================
+// MÓDULO INVENTARIO MECÁNICO (FASE X)
+// =======================
+
+model CategoriaInventario {
+  id          Int     @id @default(autoincrement())
+  nombre      String  @unique // "Ruedas", "Llantas", "Bombas", "Contadores", "Mangueras", "Pistolas", "Otros"
+  descripcion String?
+
+  articulos ArticuloInventario[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ArticuloInventario {
+  id Int @id @default(autoincrement())
+
+  nombre       String
+  descripcion  String?
+  codigoBarras String? @unique
+  referencia   String? // Referencia de fabricante
+
+  cantidad    Int @default(0)
+  stockMinimo Int @default(0)
+
+  ubicacion   String? // "Almacén Central", "Estante 3"
+  precioCosto Float?
+
+  categoriaId Int
+  categoria   CategoriaInventario @relation(fields: [categoriaId], references: [id])
+
+  movimientos MovimientoInventario[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum TipoMovimientoInventario {
+  ENTRADA
+  SALIDA
+  AJUSTE
+}
+
+model MovimientoInventario {
+  id Int @id @default(autoincrement())
+
+  articuloId Int
+  articulo   ArticuloInventario @relation(fields: [articuloId], references: [id])
+
+  tipo     TipoMovimientoInventario
+  cantidad Int // Positivo siempre, el tipo indica la operación
+
+  fecha  DateTime @default(now())
+  motivo String? // "Mantenimiento matricula X", "Compra proveedor"
+
+  realizadoPorId Int
+  realizadoPor   Empleado @relation("RegistraMovimiento", fields: [realizadoPorId], references: [id])
+
+  tareaId Int?
+  tarea   Tarea? @relation(fields: [tareaId], references: [id])
+
+  camionId Int?
+  camion   Camion? @relation(fields: [camionId], references: [id])
+
+  createdAt DateTime @default(now())
 }
