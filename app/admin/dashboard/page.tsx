@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/Button';
 import {
     AlertTriangle,
     CheckCircle,
+    X,
     Truck,
     Users,
     Clock,
@@ -27,8 +28,14 @@ export default function AdminDashboard() {
     const router = useRouter();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [hiddenAlerts, setHiddenAlerts] = useState<string[]>([]);
 
     useEffect(() => {
+        const stored = localStorage.getItem('sel_hidden_alerts');
+        if (stored) {
+            try { setHiddenAlerts(JSON.parse(stored)); } catch (e) { }
+        }
+
         const fetchData = async () => {
             try {
                 const res = await fetch('/api/admin/dashboard');
@@ -49,12 +56,25 @@ export default function AdminDashboard() {
 
     const { section1, section2, section3, section4 } = data;
 
+    const hideAlert = (e: React.MouseEvent, key: string) => {
+        e.stopPropagation();
+        const newHidden = [...hiddenAlerts, key];
+        setHiddenAlerts(newHidden);
+        localStorage.setItem('sel_hidden_alerts', JSON.stringify(newHidden));
+    };
+
+    const visibleTasks = section1.criticalTasks.filter((t: any) => !hiddenAlerts.includes(`TASK_${t.id}`));
+    const visibleAbsences = section1.urgentAbsences.filter((a: any) => !hiddenAlerts.includes(`ABSENCE_${a.id}`));
+    const visibleAlerts = section1.criticalAlerts.filter((alert: any) => !hiddenAlerts.includes(`ALERT_${alert.entityType}_${alert.id}_${alert.type}_${alert.date}`));
+
+    const isFullyStable = visibleTasks.length === 0 && visibleAbsences.length === 0 && visibleAlerts.length === 0;
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-12">
 
             {/* SECTION 1: CRITICAL GLOBAL STATUS */}
             <section className="w-full">
-                {section1.isStable ? (
+                {isFullyStable ? (
                     <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 flex items-center gap-6 shadow-sm">
                         <div className="bg-white p-4 rounded-full shadow-sm">
                             <CheckCircle className="w-10 h-10 text-emerald-600" />
@@ -78,11 +98,13 @@ export default function AdminDashboard() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                             {/* Critical Tasks */}
-                            {section1.criticalTasks.map((t: any) => (
-                                <div key={t.id} onClick={() => router.push(`/tareas/${t.id}`)} className="bg-white p-4 rounded-lg border-l-4 border-red-500 shadow-sm cursor-pointer hover:shadow-md transition-all">
-                                    <div className="flex justify-between items-start mb-2">
+                            {visibleTasks.map((t: any) => (
+                                <div key={t.id} onClick={() => router.push(`/tareas/${t.id}`)} className="bg-white p-4 rounded-lg border-l-4 border-red-500 shadow-sm cursor-pointer hover:shadow-md transition-all relative group">
+                                    <button onClick={(e) => hideAlert(e, `TASK_${t.id}`)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                    <div className="flex justify-between items-start mb-2 pr-6">
                                         <span className="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded uppercase">Avería / Urgente</span>
-                                        <ArrowLink />
                                     </div>
                                     <p className="font-bold text-gray-900 leading-tight">{t.titulo}</p>
                                     <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
@@ -91,28 +113,36 @@ export default function AdminDashboard() {
                                 </div>
                             ))}
                             {/* Urgent Absences */}
-                            {section1.urgentAbsences.map((a: any) => (
-                                <div key={a.id} onClick={() => router.push('/admin/ausencias')} className="bg-white p-4 rounded-lg border-l-4 border-orange-500 shadow-sm cursor-pointer hover:shadow-md transition-all">
-                                    <div className="flex justify-between items-start mb-2">
+                            {visibleAbsences.map((a: any) => (
+                                <div key={a.id} onClick={() => router.push('/admin/ausencias')} className="bg-white p-4 rounded-lg border-l-4 border-orange-500 shadow-sm cursor-pointer hover:shadow-md transition-all relative group">
+                                    <button onClick={(e) => hideAlert(e, `ABSENCE_${a.id}`)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                    <div className="flex justify-between items-start mb-2 pr-6">
                                         <span className="text-[10px] font-bold text-white bg-orange-500 px-2 py-0.5 rounded uppercase">Ausencia Pendiente</span>
-                                        <ArrowLink />
                                     </div>
                                     <p className="font-bold text-gray-900 leading-tight">{a.empleado.nombre} {a.empleado.apellidos}</p>
                                     <p className="text-xs text-gray-500 mt-1">Revisar solicitud</p>
                                 </div>
                             ))}
                             {/* Critical Alerts (Docs/Exp) */}
-                            {section1.criticalAlerts.map((alert: any, i: number) => (
-                                <div key={i} className="bg-white p-4 rounded-lg border-l-4 border-red-500 shadow-sm flex flex-col justify-between">
-                                    <div>
-                                        <div className="flex justify-between items-start mb-2">
-                                            <span className="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded uppercase">{alert.type}</span>
+                            {visibleAlerts.map((alert: any, i: number) => {
+                                const key = `ALERT_${alert.entityType}_${alert.id}_${alert.type}_${alert.date}`;
+                                return (
+                                    <div key={i} className="bg-white p-4 rounded-lg border-l-4 border-red-500 shadow-sm flex flex-col justify-between relative group">
+                                        <button onClick={(e) => hideAlert(e, key)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                        <div>
+                                            <div className="flex justify-between items-start mb-2 pr-6">
+                                                <span className="text-[10px] font-bold text-white bg-red-500 px-2 py-0.5 rounded uppercase">{alert.type}</span>
+                                            </div>
+                                            <p className="font-bold text-gray-900">{alert.entity}</p>
+                                            <p className="text-xs text-red-600 font-bold uppercase mt-1">{alert.message}</p>
                                         </div>
-                                        <p className="font-bold text-gray-900">{alert.entity}</p>
-                                        <p className="text-xs text-red-600 font-bold uppercase mt-1">{alert.message}</p>
                                     </div>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     </div>
                 )}
