@@ -1,0 +1,1 @@
+next.config.ts(9,25): error TS2307: Cannot find module '@ducanh2912/next-pwa' or its corresponding type declarations.

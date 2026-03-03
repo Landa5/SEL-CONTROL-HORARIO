@@ -26,6 +26,8 @@ import EmployeeAbsenceView from '@/components/empleado/EmployeeAbsenceView';
 import MainDashboardLayout from '@/components/layout/MainDashboardLayout';
 import FleetAlertsWidget from '@/components/admin/FleetAlertsWidget';
 import PredictiveMaintenanceWidget from '@/components/admin/PredictiveMaintenanceWidget';
+import TodayOverview from '@/components/admin/TodayOverview';
+
 
 
 export default function OficinaDashboard() {
@@ -34,6 +36,7 @@ export default function OficinaDashboard() {
     const [jornada, setJornada] = useState<any>(null);
     const [tareas, setTareas] = useState<any[]>([]);
     const [fleetStats, setFleetStats] = useState<any>({ upcomingExpirations: [] });
+    const [ausenciasStats, setAusenciasStats] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
 
@@ -50,7 +53,9 @@ export default function OficinaDashboard() {
         fetchJornada();
         fetchTareas();
         fetchFleetStats();
+        fetchAusenciasStats();
     }, []);
+
 
     const fetchFleetStats = async () => {
         try {
@@ -58,6 +63,14 @@ export default function OficinaDashboard() {
             if (res.ok) setFleetStats(await res.json());
         } catch (e) { console.error(e); }
     };
+
+    const fetchAusenciasStats = async () => {
+        try {
+            const res = await fetch('/api/admin/ausencias/dashboard');
+            if (res.ok) setAusenciasStats(await res.json());
+        } catch (e) { console.error(e); }
+    };
+
 
 
     const fetchJornada = async () => {
@@ -244,6 +257,17 @@ export default function OficinaDashboard() {
                             </Card>
                         </div>
                     </div>
+
+                    {/* AUSENCIAS SUMMARY */}
+                    {ausenciasStats && (
+                        <section className="mt-8 mb-8">
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="h-6 w-1 bg-red-500 rounded-full"></div>
+                                <h2 className="text-lg font-black text-gray-800 uppercase tracking-tighter">Resumen de Personal</h2>
+                            </div>
+                            <TodayOverview stats={ausenciasStats} loading={loading} />
+                        </section>
+                    )}
 
                     {/* MANAGEMENT SECTION */}
                     <section>
