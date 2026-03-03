@@ -30,25 +30,31 @@ export async function middleware(request: NextRequest) {
             'EMPLEADO': '/empleado'
         };
 
+        const rolePermissions: Record<string, string[]> = {
+            'ADMIN': ['/admin', '/oficina', '/mecanico', '/empleado'],
+            'OFICINA': ['/oficina', '/empleado', '/admin/formacion'],
+            'MECANICO': ['/mecanico', '/empleado'],
+            'CONDUCTOR': ['/empleado'],
+            'EMPLEADO': ['/empleado']
+        };
+
         const rol = (payload as any).rol;
+        const fallbackRoute = roleRoutes[rol] || '/login';
 
-        if (pathname.startsWith('/admin') && rol !== 'ADMIN') {
-            // Allow office to access formation even if it's under /admin
-            if (!pathname.startsWith('/admin/formacion') || rol !== 'OFICINA') {
-                return NextResponse.redirect(new URL(roleRoutes[rol] || '/login', request.url));
+        // Redirects away from login root or naked dashboard roots to their proper starting points
+        const isRedirectHomeRoute = pathname === '/login' || pathname === '/' || pathname === '/admin' || pathname === '/oficina' || pathname === '/mecanico';
+
+        if (isRedirectHomeRoute) {
+            return NextResponse.redirect(new URL(fallbackRoute, request.url));
+        }
+
+        if (isProtectedRoute) {
+            const allowedPrefixes = rolePermissions[rol] || [];
+            const hasPermission = allowedPrefixes.some(prefix => pathname.startsWith(prefix));
+
+            if (!hasPermission) {
+                return NextResponse.redirect(new URL(fallbackRoute, request.url));
             }
-        }
-
-        if (pathname.startsWith('/oficina') && rol !== 'OFICINA' && rol !== 'ADMIN') {
-            return NextResponse.redirect(new URL(roleRoutes[rol] || '/login', request.url));
-        }
-
-        if (pathname.startsWith('/mecanico') && rol !== 'MECANICO' && rol !== 'ADMIN') {
-            return NextResponse.redirect(new URL(roleRoutes[rol] || '/login', request.url));
-        }
-
-        if (pathname === '/login' || pathname === '/' || pathname === '/admin' || pathname === '/oficina' || pathname === '/mecanico') {
-            return NextResponse.redirect(new URL(roleRoutes[rol] || '/empleado', request.url));
         }
     }
 

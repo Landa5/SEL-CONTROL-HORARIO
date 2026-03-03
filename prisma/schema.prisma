@@ -132,6 +132,8 @@ model JornadaLaboral {
   updatedAt DateTime @updatedAt
 
   compensacion CompensacionFestivo?
+
+  @@index([empleadoId, fecha])
 }
 
 // Replaces TurnoConductor. Represents a usage slice of a truck within a day.
@@ -161,6 +163,9 @@ model UsoCamion {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([jornadaId])
+  @@index([camionId])
 }
 
 model Descarga {
@@ -297,6 +302,10 @@ model Tarea {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([asignadoAId])
+  @@index([creadoPorId])
+  @@index([estado, prioridad])
 }
 
 enum ProyectoEstado {
@@ -612,6 +621,8 @@ model NominaLinea {
   updatedBy Int? // User ID who modified it manually
 
   createdAt DateTime @default(now())
+
+  @@index([nominaId])
 }
 
 model ComercialLitros {
@@ -957,4 +968,7 @@ model MovimientoInventario {
   camion   Camion? @relation(fields: [camionId], references: [id])
 
   createdAt DateTime @default(now())
+
+  @@index([articuloId])
+  @@index([fecha])
 }

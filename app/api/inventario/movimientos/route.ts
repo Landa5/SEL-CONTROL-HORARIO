@@ -39,6 +39,18 @@ export async function GET(request: Request) {
     }
 }
 
+import { z } from 'zod';
+
+const movimientoSchema = z.object({
+    articuloId: z.union([z.number(), z.string()]).transform(Number),
+    tipo: z.enum(['ENTRADA', 'SALIDA', 'AJUSTE']),
+    cantidad: z.number(),
+    permitirNegativo: z.boolean().optional(),
+    motivo: z.string().optional(),
+    tareaId: z.union([z.number(), z.string()]).nullable().optional(),
+    camionId: z.union([z.number(), z.string()]).nullable().optional(),
+});
+
 export async function POST(request: Request) {
     try {
         const session = await getSession();
@@ -46,13 +58,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const body = await request.json();
+        const jsonBody = await request.json();
 
-        if (!body.articuloId || !body.tipo || typeof body.cantidad !== 'number') {
-            return NextResponse.json({ error: 'Faltan datos obligatorios' }, { status: 400 });
+        const parsed = movimientoSchema.safeParse(jsonBody);
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Faltan datos obligatorios o son inválidos' }, { status: 400 });
         }
 
-        const tipo = body.tipo as 'ENTRADA' | 'SALIDA' | 'AJUSTE';
+        const body = parsed.data;
+        const tipo = body.tipo;
         const cantidad = Math.abs(body.cantidad);
 
         // Transacción para asegurar la consistencia del inventario

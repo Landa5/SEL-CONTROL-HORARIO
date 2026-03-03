@@ -5,6 +5,33 @@ import { TareaTipo, TareaPrioridad, TareaEstado } from '@prisma/client';
 
 export const dynamic = 'force-dynamic';
 
+import { z } from 'zod';
+
+const createTareaSchema = z.object({
+    titulo: z.string().min(1, 'El título es obligatorio'),
+    descripcion: z.string().optional(),
+    tipo: z.string().optional(),
+    prioridad: z.string().optional(),
+    activoTipo: z.string().nullable().optional(),
+    matricula: z.string().nullable().optional(),
+    clienteNombre: z.string().nullable().optional(),
+    ubicacionTexto: z.string().nullable().optional(),
+    fechaLimite: z.string().nullable().optional(),
+    asignadoAId: z.union([z.number(), z.string()]).nullable().optional(),
+    parentId: z.union([z.number(), z.string()]).nullable().optional(),
+    proyectoId: z.union([z.number(), z.string()]).nullable().optional(),
+    privada: z.boolean().optional(),
+    descargas: z.union([z.number(), z.string()]).nullable().optional(),
+    contactoNombre: z.string().nullable().optional(),
+    contactoTelefono: z.string().nullable().optional(),
+}).refine(data => {
+    if (data.activoTipo === 'CAMION' && !data.matricula) return false;
+    return true;
+}, {
+    message: "La matrícula es obligatoria para incidencias de camión",
+    path: ["matricula"]
+});
+
 export async function POST(request: Request) {
     try {
         const session = await getSession();
@@ -12,19 +39,16 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
         }
 
-        const body = await request.json();
+        const jsonBody = await request.json();
 
-        // Validation Logic
-        if (!body.titulo) {
-            return NextResponse.json({ error: 'El título es obligatorio' }, { status: 400 });
+        // Validation Logic with Zod
+        const parsed = createTareaSchema.safeParse(jsonBody);
+        if (!parsed.success) {
+            const firstError = parsed.error.issues[0]?.message || 'Error de validación';
+            return NextResponse.json({ error: firstError }, { status: 400 });
         }
 
-        // Camion specific validation for OPERATIVA/AVERIA
-        if (body.activoTipo === 'CAMION') {
-            if (!body.matricula) {
-                return NextResponse.json({ error: 'La matrícula es obligatoria para incidencias de camión' }, { status: 400 });
-            }
-        }
+        const body = parsed.data;
 
         // Handle Camion Relation if matricula provided
         let camionId: number | undefined = undefined;
