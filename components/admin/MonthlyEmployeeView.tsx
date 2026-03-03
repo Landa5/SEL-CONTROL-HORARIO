@@ -259,6 +259,9 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                                 <th className="p-3 font-bold text-gray-600">Total</th>
                                 <th className="p-3 font-bold text-gray-600">Puntualidad</th>
                                 <th className="p-3 font-bold text-gray-600">Extra</th>
+                                <th className="p-3 font-bold text-gray-600 text-center">KM</th>
+                                <th className="p-3 font-bold text-gray-600 text-center">Viajes</th>
+                                <th className="p-3 font-bold text-gray-600 text-center">Descargas</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -274,6 +277,9 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                                     <td className="p-3 font-bold text-orange-400">
                                         {s.overtimeMinutes > 0 ? `+${((s.overtimeMinutes || 0) / 60).toFixed(2)}` : '-'}
                                     </td>
+                                    <td className="p-3 font-mono text-center">{s.km > 0 ? s.km : '-'}</td>
+                                    <td className="p-3 font-mono text-center">{s.viajes > 0 ? s.viajes : '-'}</td>
+                                    <td className="p-3 font-mono text-center">{s.descargas > 0 ? s.descargas : '-'}</td>
                                 </tr>
                             ))}
                         </tbody>

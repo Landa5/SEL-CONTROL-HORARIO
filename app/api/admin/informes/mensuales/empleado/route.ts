@@ -187,6 +187,9 @@ export async function GET(request: Request) {
             let startStr = '--:--';
             let endStr = '--:--';
             let punctualityForDay = 0;
+            let kmDia = 0;
+            let viajesDia = 0;
+            let descargasDia = 0;
 
             if (shift) {
                 daysWorkedCount++;
@@ -233,6 +236,14 @@ export async function GET(request: Request) {
                     punctualityForDay = shiftMinutes - expectedMinutes;
                     punctualityScore += punctualityForDay;
                 }
+
+                if (shift.usosCamion && shift.usosCamion.length > 0) {
+                    shift.usosCamion.forEach((u: any) => {
+                        kmDia += (u.kmRecorridos || 0);
+                        viajesDia += (u.viajesCount || 0);
+                        descargasDia += (u.descargasCount || 0);
+                    });
+                }
             }
 
             // If they worked on a weekend/holiday/absence, expectedMinutes for OVERTIME calculation
@@ -255,6 +266,9 @@ export async function GET(request: Request) {
                 workedMinutes,
                 overtimeMinutes: overtime,
                 punctuality: punctualityForDay,
+                km: kmDia,
+                viajes: viajesDia,
+                descargas: descargasDia,
                 status: shift?.estado || (absence ? absence.estado : isWeekendDay ? 'WEEKEND' : 'MISSING')
             };
         });
