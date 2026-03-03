@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
 };
 
+import AutoLogout from "@/components/AutoLogout";
+
 export default function RootLayout({
   children,
 }: {
@@ -18,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="es" suppressHydrationWarning={true}>
       <body className="min-h-screen bg-gray-100 text-gray-900">
+        <AutoLogout />
         {children}
       </body>
     </html>
