@@ -79,6 +79,9 @@ model Empleado {
 
   // Inventario
   movimientosInventario MovimientoInventario[] @relation("RegistraMovimiento")
+
+  // Mantenimiento Conductor
+  mantenimientosConductor MantenimientoConductor[]
 }
 
 model Camion {
@@ -158,6 +161,8 @@ model UsoCamion {
   viajesCount      Int        @default(0) // Cantidad de viajes
   litrosRepostados Float      @default(0) // Litros de gasoil repostados al camión
   fotoKmInicial    String? // Evidencia si hubo descuadre de KM
+
+  mantenimientos MantenimientoConductor[]
 
   notas String?
 
@@ -971,4 +976,31 @@ model MovimientoInventario {
 
   @@index([articuloId])
   @@index([fecha])
+}
+
+// =======================
+// MANTENIMIENTO CONDUCTOR
+// =======================
+
+model MantenimientoConductor {
+  id          Int       @id @default(autoincrement())
+  usoCamionId Int
+  usoCamion   UsoCamion @relation(fields: [usoCamionId], references: [id])
+
+  // Productos/acciones realizadas
+  aceite       Boolean @default(false)
+  litrosAceite Float? // Solo si aceite = true
+  hidraulico   Boolean @default(false)
+  refrigerante Boolean @default(false)
+  lavado       Boolean @default(false)
+  otroProducto String? // Texto libre para otras acciones
+
+  observaciones String?
+
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  creadoEn DateTime @default(now())
+
+  @@index([usoCamionId])
 }

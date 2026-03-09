@@ -23,7 +23,8 @@ import {
     Droplet,
     User,
     Wifi,
-    WifiOff
+    WifiOff,
+    Wrench
 } from 'lucide-react';
 import SyncManager from '@/lib/pwa/SyncManager';
 import { toast } from 'sonner';
@@ -93,6 +94,18 @@ export default function EmpleadoDashboard() {
     const [conflictData, setConflictData] = useState<any>(null);
     const [showConflictModal, setShowConflictModal] = useState(false);
     const [conflictPhoto, setConflictPhoto] = useState<string>('');
+
+    // Mantenimiento Conductor Modal
+    const [showMantenimientoModal, setShowMantenimientoModal] = useState(false);
+    const [mantenimientoRegistros, setMantenimientoRegistros] = useState<any[]>([]);
+    const [mntAceite, setMntAceite] = useState(false);
+    const [mntLitrosAceite, setMntLitrosAceite] = useState('');
+    const [mntHidraulico, setMntHidraulico] = useState(false);
+    const [mntRefrigerante, setMntRefrigerante] = useState(false);
+    const [mntLavado, setMntLavado] = useState(false);
+    const [mntOtroProducto, setMntOtroProducto] = useState('');
+    const [mntObservaciones, setMntObservaciones] = useState('');
+    const [mntGuardando, setMntGuardando] = useState(false);
 
     // Profile State
     const [profileData, setProfileData] = useState<any>(null);
@@ -443,6 +456,55 @@ export default function EmpleadoDashboard() {
         }
     };
 
+    const fetchMantenimientos = async (usoCamionId: number) => {
+        const res = await fetch(`/api/mantenimiento-conductor?usoCamionId=${usoCamionId}`);
+        if (res.ok) setMantenimientoRegistros(await res.json());
+    };
+
+    const handleAbrirMantenimientoModal = async () => {
+        if (activeTurno) await fetchMantenimientos(activeTurno.id);
+        setShowMantenimientoModal(true);
+    };
+
+    const handleGuardarMantenimiento = async () => {
+        if (!activeTurno) return;
+        if (!mntAceite && !mntHidraulico && !mntRefrigerante && !mntLavado && !mntOtroProducto) {
+            alert('Selecciona al menos una acción realizada.');
+            return;
+        }
+        setMntGuardando(true);
+        const res = await fetch('/api/mantenimiento-conductor', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                usoCamionId: activeTurno.id,
+                aceite: mntAceite,
+                litrosAceite: mntAceite ? mntLitrosAceite : null,
+                hidraulico: mntHidraulico,
+                refrigerante: mntRefrigerante,
+                lavado: mntLavado,
+                otroProducto: mntOtroProducto || null,
+                observaciones: mntObservaciones || null
+            })
+        });
+        setMntGuardando(false);
+        if (res.ok) {
+            // Resetear formulario
+            setMntAceite(false);
+            setMntLitrosAceite('');
+            setMntHidraulico(false);
+            setMntRefrigerante(false);
+            setMntLavado(false);
+            setMntOtroProducto('');
+            setMntObservaciones('');
+            await fetchMantenimientos(activeTurno.id);
+            setShowMantenimientoModal(false);
+            toast.success('Mantenimiento registrado correctamente');
+        } else {
+            alert('Error al registrar el mantenimiento');
+        }
+    };
+
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
     const isConductor = session?.rol === 'CONDUCTOR' || session?.rol === 'MECANICO';
@@ -773,6 +835,32 @@ export default function EmpleadoDashboard() {
                                     )}
                                 </div>
 
+                                {/* MANTENIMIENTO CONDUCTOR */}
+                                <div className="border p-4 rounded-xl space-y-4 border-l-4 border-l-purple-500">
+                                    <h4 className="font-bold flex items-center gap-2"><Wrench className="w-4 h-4 text-purple-600" /> Mantenimiento</h4>
+                                    <p className="text-sm text-gray-500">Registra si has añadido aceite, hidráulico, refrigerante u otras acciones al camión.</p>
+                                    <Button
+                                        onClick={handleAbrirMantenimientoModal}
+                                        className="w-full bg-purple-600 hover:bg-purple-700 font-bold"
+                                    >
+                                        <Wrench className="w-4 h-4 mr-2" /> Registrar Mantenimiento
+                                    </Button>
+                                    {mantenimientoRegistros.length > 0 && (
+                                        <div className="bg-purple-50 p-3 rounded space-y-1">
+                                            <p className="text-xs font-bold text-purple-700 uppercase mb-2">Registrado en este turno:</p>
+                                            {mantenimientoRegistros.map((r: any) => (
+                                                <div key={r.id} className="flex flex-wrap gap-1 text-xs">
+                                                    {r.aceite && <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">🛢 Aceite{r.litrosAceite ? ` (${r.litrosAceite}L)` : ''}</span>}
+                                                    {r.hidraulico && <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">⚙️ Hidráulico</span>}
+                                                    {r.refrigerante && <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">🌡️ Refrigerante</span>}
+                                                    {r.lavado && <span className="bg-purple-100 text-purple-800 px-2 py-0.5 rounded font-bold">🚿 Lavado</span>}
+                                                    {r.otroProducto && <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-bold">+ {r.otroProducto}</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
                                 <div className="pt-4 border-t space-y-2">
                                     <Input type="number" placeholder="KM Finales" value={kmFinal} onChange={e => setKmFinal(e.target.value)} />
                                     <Button onClick={handleEndShift} variant="outline" className="w-full text-red-600 border-red-200">TERMINAR RUTA</Button>
@@ -815,6 +903,150 @@ export default function EmpleadoDashboard() {
 
             {activeSection === 'formacion' && (
                 <EmployeeTrainingView />
+            )}
+
+            {/* MODAL MANTENIMIENTO CONDUCTOR */}
+            {showMantenimientoModal && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+                        <div className="bg-purple-600 p-5 text-white flex items-center gap-3">
+                            <Wrench className="w-6 h-6" />
+                            <div>
+                                <h3 className="text-lg font-bold">Mantenimiento del Vehículo</h3>
+                                <p className="text-xs text-purple-200">Marca lo que has hecho al camión</p>
+                            </div>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            {/* ACEITE */}
+                            <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-purple-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={mntAceite}
+                                    onChange={e => setMntAceite(e.target.checked)}
+                                    className="w-5 h-5 rounded text-purple-600"
+                                />
+                                <span className="text-2xl">🛢️</span>
+                                <div className="flex-1">
+                                    <p className="font-bold text-gray-800">He echado aceite</p>
+                                    <p className="text-xs text-gray-500">Aceite de motor</p>
+                                </div>
+                            </label>
+                            {mntAceite && (
+                                <div className="ml-4 flex items-center gap-2">
+                                    <Input
+                                        type="number"
+                                        placeholder="Litros de aceite (opcional)"
+                                        value={mntLitrosAceite}
+                                        onChange={e => setMntLitrosAceite(e.target.value)}
+                                        className="text-sm"
+                                    />
+                                    <span className="text-sm text-gray-500 whitespace-nowrap">litros</span>
+                                </div>
+                            )}
+
+                            {/* HIDRÁULICO */}
+                            <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-purple-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={mntHidraulico}
+                                    onChange={e => setMntHidraulico(e.target.checked)}
+                                    className="w-5 h-5 rounded text-purple-600"
+                                />
+                                <span className="text-2xl">⚙️</span>
+                                <div className="flex-1">
+                                    <p className="font-bold text-gray-800">He echado hidráulico</p>
+                                    <p className="text-xs text-gray-500">Líquido hidráulico</p>
+                                </div>
+                            </label>
+
+                            {/* REFRIGERANTE */}
+                            <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-purple-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={mntRefrigerante}
+                                    onChange={e => setMntRefrigerante(e.target.checked)}
+                                    className="w-5 h-5 rounded text-purple-600"
+                                />
+                                <span className="text-2xl">🌡️</span>
+                                <div className="flex-1">
+                                    <p className="font-bold text-gray-800">He echado refrigerante / agua</p>
+                                    <p className="text-xs text-gray-500">Líquido refrigerante o agua</p>
+                                </div>
+                            </label>
+
+                            {/* LAVADO */}
+                            <label className="flex items-center gap-3 p-3 border rounded-xl cursor-pointer hover:bg-purple-50 transition-colors">
+                                <input
+                                    type="checkbox"
+                                    checked={mntLavado}
+                                    onChange={e => setMntLavado(e.target.checked)}
+                                    className="w-5 h-5 rounded text-purple-600"
+                                />
+                                <span className="text-2xl">🚿</span>
+                                <div className="flex-1">
+                                    <p className="font-bold text-gray-800">He lavado el camión</p>
+                                    <p className="text-xs text-gray-500">Lavado exterior / interior</p>
+                                </div>
+                            </label>
+
+                            {/* OTRO */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">Otro producto / acción (texto libre)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: He revisado las ruedas, he echado AdBlue..."
+                                    value={mntOtroProducto}
+                                    onChange={e => setMntOtroProducto(e.target.value)}
+                                    className="w-full p-3 border rounded-xl text-sm focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none"
+                                />
+                            </div>
+
+                            {/* OBSERVACIONES */}
+                            <div className="space-y-2">
+                                <label className="text-sm font-bold text-gray-700">Observaciones (opcional)</label>
+                                <textarea
+                                    placeholder="Cualquier detalle adicional..."
+                                    value={mntObservaciones}
+                                    onChange={e => setMntObservaciones(e.target.value)}
+                                    rows={2}
+                                    className="w-full p-3 border rounded-xl text-sm focus:ring-2 focus:ring-purple-300 focus:border-purple-400 outline-none resize-none"
+                                />
+                            </div>
+
+                            {/* HISTORIAL DEL TURNO */}
+                            {mantenimientoRegistros.length > 0 && (
+                                <div className="bg-purple-50 p-3 rounded-xl border border-purple-100">
+                                    <p className="text-xs font-bold text-purple-700 uppercase mb-2">Registros anteriores de este turno:</p>
+                                    {mantenimientoRegistros.map((r: any) => (
+                                        <div key={r.id} className="flex flex-wrap gap-1 text-xs mb-1">
+                                            {r.aceite && <span className="bg-white border px-2 py-0.5 rounded font-medium">🛢 Aceite{r.litrosAceite ? ` (${r.litrosAceite}L)` : ''}</span>}
+                                            {r.hidraulico && <span className="bg-white border px-2 py-0.5 rounded font-medium">⚙️ Hidráulico</span>}
+                                            {r.refrigerante && <span className="bg-white border px-2 py-0.5 rounded font-medium">🌡️ Refrigerante</span>}
+                                            {r.lavado && <span className="bg-white border px-2 py-0.5 rounded font-medium">🚿 Lavado</span>}
+                                            {r.otroProducto && <span className="bg-white border px-2 py-0.5 rounded font-medium">+ {r.otroProducto}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="p-5 pt-0 flex gap-3">
+                            <Button
+                                onClick={() => setShowMantenimientoModal(false)}
+                                variant="ghost"
+                                className="flex-1 py-6"
+                            >
+                                Cancelar
+                            </Button>
+                            <Button
+                                onClick={handleGuardarMantenimiento}
+                                disabled={mntGuardando}
+                                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-6"
+                            >
+                                {mntGuardando ? 'Guardando...' : 'Guardar Registro'}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* CONFLICT MODAL */}
