@@ -82,6 +82,9 @@ model Empleado {
 
   // Mantenimiento Conductor
   mantenimientosConductor MantenimientoConductor[]
+
+  // Revisión mensual accesorios
+  revisionesAccesorios RevisionAccesorios[]
 }
 
 model Camion {
@@ -109,6 +112,7 @@ model Camion {
   mantenimientosPlanificados MantenimientoProximo[]
   historialMantenimientos    MantenimientoRealizado[]
   movimientosInventario      MovimientoInventario[]
+  revisionesAccesorios       RevisionAccesorios[]
 
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @default(now()) @updatedAt
@@ -1003,4 +1007,72 @@ model MantenimientoConductor {
   creadoEn DateTime @default(now())
 
   @@index([usoCamionId])
+}
+
+// =======================
+// REVISIÓN MENSUAL DE ACCESORIOS DEL VEHÍCULO
+// =======================
+
+model RevisionAccesorios {
+  id Int @id @default(autoincrement())
+
+  camionId Int
+  camion   Camion @relation(fields: [camionId], references: [id])
+
+  empleadoId Int
+  empleado   Empleado @relation(fields: [empleadoId], references: [id])
+
+  // Mes en formato "YYYY-MM" (ej: "2026-03")
+  mes String
+
+  // ---- ÍTEMS DEL FORMULARIO ----
+  instruccionesEscritas Boolean @default(false) // Instrucciones escritas a la vista
+
+  // Linternas
+  linternaPetroval Boolean @default(false)
+  linternaNormal   Boolean @default(false)
+
+  // EPIs
+  gafasSeguridad Boolean @default(false)
+  chaleco        Boolean @default(false)
+  calzo          Boolean @default(false)
+  liquidoAclaraOjos Boolean @default(false)
+  guantes        Boolean @default(false)
+  impermeableCasco Boolean @default(false)
+
+  // Material de seguridad vial
+  triangulos     Boolean @default(false)
+  sAutoportante  Boolean @default(false) // S. Autoportante
+  cargadorMovil  Boolean @default(false)
+
+  // Material operativo
+  pala           Boolean @default(false)
+  obturador      Boolean @default(false)
+  recColector    Boolean @default(false) // Rec. Colector
+  sepiolita      Boolean @default(false)
+  cuerda         Boolean @default(false)
+
+  // Pistolas
+  pistolaMk50       Boolean @default(false)
+  pistolaAutomatica Boolean @default(false)
+  fundaNegraPistola Boolean @default(false) // Funda negra pistola automática
+
+  // Estado vehículo
+  ruedasDelante    Boolean @default(false)
+  ruedasDetras     Boolean @default(false)
+  limpiezaInterior Boolean @default(false)
+  limpiezaExterior Boolean @default(false)
+  desagues         Boolean @default(false)
+  grifos           Boolean @default(false)
+  aceiteAgua       Boolean @default(false)
+  presionRuedas    Boolean @default(false)
+
+  observaciones String?
+
+  creadoEn  DateTime @default(now())
+
+  // Un conductor solo puede hacer una revisión por camión por mes
+  @@unique([camionId, empleadoId, mes])
+  @@index([camionId])
+  @@index([mes])
 }

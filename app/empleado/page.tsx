@@ -24,7 +24,8 @@ import {
     User,
     Wifi,
     WifiOff,
-    Wrench
+    Wrench,
+    ClipboardCheck
 } from 'lucide-react';
 import SyncManager from '@/lib/pwa/SyncManager';
 import { toast } from 'sonner';
@@ -106,6 +107,25 @@ export default function EmpleadoDashboard() {
     const [mntOtroProducto, setMntOtroProducto] = useState('');
     const [mntObservaciones, setMntObservaciones] = useState('');
     const [mntGuardando, setMntGuardando] = useState(false);
+
+    // Revisión Mensual de Accesorios
+    const now = new Date();
+    const mesActual = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const [showRevisionModal, setShowRevisionModal] = useState(false);
+    const [revisionGuardando, setRevisionGuardando] = useState(false);
+    const [revisionDelMes, setRevisionDelMes] = useState<any>(null);
+    const [revisionCamionId, setRevisionCamionId] = useState<number | null>(null);
+    const [rev, setRev] = useState<Record<string, boolean>>({
+        instruccionesEscritas: false, linternaPetroval: false, linternaNormal: false,
+        gafasSeguridad: false, chaleco: false, calzo: false, liquidoAclaraOjos: false,
+        guantes: false, impermeableCasco: false, triangulos: false, sAutoportante: false,
+        cargadorMovil: false, pala: false, obturador: false, recColector: false,
+        sepiolita: false, cuerda: false, pistolaMk50: false, pistolaAutomatica: false,
+        fundaNegraPistola: false, ruedasDelante: false, ruedasDetras: false,
+        limpiezaInterior: false, limpiezaExterior: false, desagues: false, grifos: false,
+        aceiteAgua: false, presionRuedas: false
+    });
+    const [revObs, setRevObs] = useState('');
 
     // Profile State
     const [profileData, setProfileData] = useState<any>(null);
@@ -505,6 +525,36 @@ export default function EmpleadoDashboard() {
         }
     };
 
+    const fetchRevisionMensual = async (camionId: number) => {
+        const res = await fetch(`/api/revision-accesorios?camionId=${camionId}&mes=${mesActual}`);
+        if (res.ok) setRevisionDelMes(await res.json());
+    };
+
+    const handleAbrirRevision = async (camionId: number) => {
+        setRevisionCamionId(camionId);
+        await fetchRevisionMensual(camionId);
+        setShowRevisionModal(true);
+    };
+
+    const handleGuardarRevision = async () => {
+        if (!revisionCamionId) return;
+        setRevisionGuardando(true);
+        const res = await fetch('/api/revision-accesorios', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ camionId: revisionCamionId, mes: mesActual, ...rev, observaciones: revObs || null })
+        });
+        setRevisionGuardando(false);
+        if (res.ok) {
+            const data = await res.json();
+            setRevisionDelMes(data);
+            setShowRevisionModal(false);
+            toast.success('Revisión mensual guardada correctamente');
+        } else {
+            toast.error('Error al guardar la revisión');
+        }
+    };
+
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando...</div>;
 
     const isConductor = session?.rol === 'CONDUCTOR' || session?.rol === 'MECANICO';
@@ -514,6 +564,7 @@ export default function EmpleadoDashboard() {
         { id: 'summary', label: 'Resumen', icon: LayoutDashboard },
         { id: 'jornada', label: 'Mi Control de Días', icon: Clock, badgeCount: !jornada ? 1 : 0 },
         ...(isConductor ? [{ id: 'vehiculo', label: 'Vehículo', icon: Truck }] : []),
+        ...(isConductor ? [{ id: 'revision', label: 'Revisión Mensual', icon: ClipboardCheck, badgeCount: isConductor && !revisionDelMes ? 1 : 0 }] : []),
         { id: 'vacaciones', label: 'Vacaciones/Bajas', icon: Calendar },
         { id: 'taller', label: 'Reportar Avería', icon: AlertTriangle, badgeCount: tareas.length },
         { id: 'formacion', label: 'Formación', icon: BookOpen },
@@ -1299,6 +1350,182 @@ export default function EmpleadoDashboard() {
                     </Card>
                 </div>
             )}
+
+            {/* SECCIÓN REVISIÓN MENSUAL DE ACCESORIOS */}
+            {activeSection === 'revision' && isConductor && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <ClipboardCheck className="w-5 h-5 text-blue-600" />
+                            Revisión Mensual de Accesorios
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <p className="text-sm text-gray-500">
+                            Una vez al mes debes revisar y verificar que el camión tiene todo el equipamiento de seguridad en orden.
+                            Mes actual: <strong>{mesActual}</strong>
+                        </p>
+
+                        {/* SELECCIÓN DE CAMIÓN */}
+                        <div className="space-y-2">
+                            <label className="text-sm font-bold text-gray-700">Selecciona el camión a revisar</label>
+                            <select
+                                className="w-full p-3 border rounded-xl text-sm"
+                                value={revisionCamionId || ''}
+                                onChange={async e => {
+                                    const id = parseInt(e.target.value);
+                                    setRevisionCamionId(id || null);
+                                    if (id) await fetchRevisionMensual(id);
+                                    else setRevisionDelMes(null);
+                                }}
+                            >
+                                <option value="">-- Seleccionar --</option>
+                                {camiones.map((c: any) => (
+                                    <option key={c.id} value={c.id}>{c.matricula} {c.marca ? `(${c.marca})` : ''}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {revisionCamionId && (
+                            revisionDelMes ? (
+                                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <CheckCircle className="w-6 h-6 text-green-600" />
+                                        <div>
+                                            <p className="font-bold text-green-800">Revisión completada este mes ✓</p>
+                                            <p className="text-xs text-green-600">Realizada el {new Date(revisionDelMes.creadoEn).toLocaleDateString('es-ES')}</p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        onClick={() => handleAbrirRevision(revisionCamionId)}
+                                        variant="outline"
+                                        className="w-full border-green-300 text-green-700"
+                                    >
+                                        Ver / Editar Revisión
+                                    </Button>
+                                </div>
+                            ) : (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <ClipboardCheck className="w-6 h-6 text-amber-600" />
+                                        <div>
+                                            <p className="font-bold text-amber-800">⚠️ Revisión pendiente este mes</p>
+                                            <p className="text-xs text-amber-600">Aún no has hecho la revisión de {mesActual}</p>
+                                        </div>
+                                    </div>
+                                    <Button
+                                        onClick={() => handleAbrirRevision(revisionCamionId)}
+                                        className="w-full bg-blue-600 hover:bg-blue-700 font-bold"
+                                    >
+                                        <ClipboardCheck className="w-4 h-4 mr-2" /> Hacer la Revisión Ahora
+                                    </Button>
+                                </div>
+                            )
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* MODAL REVISIÓN MENSUAL */}
+            {showRevisionModal && (() => {
+                const ITEMS = [
+                    { key: 'instruccionesEscritas', emoji: '📜', label: 'Instrucciones escritas a la vista' },
+                    { key: 'linternaPetroval', emoji: '🔦', label: 'Linterna Petroval' },
+                    { key: 'linternaNormal', emoji: '🔦', label: 'Linterna Normal' },
+                    { key: 'gafasSeguridad', emoji: '🕶️', label: 'Gafas de seguridad' },
+                    { key: 'chaleco', emoji: '🦷', label: 'Chaleco reflectante' },
+                    { key: 'calzo', emoji: '🛠️', label: 'Calzo' },
+                    { key: 'liquidoAclaraOjos', emoji: '👁️', label: 'Líquido aclara ojos' },
+                    { key: 'guantes', emoji: '🧤', label: 'Guantes' },
+                    { key: 'impermeableCasco', emoji: '⛑️', label: 'Impermeable / Casco' },
+                    { key: 'triangulos', emoji: '⚠️', label: 'Triángulos' },
+                    { key: 'sAutoportante', emoji: '🚨', label: 'S. Autoportante' },
+                    { key: 'cargadorMovil', emoji: '🔋', label: 'Cargador móvil' },
+                    { key: 'pala', emoji: '⛏️', label: 'Pala' },
+                    { key: 'obturador', emoji: '🔧', label: 'Obturador' },
+                    { key: 'recColector', emoji: '🧲', label: 'Rec. Colector' },
+                    { key: 'sepiolita', emoji: '💊', label: 'Sepiolita' },
+                    { key: 'cuerda', emoji: '🧵', label: 'Cuerda' },
+                    { key: 'pistolaMk50', emoji: '🔫', label: 'Pistola MK-50' },
+                    { key: 'pistolaAutomatica', emoji: '🔫', label: 'Pistola Automática' },
+                    { key: 'fundaNegraPistola', emoji: '👜', label: 'Funda negra pistola automática' },
+                    { key: 'ruedasDelante', emoji: '🛥️', label: 'Ruedas Delante' },
+                    { key: 'ruedasDetras', emoji: '🛥️', label: 'Ruedas Detrás' },
+                    { key: 'limpiezaInterior', emoji: '🧹', label: 'Limpieza Interior' },
+                    { key: 'limpiezaExterior', emoji: '🚿', label: 'Limpieza Exterior' },
+                    { key: 'desagues', emoji: '🚰', label: 'Desagües' },
+                    { key: 'grifos', emoji: '🚰', label: 'Grifos' },
+                    { key: 'aceiteAgua', emoji: '🐧', label: 'Aceite / Agua' },
+                    { key: 'presionRuedas', emoji: '💨', label: 'Presión Ruedas' },
+                ];
+                return (
+                    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-2">
+                        <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[95vh]">
+                            {/* HEADER */}
+                            <div className="bg-blue-600 p-5 text-white rounded-t-2xl shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <ClipboardCheck className="w-6 h-6" />
+                                    <div>
+                                        <h3 className="text-lg font-bold">Revisión Mensual de Accesorios</h3>
+                                        <p className="text-xs text-blue-200">Mes: {mesActual} — Marca los ítems que están presentes y correctos</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* BODY - scroll */}
+                            <div className="overflow-y-auto p-5 space-y-2 flex-1">
+                                {ITEMS.map(item => (
+                                    <label key={item.key} className={`flex items-center gap-3 p-3 border-2 rounded-xl cursor-pointer transition-all ${rev[item.key] ? 'border-green-400 bg-green-50' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                                        }`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={rev[item.key]}
+                                            onChange={e => setRev(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                                            className="w-5 h-5 rounded text-green-600"
+                                        />
+                                        <span className="text-xl">{item.emoji}</span>
+                                        <span className={`text-sm font-medium ${rev[item.key] ? 'text-green-800' : 'text-gray-700'}`}>{item.label}</span>
+                                        {rev[item.key] && <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />}
+                                    </label>
+                                ))}
+
+                                {/* OBSERVACIONES */}
+                                <div className="pt-2 space-y-1">
+                                    <label className="text-sm font-bold text-gray-700">Observaciones (opcional)</label>
+                                    <textarea
+                                        value={revObs}
+                                        onChange={e => setRevObs(e.target.value)}
+                                        rows={2}
+                                        placeholder="Cualquier detalle adicional..."
+                                        className="w-full p-3 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-300 resize-none"
+                                    />
+                                </div>
+
+                                {/* RESUMEN */}
+                                <div className="bg-gray-50 rounded-xl p-3 text-sm flex justify-between">
+                                    <span className="text-gray-600">Verificados:</span>
+                                    <span className="font-bold text-blue-700">{Object.values(rev).filter(Boolean).length} / {ITEMS.length}</span>
+                                </div>
+                            </div>
+
+                            {/* FOOTER */}
+                            <div className="p-4 border-t flex gap-3 shrink-0">
+                                <Button onClick={() => setShowRevisionModal(false)} variant="ghost" className="flex-1">
+                                    Cancelar
+                                </Button>
+                                <Button
+                                    onClick={handleGuardarRevision}
+                                    disabled={revisionGuardando}
+                                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold"
+                                >
+                                    {revisionGuardando ? 'Guardando...' : 'Guardar Revisión'}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
+
         </MainDashboardLayout>
     );
 }
