@@ -81,7 +81,7 @@ export default function EmpleadoDashboard() {
     const [monthlyDetails, setMonthlyDetails] = useState<any[]>([]);
 
     // View control
-    const [activeSection, setActiveSection] = useState<'summary' | 'jornada' | 'vehiculo' | 'vacaciones' | 'taller' | 'formacion' | 'profile'>('summary');
+    const [activeSection, setActiveSection] = useState<'summary' | 'jornada' | 'vehiculo' | 'revision' | 'vacaciones' | 'taller' | 'formacion' | 'profile'>('summary');
 
     // Form states
     const [observaciones, setObservaciones] = useState('');
