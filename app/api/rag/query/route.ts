@@ -14,7 +14,10 @@ export async function POST(req: NextRequest) {
 
     const ragRes = await fetch(`${RAG_API_URL}/chat/stream`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "ngrok-skip-browser-warning": "1",
+      },
       body: JSON.stringify(body),
       // Mantenemos el abort, pero en stream podemos ser más generosos
       signal: AbortSignal.timeout(60_000),
