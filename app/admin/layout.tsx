@@ -2,7 +2,6 @@
 
 import dynamic from 'next/dynamic';
 import React from 'react';
-import { Loader2 } from 'lucide-react';
 
 const AdminLayoutContent = dynamic(
     () => import('@/components/admin/AdminLayoutContent'),
@@ -16,10 +15,13 @@ const AdminLayoutContent = dynamic(
     }
 );
 
+const RagChat = dynamic(() => import('@/components/RagChat'), { ssr: false });
+
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
     return (
         <div suppressHydrationWarning={true}>
             <AdminLayoutContent>{children}</AdminLayoutContent>
+            <RagChat />
         </div>
     );
 }
