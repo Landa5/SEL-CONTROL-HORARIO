@@ -151,7 +151,15 @@ export default function ActividadPage() {
       let actData: any[] = [];
       if (actRes.ok) {
         const json = await actRes.json();
-        actData = json.data || [];
+        const raw = json.data || [];
+        // Deduplicate activities (same file imported multiple times)
+        const seen = new Set<string>();
+        actData = raw.filter((act: any) => {
+          const key = `${act.startTime}_${act.endTime}_${act.activityType}_${act.driverId}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
       }
       if (drvRes.ok) setDrivers(await drvRes.json());
 
