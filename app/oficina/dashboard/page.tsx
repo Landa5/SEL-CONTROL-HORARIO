@@ -18,7 +18,8 @@ import {
     Truck,
     Users,
     FileText,
-    BookOpen
+    BookOpen,
+    Disc3
 } from 'lucide-react';
 import EmployeeAbsenceSummary from '@/components/empleado/EmployeeAbsenceSummary';
 import EmployeeWorkdaySummary from '@/components/empleado/EmployeeWorkdaySummary';
@@ -161,7 +162,8 @@ export default function OficinaDashboard() {
         { id: 'conductores', label: 'Días Conductores', icon: Users },
         { id: 'camiones', label: 'Gestionar Camiones', icon: Truck },
         { id: 'taller', label: 'Averías / Taller', icon: AlertCircle, badgeCount: tareas.filter(t => t.estado === 'ABIERTA').length },
-        { id: 'formacion', label: 'Formación', icon: BookOpen }
+        { id: 'formacion', label: 'Formación', icon: BookOpen },
+        { id: 'tacografo', label: 'Tacógrafo Digital', icon: Disc3 }
     ];
 
     return (
@@ -190,6 +192,10 @@ export default function OficinaDashboard() {
                 }
                 if (id === 'formacion') {
                     router.push('/admin/formacion');
+                    return;
+                }
+                if (id === 'tacografo') {
+                    router.push('/admin/tacografo/importaciones');
                     return;
                 }
                 setActiveSection(id as any);
