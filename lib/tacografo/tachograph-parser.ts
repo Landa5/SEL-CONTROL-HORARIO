@@ -98,6 +98,23 @@ function extractPlateFromFileName(fileName: string): string | undefined {
 }
 
 /**
+ * Extracts DNI from tachograph driver card filename.
+ * Spanish driver card filenames follow: C_E{DNI}{version}
+ * Examples:
+ *   C_E44798563Z000003_E... → DNI: 44798563Z
+ *   C_E45802660T000001_E... → DNI: 45802660T
+ *   E__E45802660T000020...  → DNI: 45802660T
+ */
+function extractDniFromFileName(fileName: string): string | undefined {
+  const baseName = fileName.split(/[\\/]/).pop() || '';
+  // Pattern: E followed by 8 digits + 1 letter (Spanish DNI)
+  // Can appear after C_, E_, E__ or similar prefixes
+  const match = baseName.match(/E(\d{8}[A-Za-z])/i);
+  if (match) return match[1].toUpperCase();
+  return undefined;
+}
+
+/**
  * Intenta extraer fechas del nombre del archivo.
  * Busca patrones como YYYYMMDD, YYYY-MM-DD
  */
@@ -167,6 +184,14 @@ export async function parseTachographFile(
       const dates = extractDatesFromFileName(fileName);
       if (dates.dateFrom) result.metadata.dateFrom = dates.dateFrom;
       if (dates.dateTo) result.metadata.dateTo = dates.dateTo;
+    }
+
+    // Extraer DNI del nombre de archivo (C_E44798563Z000003 → 44798563Z)
+    if (!result.metadata.driverDni) {
+      const dni = extractDniFromFileName(fileName);
+      if (dni) {
+        result.metadata.driverDni = dni;
+      }
     }
 
     // Si el binario no determinó tipo, intentar por nombre

@@ -195,8 +195,8 @@ export async function processImport(
       if (newDriver) {
         updateData.driverId = newDriver.id;
         
-        // Try auto-linking with employee
-        const autoLinked = await autoLinkDriver(newDriver.id);
+        // Try auto-linking with employee (pass DNI from filename if available)
+        const autoLinked = await autoLinkDriver(newDriver.id, parseResult.metadata.driverDni);
         if (!autoLinked) {
           await prisma.tachographIncident.create({
             data: {
@@ -355,9 +355,32 @@ async function createOrGetDriver(parseResult: TachographParseResult) {
   });
 }
 
-async function autoLinkDriver(driverId: number): Promise<boolean> {
+async function autoLinkDriver(driverId: number, dniFromFile?: string): Promise<boolean> {
   const driver = await prisma.tachographDriver.findUnique({ where: { id: driverId } });
   if (!driver || driver.linkedEmployeeId) return !!driver?.linkedEmployeeId;
+  
+  // ========================================
+  // Strategy 0: Direct DNI match from filename
+  // ========================================
+  // The filename contains the DNI directly: C_E44798563Z000003 → 44798563Z
+  // This is the most reliable source.
+  if (dniFromFile) {
+    const normalizedFileDni = dniFromFile.replace(/[\s\-\.]/g, '').toUpperCase();
+    const allEmployees = await prisma.empleado.findMany({
+      where: { activo: true, dni: { not: null } }
+    });
+    for (const emp of allEmployees) {
+      if (!emp.dni) continue;
+      const empDni = emp.dni.replace(/[\s\-\.]/g, '').toUpperCase();
+      if (empDni === normalizedFileDni) {
+        await prisma.tachographDriver.update({
+          where: { id: driverId },
+          data: { linkedEmployeeId: emp.id }
+        });
+        return true;
+      }
+    }
+  }
   
   // ========================================
   // Strategy 1: Match by DNI in card number
