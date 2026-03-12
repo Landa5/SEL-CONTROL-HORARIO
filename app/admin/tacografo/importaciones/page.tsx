@@ -277,7 +277,9 @@ export default function ImportacionesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-gray-600 truncate max-w-[120px]">
-                      {imp.driver?.fullName || imp.detectedDriverName || <span className="text-gray-300">—</span>}
+                      {imp.driver?.linkedEmployee
+                        ? `${imp.driver.linkedEmployee.nombre} ${imp.driver.linkedEmployee.apellidos || ''}`.trim()
+                        : imp.driver?.fullName || imp.detectedDriverName || <span className="text-gray-300">—</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600">
                       {imp.vehicle?.plateNumber || imp.detectedPlate || <span className="text-gray-300">—</span>}
