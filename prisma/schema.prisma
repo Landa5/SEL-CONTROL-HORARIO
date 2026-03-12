@@ -85,6 +85,10 @@ model Empleado {
 
   // Revisión mensual accesorios
   revisionesAccesorios RevisionAccesorios[]
+
+  // Tacógrafo Digital
+  tachographUploads    TachographImport[] @relation("TachographUploader")
+  tachographDriverLink TachographDriver[] @relation("TachographLinkedEmployee")
 }
 
 model Camion {
@@ -113,6 +117,9 @@ model Camion {
   historialMantenimientos    MantenimientoRealizado[]
   movimientosInventario      MovimientoInventario[]
   revisionesAccesorios       RevisionAccesorios[]
+
+  // Tacógrafo Digital
+  tachographVehicles         TachographVehicle[] @relation("TachographLinkedVehicle")
 
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @default(now()) @updatedAt
@@ -1075,4 +1082,275 @@ model RevisionAccesorios {
   @@unique([camionId, empleadoId, mes])
   @@index([camionId])
   @@index([mes])
+}
+
+// =======================
+// MÓDULO TACÓGRAFO DIGITAL
+// =======================
+
+enum TachographSourceType {
+  MANUAL_UPLOAD
+  LOCAL_FOLDER
+  FUTURE_API
+  FUTURE_HARDWARE
+}
+
+enum TachographImportStatus {
+  PENDING
+  PROCESSING
+  PROCESSED_OK
+  PROCESSED_WARNINGS
+  ERROR
+}
+
+enum TachographActivityType {
+  DRIVING
+  OTHER_WORK
+  AVAILABILITY
+  REST
+  BREAK
+  UNKNOWN
+}
+
+enum TachographFileType {
+  DRIVER_CARD
+  VEHICLE_UNIT
+  UNKNOWN
+}
+
+enum TachographIncidentType {
+  DUPLICATE_FILE
+  CORRUPT_FILE
+  UNIDENTIFIED_DRIVER
+  UNIDENTIFIED_VEHICLE
+  TEMPORAL_OVERLAP
+  ACTIVITY_GAP
+  INCOMPLETE_DATA
+  CARD_VEHICLE_CONFLICT
+  PARSE_ERROR
+  INTERNAL_JOURNEY_MISMATCH
+}
+
+enum TachographSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TachographResolutionStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  DISMISSED
+}
+
+model TachographImport {
+  id Int @id @default(autoincrement())
+
+  sourceType     TachographSourceType    @default(MANUAL_UPLOAD)
+  fileType       TachographFileType      @default(UNKNOWN)
+  fileName       String
+  originalExtension String
+  mimeType       String?
+  fileSize       Int                     // bytes
+  fileHash       String                  @unique
+  importStatus   TachographImportStatus  @default(PENDING)
+  importDate     DateTime                @default(now())
+  processedAt    DateTime?
+  parserVersion  String                  @default("stub-v1")
+  rawMetadataJson String?                // JSON string
+  warningsJson   String?                 // JSON string
+  errorsJson     String?                 // JSON string
+  rawFilePath    String                  // path to original file
+
+  // Who uploaded
+  uploadedById   Int?
+  uploadedBy     Empleado?               @relation("TachographUploader", fields: [uploadedById], references: [id])
+
+  // Detected data
+  detectedDriverName  String?
+  detectedCardNumber  String?
+  detectedPlate       String?
+  detectedVin         String?
+  detectedDateFrom    DateTime?
+  detectedDateTo      DateTime?
+
+  // Linked after processing
+  driverId       Int?
+  driver         TachographDriver?       @relation(fields: [driverId], references: [id])
+  vehicleId      Int?
+  vehicle        TachographVehicle?      @relation(fields: [vehicleId], references: [id])
+
+  // Review
+  reviewedAt     DateTime?
+  reviewedById   Int?
+
+  activities     TachographActivity[]
+  incidents      TachographIncident[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([importStatus])
+  @@index([importDate])
+  @@index([fileHash])
+}
+
+model TachographDriver {
+  id Int @id @default(autoincrement())
+
+  // Link to internal employee
+  linkedEmployeeId Int?
+  linkedEmployee   Empleado? @relation("TachographLinkedEmployee", fields: [linkedEmployeeId], references: [id])
+
+  fullName         String
+  cardNumber       String?   @unique
+  cardExpiry       DateTime?
+  driverIdentifier String?
+  active           Boolean   @default(true)
+
+  imports      TachographImport[]
+  activities   TachographActivity[]
+  dailySummaries TachographDailySummary[]
+  incidents    TachographIncident[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([cardNumber])
+  @@index([linkedEmployeeId])
+}
+
+model TachographVehicle {
+  id Int @id @default(autoincrement())
+
+  // Link to internal vehicle
+  linkedVehicleId Int?
+  linkedVehicle   Camion? @relation("TachographLinkedVehicle", fields: [linkedVehicleId], references: [id])
+
+  plateNumber     String?  @unique
+  vin             String?  @unique
+  companyNumber   String?
+  tachographBrand String?
+  active          Boolean  @default(true)
+
+  imports      TachographImport[]
+  activities   TachographActivity[]
+  dailySummaries TachographDailySummary[]
+  incidents    TachographIncident[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([plateNumber])
+  @@index([linkedVehicleId])
+}
+
+model TachographActivity {
+  id Int @id @default(autoincrement())
+
+  importId      Int
+  import        TachographImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  sourceType    TachographFileType @default(UNKNOWN)
+
+  driverId      Int?
+  driver        TachographDriver? @relation(fields: [driverId], references: [id])
+
+  vehicleId     Int?
+  vehicle       TachographVehicle? @relation(fields: [vehicleId], references: [id])
+
+  activityType  TachographActivityType @default(UNKNOWN)
+  startTime     DateTime
+  endTime       DateTime
+  durationMinutes Int
+
+  countryStart  String?
+  countryEnd    String?
+
+  rawPayloadJson String? // JSON string
+  confidenceLevel String @default("low") // low, medium, high
+
+  createdAt DateTime @default(now())
+
+  @@index([importId])
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([startTime])
+}
+
+model TachographDailySummary {
+  id Int @id @default(autoincrement())
+
+  driverId    Int
+  driver      TachographDriver @relation(fields: [driverId], references: [id])
+
+  vehicleId   Int?
+  vehicle     TachographVehicle? @relation(fields: [vehicleId], references: [id])
+
+  date        DateTime @db.Date
+
+  totalDrivingMinutes     Int @default(0)
+  totalOtherWorkMinutes   Int @default(0)
+  totalAvailabilityMinutes Int @default(0)
+  totalRestMinutes        Int @default(0)
+  totalBreakMinutes       Int @default(0)
+
+  importedFromCount       Int @default(0)
+  consistencyStatus       String @default("pending") // pending, ok, warning, error
+  notes                   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([driverId, vehicleId, date])
+  @@index([driverId])
+  @@index([date])
+}
+
+model TachographIncident {
+  id Int @id @default(autoincrement())
+
+  incidentType TachographIncidentType
+  severity     TachographSeverity @default(MEDIUM)
+
+  driverId     Int?
+  driver       TachographDriver? @relation(fields: [driverId], references: [id])
+
+  vehicleId    Int?
+  vehicle      TachographVehicle? @relation(fields: [vehicleId], references: [id])
+
+  importId     Int?
+  import       TachographImport? @relation(fields: [importId], references: [id])
+
+  dateFrom     DateTime?
+  dateTo       DateTime?
+
+  title        String
+  description  String?
+
+  resolutionStatus TachographResolutionStatus @default(OPEN)
+  resolutionNotes  String?
+  resolvedAt       DateTime?
+  resolvedById     Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([incidentType])
+  @@index([resolutionStatus])
+  @@index([driverId])
+  @@index([vehicleId])
+}
+
+model TachographConfig {
+  id Int @id @default(autoincrement())
+
+  key   String @unique // e.g. "input_folder", "processed_folder", "error_folder", etc.
+  value String          // JSON string for complex values, plain string for simple ones
+  label String          // Human-readable label
+
+  updatedAt DateTime @updatedAt
+  updatedBy Int?
 }

@@ -1,0 +1,377 @@
+'use client';
+
+import React, { useState, useEffect, useCallback } from 'react';
+import { Upload, FileText, RefreshCw, Search, Eye, RotateCcw, CheckCircle, AlertTriangle, XCircle, Clock, X, Download } from 'lucide-react';
+
+const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+  PENDING: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
+  PROCESSING: { label: 'Procesando', color: 'bg-blue-100 text-blue-800 border-blue-200', icon: RefreshCw },
+  PROCESSED_OK: { label: 'Correcto', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
+  PROCESSED_WARNINGS: { label: 'Con avisos', color: 'bg-orange-100 text-orange-800 border-orange-200', icon: AlertTriangle },
+  ERROR: { label: 'Error', color: 'bg-red-100 text-red-800 border-red-200', icon: XCircle },
+};
+
+export default function ImportacionesPage() {
+  const [imports, setImports] = useState<any[]>([]);
+  const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 });
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [selectedImport, setSelectedImport] = useState<any>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [uploadResults, setUploadResults] = useState<any[] | null>(null);
+
+  const fetchImports = useCallback(async (page = 1) => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '20' });
+      if (statusFilter) params.set('status', statusFilter);
+      const res = await fetch(`/api/tacografo/imports?${params}`);
+      if (res.ok) {
+        const data = await res.json();
+        setImports(data.data);
+        setPagination(data.pagination);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
+  }, [statusFilter]);
+
+  useEffect(() => { fetchImports(); }, [fetchImports]);
+
+  const handleUpload = async (files: FileList | File[]) => {
+    if (!files.length) return;
+    setUploading(true);
+    setUploadResults(null);
+    try {
+      const formData = new FormData();
+      Array.from(files).forEach(f => formData.append('files', f));
+      const res = await fetch('/api/tacografo/import', { method: 'POST', body: formData });
+      if (res.ok) {
+        const data = await res.json();
+        setUploadResults(data.results);
+        fetchImports();
+      }
+    } catch (e) { console.error(e); }
+    setUploading(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragActive(false);
+    if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files);
+  };
+
+  const viewDetail = async (id: number) => {
+    setDetailLoading(true);
+    try {
+      const res = await fetch(`/api/tacografo/imports/${id}`);
+      if (res.ok) setSelectedImport(await res.json());
+    } catch (e) { console.error(e); }
+    setDetailLoading(false);
+  };
+
+  const markReviewed = async (id: number) => {
+    await fetch(`/api/tacografo/imports/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewed: true })
+    });
+    fetchImports();
+    if (selectedImport?.id === id) viewDetail(id);
+  };
+
+  const reprocess = async (id: number) => {
+    await fetch(`/api/tacografo/imports/${id}/reprocess`, { method: 'POST' });
+    fetchImports();
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-lg">
+            <Upload className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Importaciones</h1>
+            <p className="text-sm text-gray-500">Gestión de archivos de tacógrafo importados</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Upload Dropzone */}
+      <div
+        className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
+          dragActive
+            ? 'border-blue-500 bg-blue-50 scale-[1.01]'
+            : 'border-gray-300 bg-white hover:border-blue-400 hover:bg-blue-50/30'
+        }`}
+        onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+        onClick={() => document.getElementById('fileInput')?.click()}
+      >
+        <input
+          id="fileInput"
+          type="file"
+          multiple
+          className="hidden"
+          accept=".ddd,.dtco,.tgd,.v1b,.c1b,.esm"
+          onChange={(e) => e.target.files && handleUpload(e.target.files)}
+        />
+        {uploading ? (
+          <div className="flex flex-col items-center gap-3">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+            <p className="text-blue-600 font-semibold">Procesando archivos...</p>
+          </div>
+        ) : (
+          <>
+            <Upload className={`w-12 h-12 mx-auto mb-3 ${dragActive ? 'text-blue-500' : 'text-gray-300'}`} />
+            <p className="text-lg font-semibold text-gray-700">
+              {dragActive ? '¡Suelta aquí!' : 'Arrastra archivos de tacógrafo aquí'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">o haz clic para seleccionar • Formatos: .ddd, .dtco, .tgd, .v1b, .c1b, .esm</p>
+          </>
+        )}
+      </div>
+
+      {/* Upload Results */}
+      {uploadResults && (
+        <div className="bg-white border rounded-xl p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="font-bold text-gray-900">Resultado de importación</h3>
+            <button onClick={() => setUploadResults(null)} className="text-gray-400 hover:text-gray-600"><X className="w-4 h-4" /></button>
+          </div>
+          {uploadResults.map((r: any, i: number) => (
+            <div key={i} className={`flex items-center gap-3 p-3 rounded-lg ${r.success ? 'bg-green-50' : 'bg-red-50'}`}>
+              {r.success ? <CheckCircle className="w-5 h-5 text-green-600 shrink-0" /> : <XCircle className="w-5 h-5 text-red-600 shrink-0" />}
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-sm truncate">{r.fileName}</p>
+                {r.warnings?.length > 0 && <p className="text-xs text-orange-600 mt-0.5">{r.warnings.length} aviso(s)</p>}
+                {r.errors?.length > 0 && <p className="text-xs text-red-600 mt-0.5">{r.errors[0]}</p>}
+              </div>
+              <span className={`text-xs font-bold px-2 py-1 rounded-full ${STATUS_CONFIG[r.status]?.color || 'bg-gray-100'}`}>
+                {STATUS_CONFIG[r.status]?.label || r.status}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Filters */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 border rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+        >
+          <option value="">Todos los estados</option>
+          {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+            <option key={key} value={key}>{config.label}</option>
+          ))}
+        </select>
+        <button onClick={() => fetchImports()} className="flex items-center gap-2 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50">
+          <RefreshCw className="w-4 h-4" /> Actualizar
+        </button>
+        <span className="text-sm text-gray-500 ml-auto">{pagination.total} importaciones</span>
+      </div>
+
+      {/* Imports Table */}
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          </div>
+        ) : imports.length === 0 ? (
+          <div className="text-center py-16 text-gray-400">
+            <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">Sin importaciones</p>
+          </div>
+        ) : (
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-xs font-bold text-gray-500 uppercase tracking-wider border-b bg-gray-50/50">
+                <th className="px-4 py-3">Archivo</th>
+                <th className="px-4 py-3">Fecha</th>
+                <th className="px-4 py-3">Origen</th>
+                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Conductor</th>
+                <th className="px-4 py-3">Vehículo</th>
+                <th className="px-4 py-3">Rango</th>
+                <th className="px-4 py-3 text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {imports.map((imp) => {
+                const st = STATUS_CONFIG[imp.importStatus] || { label: imp.importStatus, color: 'bg-gray-100', icon: Clock };
+                const StIcon = st.icon;
+                return (
+                  <tr key={imp.id} className="hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-gray-900 truncate max-w-[180px]">{imp.fileName}</div>
+                      <div className="text-xs text-gray-400">{(imp.fileSize / 1024).toFixed(1)} KB</div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
+                      {new Date(imp.importDate).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                      <span className="text-xs text-gray-400 ml-1">
+                        {new Date(imp.importDate).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
+                        {imp.sourceType === 'MANUAL_UPLOAD' ? 'Manual' : 'Carpeta'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${st.color}`}>
+                        <StIcon className="w-3 h-3" />{st.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 truncate max-w-[120px]">
+                      {imp.driver?.fullName || imp.detectedDriverName || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">
+                      {imp.vehicle?.plateNumber || imp.detectedPlate || <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                      {imp.detectedDateFrom
+                        ? `${new Date(imp.detectedDateFrom).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })} — ${imp.detectedDateTo ? new Date(imp.detectedDateTo).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '?'}`
+                        : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => viewDetail(imp.id)} title="Ver detalle" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><Eye className="w-4 h-4" /></button>
+                        <button onClick={() => reprocess(imp.id)} title="Reprocesar" className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-600"><RotateCcw className="w-4 h-4" /></button>
+                        {!imp.reviewedAt && <button onClick={() => markReviewed(imp.id)} title="Marcar revisado" className="p-1.5 rounded-lg hover:bg-green-50 text-green-600"><CheckCircle className="w-4 h-4" /></button>}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+
+        {/* Pagination */}
+        {pagination.totalPages > 1 && (
+          <div className="px-4 py-3 border-t flex items-center justify-between">
+            <button disabled={pagination.page <= 1} onClick={() => fetchImports(pagination.page - 1)} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">Anterior</button>
+            <span className="text-sm text-gray-500">Pág. {pagination.page} de {pagination.totalPages}</span>
+            <button disabled={pagination.page >= pagination.totalPages} onClick={() => fetchImports(pagination.page + 1)} className="px-3 py-1.5 text-sm border rounded hover:bg-gray-50 disabled:opacity-50">Siguiente</button>
+          </div>
+        )}
+      </div>
+
+      {/* Detail Modal */}
+      {selectedImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setSelectedImport(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <h2 className="text-lg font-bold text-gray-900">Detalle de Importación</h2>
+              <button onClick={() => setSelectedImport(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
+            {detailLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-6">
+                {/* File Info */}
+                <div className="grid grid-cols-2 gap-4">
+                  <InfoItem label="Archivo" value={selectedImport.fileName} />
+                  <InfoItem label="Estado" value={STATUS_CONFIG[selectedImport.importStatus]?.label || selectedImport.importStatus} />
+                  <InfoItem label="Tipo" value={selectedImport.fileType === 'DRIVER_CARD' ? 'Tarjeta Conductor' : selectedImport.fileType === 'VEHICLE_UNIT' ? 'Unidad Vehículo' : 'Desconocido'} />
+                  <InfoItem label="Tamaño" value={`${(selectedImport.fileSize / 1024).toFixed(1)} KB`} />
+                  <InfoItem label="Hash" value={selectedImport.fileHash?.substring(0, 16) + '...'} />
+                  <InfoItem label="Parser" value={selectedImport.parserVersion} />
+                  <InfoItem label="Importado" value={new Date(selectedImport.importDate).toLocaleString('es-ES')} />
+                  <InfoItem label="Procesado" value={selectedImport.processedAt ? new Date(selectedImport.processedAt).toLocaleString('es-ES') : '—'} />
+                  {selectedImport.driver && <InfoItem label="Conductor" value={selectedImport.driver.fullName} />}
+                  {selectedImport.vehicle && <InfoItem label="Vehículo" value={selectedImport.vehicle.plateNumber || selectedImport.vehicle.vin} />}
+                </div>
+
+                {/* Metadata */}
+                {selectedImport.rawMetadataJson && (
+                  <div>
+                    <h3 className="font-bold text-gray-900 mb-2 text-sm">Metadatos Extraídos</h3>
+                    <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto border">{JSON.stringify(JSON.parse(selectedImport.rawMetadataJson), null, 2)}</pre>
+                  </div>
+                )}
+
+                {/* Warnings */}
+                {selectedImport.warningsJson && JSON.parse(selectedImport.warningsJson).length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-orange-700 mb-2 text-sm">Avisos ({JSON.parse(selectedImport.warningsJson).length})</h3>
+                    <ul className="space-y-1">
+                      {JSON.parse(selectedImport.warningsJson).map((w: string, i: number) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded">
+                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{w}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Errors */}
+                {selectedImport.errorsJson && JSON.parse(selectedImport.errorsJson).length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-red-700 mb-2 text-sm">Errores ({JSON.parse(selectedImport.errorsJson).length})</h3>
+                    <ul className="space-y-1">
+                      {JSON.parse(selectedImport.errorsJson).map((e: string, i: number) => (
+                        <li key={i} className="flex items-start gap-2 text-xs text-red-700 bg-red-50 p-2 rounded">
+                          <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{e}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Activities */}
+                {selectedImport.activities?.length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-gray-900 mb-2 text-sm">Actividades detectadas ({selectedImport.activities.length})</h3>
+                    <div className="space-y-1">
+                      {selectedImport.activities.map((act: any) => (
+                        <div key={act.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded text-xs">
+                          <span className="font-bold uppercase w-24">{act.activityType.replace('_', ' ')}</span>
+                          <span>{new Date(act.startTime).toLocaleString('es-ES')} — {new Date(act.endTime).toLocaleString('es-ES')}</span>
+                          <span className="text-gray-500">{act.durationMinutes} min</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Incidents */}
+                {selectedImport.incidents?.length > 0 && (
+                  <div>
+                    <h3 className="font-bold text-gray-900 mb-2 text-sm">Incidencias ({selectedImport.incidents.length})</h3>
+                    <div className="space-y-1">
+                      {selectedImport.incidents.map((inc: any) => (
+                        <div key={inc.id} className="flex items-center gap-3 p-2 bg-red-50 rounded text-xs text-red-800">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span className="font-medium">{inc.title}</span>
+                          <span className="ml-auto px-2 py-0.5 rounded bg-red-100">{inc.severity}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">{label}</p>
+      <p className="text-sm text-gray-900 mt-0.5 break-all">{value}</p>
+    </div>
+  );
+}

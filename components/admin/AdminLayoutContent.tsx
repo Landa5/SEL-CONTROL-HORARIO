@@ -33,7 +33,12 @@ import {
     Car,
     CheckCircle,
     Package,
-    ClipboardCheck
+    ClipboardCheck,
+    Disc3,
+    Upload,
+    UserCheck,
+    Activity,
+    AlertCircle
 } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
@@ -122,6 +127,19 @@ export default function AdminLayoutContent({ children }: { children: React.React
                 { href: '/admin/jornadas?tab=rutas', label: 'Rutas / Operación', icon: Map },
                 { href: '/admin/flota/inteligencia', label: 'Inteligencia de Flota', icon: BarChart2 },
                 { href: '/admin/informes/operativos', label: 'Informe Operativo', icon: FileText },
+            ]
+        },
+        {
+            type: 'group',
+            label: 'Tacógrafo Digital',
+            items: [
+                { href: '/admin/tacografo', label: 'Dashboard', icon: Disc3 },
+                { href: '/admin/tacografo/importaciones', label: 'Importaciones', icon: Upload },
+                { href: '/admin/tacografo/conductores', label: 'Conductores', icon: UserCheck },
+                { href: '/admin/tacografo/vehiculos', label: 'Vehículos', icon: Truck },
+                { href: '/admin/tacografo/actividad', label: 'Jornadas / Actividad', icon: Activity },
+                { href: '/admin/tacografo/incidencias', label: 'Incidencias', icon: AlertCircle },
+                { href: '/admin/tacografo/configuracion', label: 'Configuración', icon: Settings },
             ]
         },
         {
