@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     const user: any = await verifyToken(session);
-    if (!user || !['ADMIN'].includes(user.rol)) {
+    if (!user || !['ADMIN', 'OFICINA'].includes(user.rol)) {
       return NextResponse.json({ error: 'Solo administradores' }, { status: 403 });
     }
 
