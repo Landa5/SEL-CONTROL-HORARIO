@@ -98,20 +98,28 @@ function extractPlateFromFileName(fileName: string): string | undefined {
 }
 
 /**
- * Extracts DNI from tachograph driver card filename.
+ * Extracts card number and DNI from tachograph driver card filename.
  * Spanish driver card filenames follow: C_E{DNI}{version}
+ * The E is the country code (Spain), followed by 8 digits + 1 letter = DNI.
+ * 
  * Examples:
- *   C_E44798563Z000003_E... → DNI: 44798563Z
- *   C_E45802660T000001_E... → DNI: 45802660T
- *   E__E45802660T000020...  → DNI: 45802660T
+ *   C_E44798563Z000003_E... → cardNumber: E44798563Z000003, DNI: 44798563Z
+ *   C_E45802660T000001_E... → cardNumber: E45802660T000001, DNI: 45802660T
+ *   E__E45802660T0000202... → cardNumber: E45802660T0000202, DNI: 45802660T
  */
-function extractDniFromFileName(fileName: string): string | undefined {
+function extractCardInfoFromFileName(fileName: string): { cardNumber?: string; dni?: string } {
   const baseName = fileName.split(/[\\/]/).pop() || '';
-  // Pattern: E followed by 8 digits + 1 letter (Spanish DNI)
-  // Can appear after C_, E_, E__ or similar prefixes
-  const match = baseName.match(/E(\d{8}[A-Za-z])/i);
-  if (match) return match[1].toUpperCase();
-  return undefined;
+  // Match: E (country) + 8 digits + 1 letter (DNI) + 4-8 version digits
+  const match = baseName.match(/E(\d{8}[A-Za-z])(\d{4,8})/);
+  if (match) {
+    const dni = match[1].toUpperCase();
+    const version = match[2];
+    return {
+      cardNumber: `E${dni}${version}`,
+      dni: dni,
+    };
+  }
+  return {};
 }
 
 /**
@@ -186,12 +194,14 @@ export async function parseTachographFile(
       if (dates.dateTo) result.metadata.dateTo = dates.dateTo;
     }
 
-    // Extraer DNI del nombre de archivo (C_E44798563Z000003 → 44798563Z)
-    if (!result.metadata.driverDni) {
-      const dni = extractDniFromFileName(fileName);
-      if (dni) {
-        result.metadata.driverDni = dni;
-      }
+    // Extraer tarjeta y DNI del nombre de archivo (C_E44798563Z000003 → card E44798563Z000003, DNI 44798563Z)
+    // IMPORTANTE: El nombre del archivo es más fiable que el parseo binario para el cardNumber!
+    const cardInfo = extractCardInfoFromFileName(fileName);
+    if (cardInfo.cardNumber) {
+      result.metadata.cardNumber = cardInfo.cardNumber; // Override binary parser's incorrect extraction
+    }
+    if (cardInfo.dni) {
+      result.metadata.driverDni = cardInfo.dni;
     }
 
     // Si el binario no determinó tipo, intentar por nombre
