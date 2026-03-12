@@ -373,26 +373,80 @@ export default function ActividadPage() {
                               </div>
                             </div>
 
-                            {/* Activity bar */}
-                            <div className="flex h-8 rounded-lg overflow-hidden mb-4 border shadow-inner">
-                              {s.activities
-                                .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-                                .map((act, idx) => {
-                                  const totalMins = s.activities.reduce((sum: number, a: any) => sum + (a.durationMinutes || 0), 0);
-                                  const pct = totalMins > 0 ? ((act.durationMinutes || 0) / totalMins * 100) : 0;
-                                  if (pct < 0.5) return null;
-                                  return (
-                                    <div
-                                      key={idx}
-                                      className={`${ACTIVITY_COLORS[act.activityType]?.bg || 'bg-gray-300'} flex items-center justify-center text-[9px] font-bold text-white/90 border-r border-white/20 last:border-r-0`}
-                                      style={{ width: `${pct}%` }}
-                                      title={`${ACTIVITY_COLORS[act.activityType]?.label || act.activityType}: ${toSpainTime(new Date(act.startTime))} — ${toSpainTime(new Date(act.endTime))} (${act.durationMinutes} min)`}
-                                    >
-                                      {pct > 8 ? `${act.durationMinutes}m` : ''}
-                                    </div>
-                                  );
-                                })}
-                            </div>
+                            {/* Activity bar — time-based with hour markers */}
+                            {(() => {
+                              const sortedActs = [...s.activities].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+                              if (sortedActs.length === 0) return null;
+
+                              // Get the day's time range using Spain timezone
+                              const toSpainDate = (d: Date) => new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
+                              const firstAct = toSpainDate(new Date(sortedActs[0].startTime));
+                              const lastAct = toSpainDate(new Date(sortedActs[sortedActs.length - 1].endTime));
+
+                              // Round to the nearest hour (floor start, ceil end)
+                              const startHour = Math.max(0, Math.floor(firstAct.getHours()));
+                              const endHour = Math.min(24, Math.ceil(lastAct.getHours() + (lastAct.getMinutes() > 0 ? 1 : 0)));
+                              const totalHours = Math.max(endHour - startHour, 1);
+
+                              // Generate hour markers
+                              const hourMarkers = [];
+                              for (let h = startHour; h <= endHour; h++) {
+                                const pct = ((h - startHour) / totalHours) * 100;
+                                hourMarkers.push({ hour: h, pct });
+                              }
+
+                              return (
+                                <div className="mb-4">
+                                  {/* Hour labels */}
+                                  <div className="relative h-4 mb-0.5" style={{ marginLeft: 0, marginRight: 0 }}>
+                                    {hourMarkers.map(({ hour, pct }) => (
+                                      <span
+                                        key={hour}
+                                        className="absolute text-[9px] font-bold text-gray-400 -translate-x-1/2"
+                                        style={{ left: `${pct}%` }}
+                                      >
+                                        {String(hour).padStart(2, '0')}:00
+                                      </span>
+                                    ))}
+                                  </div>
+                                  {/* Activity blocks */}
+                                  <div className="relative h-8 rounded-lg overflow-hidden border shadow-inner bg-gray-100">
+                                    {/* Hour grid lines */}
+                                    {hourMarkers.map(({ hour, pct }) => (
+                                      <div
+                                        key={`line-${hour}`}
+                                        className="absolute top-0 bottom-0 border-l border-gray-300/50"
+                                        style={{ left: `${pct}%` }}
+                                      />
+                                    ))}
+                                    {/* Activity segments */}
+                                    {sortedActs.map((act, idx) => {
+                                      const actStart = toSpainDate(new Date(act.startTime));
+                                      const actEnd = toSpainDate(new Date(act.endTime));
+
+                                      const startMinutes = actStart.getHours() * 60 + actStart.getMinutes();
+                                      const endMinutes = actEnd.getHours() * 60 + actEnd.getMinutes();
+                                      const startOffset = (startMinutes - startHour * 60) / (totalHours * 60) * 100;
+                                      const duration = (endMinutes - startMinutes) / (totalHours * 60) * 100;
+
+                                      if (duration < 0.3) return null;
+                                      const actColor = ACTIVITY_COLORS[act.activityType]?.bg || 'bg-gray-300';
+
+                                      return (
+                                        <div
+                                          key={idx}
+                                          className={`absolute top-0 bottom-0 ${actColor} flex items-center justify-center text-[8px] font-bold text-white/90`}
+                                          style={{ left: `${Math.max(0, startOffset)}%`, width: `${Math.min(duration, 100 - startOffset)}%` }}
+                                          title={`${ACTIVITY_COLORS[act.activityType]?.label || act.activityType}: ${toSpainTime(new Date(act.startTime))} — ${toSpainTime(new Date(act.endTime))} (${act.durationMinutes} min)`}
+                                        >
+                                          {duration > 6 ? `${toSpainTime(new Date(act.startTime))}` : ''}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              );
+                            })()}
 
                             {/* Detail list */}
                             <div className="grid gap-1">
