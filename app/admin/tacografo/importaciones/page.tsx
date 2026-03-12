@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Upload, FileText, RefreshCw, Search, Eye, RotateCcw, CheckCircle, AlertTriangle, XCircle, Clock, X, Download } from 'lucide-react';
+import { Upload, FileText, RefreshCw, Search, Eye, RotateCcw, CheckCircle, AlertTriangle, XCircle, Clock, X, Download, Trash2 } from 'lucide-react';
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
   PENDING: { label: 'Pendiente', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock },
@@ -9,6 +9,24 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; icon: any }>
   PROCESSED_OK: { label: 'Correcto', color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle },
   PROCESSED_WARNINGS: { label: 'Con avisos', color: 'bg-orange-100 text-orange-800 border-orange-200', icon: AlertTriangle },
   ERROR: { label: 'Error', color: 'bg-red-100 text-red-800 border-red-200', icon: XCircle },
+};
+
+const ACTIVITY_COLORS: Record<string, string> = {
+  DRIVING: 'bg-blue-100 text-blue-800 border-blue-300',
+  REST: 'bg-green-100 text-green-800 border-green-300',
+  OTHER_WORK: 'bg-purple-100 text-purple-800 border-purple-300',
+  AVAILABILITY: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+  BREAK: 'bg-green-100 text-green-800 border-green-300',
+  UNKNOWN: 'bg-gray-100 text-gray-600 border-gray-300',
+};
+
+const ACTIVITY_LABELS: Record<string, string> = {
+  DRIVING: 'Conducción',
+  REST: 'Descanso',
+  OTHER_WORK: 'Otro trabajo',
+  AVAILABILITY: 'Disponibilidad',
+  BREAK: 'Pausa',
+  UNKNOWN: 'Desconocido',
 };
 
 export default function ImportacionesPage() {
@@ -52,7 +70,6 @@ export default function ImportacionesPage() {
         setUploadResults(data.results);
         fetchImports();
       } else {
-        // Mostrar el error de la API
         let errorMsg = `Error del servidor (${res.status})`;
         try {
           const errData = await res.json();
@@ -96,6 +113,22 @@ export default function ImportacionesPage() {
     fetchImports();
   };
 
+  const deleteImport = async (id: number) => {
+    if (!confirm('¿Estás seguro de que quieres eliminar esta importación? Se borrarán todos los datos asociados (actividades, incidencias, resúmenes).')) return;
+    try {
+      const res = await fetch(`/api/tacografo/imports/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchImports();
+        if (selectedImport?.id === id) setSelectedImport(null);
+      } else {
+        const errData = await res.json();
+        alert(`Error al eliminar: ${errData.error || 'Error desconocido'}`);
+      }
+    } catch (e: any) {
+      alert(`Error de conexión: ${e.message}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -111,7 +144,7 @@ export default function ImportacionesPage() {
         </div>
       </div>
 
-      {/* Hidden file input - fuera del dropzone para evitar conflictos de click */}
+      {/* Hidden file input */}
       <input
         id="fileInput"
         type="file"
@@ -121,7 +154,6 @@ export default function ImportacionesPage() {
           if (e.target.files && e.target.files.length > 0) {
             handleUpload(e.target.files);
           }
-          // Reset the input so the same file can be selected again
           e.target.value = '';
         }}
       />
@@ -216,7 +248,6 @@ export default function ImportacionesPage() {
               <tr className="text-left text-xs font-bold text-gray-500 uppercase tracking-wider border-b bg-gray-50/50">
                 <th className="px-4 py-3">Archivo</th>
                 <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Origen</th>
                 <th className="px-4 py-3">Estado</th>
                 <th className="px-4 py-3">Conductor</th>
                 <th className="px-4 py-3">Vehículo</th>
@@ -241,11 +272,6 @@ export default function ImportacionesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs px-2 py-0.5 bg-gray-100 rounded text-gray-600">
-                        {imp.sourceType === 'MANUAL_UPLOAD' ? 'Manual' : 'Carpeta'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${st.color}`}>
                         <StIcon className="w-3 h-3" />{st.label}
                       </span>
@@ -266,6 +292,7 @@ export default function ImportacionesPage() {
                         <button onClick={() => viewDetail(imp.id)} title="Ver detalle" className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600"><Eye className="w-4 h-4" /></button>
                         <button onClick={() => reprocess(imp.id)} title="Reprocesar" className="p-1.5 rounded-lg hover:bg-orange-50 text-orange-600"><RotateCcw className="w-4 h-4" /></button>
                         {!imp.reviewedAt && <button onClick={() => markReviewed(imp.id)} title="Marcar revisado" className="p-1.5 rounded-lg hover:bg-green-50 text-green-600"><CheckCircle className="w-4 h-4" /></button>}
+                        <button onClick={() => deleteImport(imp.id)} title="Eliminar" className="p-1.5 rounded-lg hover:bg-red-50 text-red-600"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -288,10 +315,15 @@ export default function ImportacionesPage() {
       {/* Detail Modal */}
       {selectedImport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => setSelectedImport(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[85vh] overflow-y-auto m-4" onClick={(e) => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl z-10">
               <h2 className="text-lg font-bold text-gray-900">Detalle de Importación</h2>
-              <button onClick={() => setSelectedImport(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              <div className="flex items-center gap-2">
+                <button onClick={() => deleteImport(selectedImport.id)} className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg font-medium flex items-center gap-1">
+                  <Trash2 className="w-3.5 h-3.5" />Eliminar
+                </button>
+                <button onClick={() => setSelectedImport(null)} className="p-1 hover:bg-gray-100 rounded-lg"><X className="w-5 h-5" /></button>
+              </div>
             </div>
             {detailLoading ? (
               <div className="flex items-center justify-center py-12">
@@ -306,11 +338,18 @@ export default function ImportacionesPage() {
                   <InfoItem label="Tipo" value={selectedImport.fileType === 'DRIVER_CARD' ? 'Tarjeta Conductor' : selectedImport.fileType === 'VEHICLE_UNIT' ? 'Unidad Vehículo' : 'Desconocido'} />
                   <InfoItem label="Tamaño" value={`${(selectedImport.fileSize / 1024).toFixed(1)} KB`} />
                   <InfoItem label="Hash" value={selectedImport.fileHash?.substring(0, 16) + '...'} />
-                  <InfoItem label="Parser" value={selectedImport.parserVersion} />
+                  <InfoItem label="Parser" value={selectedImport.parserVersion || '—'} />
                   <InfoItem label="Importado" value={new Date(selectedImport.importDate).toLocaleString('es-ES')} />
                   <InfoItem label="Procesado" value={selectedImport.processedAt ? new Date(selectedImport.processedAt).toLocaleString('es-ES') : '—'} />
-                  {selectedImport.driver && <InfoItem label="Conductor" value={selectedImport.driver.fullName} />}
-                  {selectedImport.vehicle && <InfoItem label="Vehículo" value={selectedImport.vehicle.plateNumber || selectedImport.vehicle.vin} />}
+                  {selectedImport.driver && (
+                    <InfoItem label="Conductor" value={`${selectedImport.driver.fullName}${selectedImport.driver.linkedEmployee ? ` → ${selectedImport.driver.linkedEmployee.nombre}` : ' (sin vincular)'}`} />
+                  )}
+                  {selectedImport.vehicle && (
+                    <InfoItem label="Vehículo" value={`${selectedImport.vehicle.plateNumber || selectedImport.vehicle.vin || '—'}${selectedImport.vehicle.linkedVehicle ? ` → ${selectedImport.vehicle.linkedVehicle.matricula}` : ' (sin vincular)'}`} />
+                  )}
+                  {selectedImport.detectedDateFrom && (
+                    <InfoItem label="Rango de datos" value={`${new Date(selectedImport.detectedDateFrom).toLocaleDateString('es-ES')} — ${selectedImport.detectedDateTo ? new Date(selectedImport.detectedDateTo).toLocaleDateString('es-ES') : '?'}`} />
+                  )}
                 </div>
 
                 {/* Metadata */}
@@ -320,6 +359,88 @@ export default function ImportacionesPage() {
                     <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto border">{JSON.stringify(JSON.parse(selectedImport.rawMetadataJson), null, 2)}</pre>
                   </div>
                 )}
+
+                {/* Activities - Jornada */}
+                <div>
+                  <h3 className="font-bold text-gray-900 mb-2 text-sm">
+                    Actividades / Jornada {selectedImport.activities?.length > 0 ? `(${selectedImport.activities.length})` : ''}
+                  </h3>
+                  {selectedImport.activities?.length > 0 ? (
+                    <div className="space-y-1">
+                      {/* Summary bar */}
+                      <div className="flex h-8 rounded-lg overflow-hidden mb-3 border">
+                        {selectedImport.activities.map((act: any, idx: number) => {
+                          const totalMinutes = selectedImport.activities.reduce((s: number, a: any) => s + (a.durationMinutes || 0), 0);
+                          const pct = totalMinutes > 0 ? ((act.durationMinutes || 0) / totalMinutes * 100) : 0;
+                          if (pct < 1) return null;
+                          return (
+                            <div
+                              key={idx}
+                              className={`${ACTIVITY_COLORS[act.activityType]?.split(' ')[0] || 'bg-gray-200'} flex items-center justify-center text-[10px] font-bold`}
+                              style={{ width: `${pct}%` }}
+                              title={`${ACTIVITY_LABELS[act.activityType] || act.activityType}: ${act.durationMinutes} min`}
+                            >
+                              {pct > 8 ? ACTIVITY_LABELS[act.activityType]?.substring(0, 4) : ''}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {/* Activity list */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-left text-[10px] font-bold text-gray-500 uppercase border-b">
+                              <th className="pb-1 pr-3">Actividad</th>
+                              <th className="pb-1 pr-3">Inicio</th>
+                              <th className="pb-1 pr-3">Fin</th>
+                              <th className="pb-1 pr-3">Duración</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {selectedImport.activities.map((act: any, idx: number) => (
+                              <tr key={act.id || idx} className="hover:bg-gray-50">
+                                <td className="py-1.5 pr-3">
+                                  <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${ACTIVITY_COLORS[act.activityType] || ACTIVITY_COLORS.UNKNOWN}`}>
+                                    {ACTIVITY_LABELS[act.activityType] || act.activityType}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.startTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</td>
+                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.endTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</td>
+                                <td className="py-1.5 pr-3 font-medium">
+                                  {act.durationMinutes >= 60
+                                    ? `${Math.floor(act.durationMinutes / 60)}h ${act.durationMinutes % 60}min`
+                                    : `${act.durationMinutes} min`}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {/* Totals */}
+                      <div className="mt-3 pt-3 border-t grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                        {(['DRIVING', 'REST', 'OTHER_WORK', 'AVAILABILITY'] as const).map(type => {
+                          const totalMin = selectedImport.activities
+                            .filter((a: any) => a.activityType === type)
+                            .reduce((s: number, a: any) => s + (a.durationMinutes || 0), 0);
+                          if (totalMin === 0) return null;
+                          return (
+                            <div key={type} className={`p-2 rounded-lg border ${ACTIVITY_COLORS[type]}`}>
+                              <div className="font-bold text-[10px] uppercase">{ACTIVITY_LABELS[type]}</div>
+                              <div className="font-bold text-sm">{Math.floor(totalMin / 60)}h {totalMin % 60}min</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed">
+                      <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      <p className="text-sm text-gray-500 font-medium">No se detectaron actividades en este archivo</p>
+                      <p className="text-xs text-gray-400 mt-1">El parser binario no pudo extraer registros de actividad del contenido del archivo.</p>
+                      <p className="text-xs text-gray-400">Los datos visibles se limitan a la identificación del vehículo/conductor.</p>
+                    </div>
+                  )}
+                </div>
 
                 {/* Warnings */}
                 {selectedImport.warningsJson && JSON.parse(selectedImport.warningsJson).length > 0 && (
@@ -349,32 +470,16 @@ export default function ImportacionesPage() {
                   </div>
                 )}
 
-                {/* Activities */}
-                {selectedImport.activities?.length > 0 && (
-                  <div>
-                    <h3 className="font-bold text-gray-900 mb-2 text-sm">Actividades detectadas ({selectedImport.activities.length})</h3>
-                    <div className="space-y-1">
-                      {selectedImport.activities.map((act: any) => (
-                        <div key={act.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded text-xs">
-                          <span className="font-bold uppercase w-24">{act.activityType.replace('_', ' ')}</span>
-                          <span>{new Date(act.startTime).toLocaleString('es-ES')} — {new Date(act.endTime).toLocaleString('es-ES')}</span>
-                          <span className="text-gray-500">{act.durationMinutes} min</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Incidents */}
                 {selectedImport.incidents?.length > 0 && (
                   <div>
                     <h3 className="font-bold text-gray-900 mb-2 text-sm">Incidencias ({selectedImport.incidents.length})</h3>
                     <div className="space-y-1">
                       {selectedImport.incidents.map((inc: any) => (
-                        <div key={inc.id} className="flex items-center gap-3 p-2 bg-red-50 rounded text-xs text-red-800">
-                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <div key={inc.id} className={`flex items-center gap-3 p-2 rounded text-xs ${inc.resolutionStatus === 'RESOLVED' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                          {inc.resolutionStatus === 'RESOLVED' ? <CheckCircle className="w-3.5 h-3.5 shrink-0" /> : <AlertTriangle className="w-3.5 h-3.5 shrink-0" />}
                           <span className="font-medium">{inc.title}</span>
-                          <span className="ml-auto px-2 py-0.5 rounded bg-red-100">{inc.severity}</span>
+                          <span className="ml-auto px-2 py-0.5 rounded bg-white/50 border">{inc.severity}</span>
                         </div>
                       ))}
                     </div>

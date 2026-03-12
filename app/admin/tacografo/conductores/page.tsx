@@ -32,20 +32,40 @@ export default function ConductoresPage() {
 
   const linkDriver = async (driverId: number) => {
     if (!selectedEmployee) return;
-    await fetch(`/api/tacografo/drivers/${driverId}/link`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: selectedEmployee })
-    });
+    try {
+      const res = await fetch(`/api/tacografo/drivers/${driverId}/link`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId: selectedEmployee })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Error al vincular: ${err.error || 'Error desconocido'}`);
+        return;
+      }
+    } catch (e: any) {
+      alert(`Error de conexión: ${e.message}`);
+      return;
+    }
     setLinkingId(null);
     setSelectedEmployee(0);
     fetchData();
   };
 
   const unlinkDriver = async (driverId: number) => {
-    await fetch(`/api/tacografo/drivers/${driverId}/link`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employeeId: null })
-    });
+    try {
+      const res = await fetch(`/api/tacografo/drivers/${driverId}/link`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employeeId: null })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert(`Error al desvincular: ${err.error || 'Error desconocido'}`);
+        return;
+      }
+    } catch (e: any) {
+      alert(`Error de conexión: ${e.message}`);
+      return;
+    }
     fetchData();
   };
 

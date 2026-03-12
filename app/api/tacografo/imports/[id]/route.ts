@@ -80,3 +80,32 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: 'Error al actualizar importación' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const cookieStore = await cookies();
+    const session = cookieStore.get('session')?.value;
+    if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+    const user: any = await verifyToken(session);
+    if (!user || !['ADMIN'].includes(user.rol)) {
+      return NextResponse.json({ error: 'Solo administradores pueden borrar importaciones' }, { status: 403 });
+    }
+
+    const { id } = await params;
+    const importId = parseInt(id);
+
+    // Delete related records first (FK constraints)
+    await prisma.tachographIncident.deleteMany({ where: { importId } });
+    await prisma.tachographActivity.deleteMany({ where: { importId } });
+    await prisma.tachographDailySummary.deleteMany({ where: { importId } });
+
+    // Delete the import itself
+    await prisma.tachographImport.delete({ where: { id: importId } });
+
+    return NextResponse.json({ success: true, message: 'Importación eliminada correctamente' });
+  } catch (error: any) {
+    console.error('DELETE /api/tacografo/imports/[id] error:', error);
+    return NextResponse.json({ error: `Error al eliminar: ${error.message}` }, { status: 500 });
+  }
+}
