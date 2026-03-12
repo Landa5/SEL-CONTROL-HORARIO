@@ -386,17 +386,65 @@ async function autoLinkDriver(driverId: number): Promise<boolean> {
 // Vehicle Matching
 // =====================
 
+/**
+ * Normalize plate number for fuzzy matching.
+ * Strips country prefixes (E, D, F, G, etc.), spaces, dashes, and uppercases.
+ * Spanish plates: 4 digits + 3 letters (e.g., 9946GWZ)
+ * Tachograph may prepend country code: G9946GW, E9946GWZ, etc.
+ */
+function normalizePlate(plate: string): string {
+  // Remove spaces, dashes, dots
+  let normalized = plate.replace(/[\s\-\.]/g, '').toUpperCase();
+  // Extract the core Spanish plate pattern (4 digits + 2-3 letters) from anywhere in the string
+  const match = normalized.match(/(\d{4}[A-Z]{2,3})/);
+  if (match) return match[1];
+  // If no standard pattern found, just return cleaned version
+  return normalized;
+}
+
+/**
+ * Check if two plates likely refer to the same vehicle
+ */
+function platesMatch(plate1: string, plate2: string): boolean {
+  if (!plate1 || !plate2) return false;
+  // Exact match
+  if (plate1.toUpperCase() === plate2.toUpperCase()) return true;
+  // Normalized match (strips country prefix, extracts core plate)
+  const n1 = normalizePlate(plate1);
+  const n2 = normalizePlate(plate2);
+  if (n1 === n2) return true;
+  // One contains the other (handles partial plates)
+  if (n1.length >= 4 && n2.length >= 4) {
+    if (n1.includes(n2) || n2.includes(n1)) return true;
+  }
+  return false;
+}
+
 async function matchVehicle(parseResult: TachographParseResult) {
-  if (parseResult.metadata.plateNumber) {
+  const { plateNumber, vin } = parseResult.metadata;
+  
+  // 1. Exact plate match
+  if (plateNumber) {
     const existing = await prisma.tachographVehicle.findUnique({
-      where: { plateNumber: parseResult.metadata.plateNumber }
+      where: { plateNumber }
     });
     if (existing) return existing;
+    
+    // 2. Fuzzy plate match — search all vehicles and compare normalized
+    const allVehicles = await prisma.tachographVehicle.findMany({
+      where: { plateNumber: { not: null } }
+    });
+    for (const v of allVehicles) {
+      if (v.plateNumber && platesMatch(plateNumber, v.plateNumber)) {
+        return v;
+      }
+    }
   }
   
-  if (parseResult.metadata.vin) {
+  // 3. Exact VIN match
+  if (vin) {
     const existing = await prisma.tachographVehicle.findUnique({
-      where: { vin: parseResult.metadata.vin }
+      where: { vin }
     });
     if (existing) return existing;
   }
@@ -408,14 +456,26 @@ async function createOrGetVehicle(parseResult: TachographParseResult) {
   const { plateNumber, vin } = parseResult.metadata;
   if (!plateNumber && !vin) return null;
   
+  // Try exact matches first
   if (plateNumber) {
     const existing = await prisma.tachographVehicle.findUnique({ where: { plateNumber } });
     if (existing) return existing;
   }
-  
   if (vin) {
     const existing = await prisma.tachographVehicle.findUnique({ where: { vin } });
     if (existing) return existing;
+  }
+  
+  // Try fuzzy plate match before creating new
+  if (plateNumber) {
+    const allVehicles = await prisma.tachographVehicle.findMany({
+      where: { plateNumber: { not: null } }
+    });
+    for (const v of allVehicles) {
+      if (v.plateNumber && platesMatch(plateNumber, v.plateNumber)) {
+        return v;
+      }
+    }
   }
   
   return prisma.tachographVehicle.create({
@@ -430,7 +490,7 @@ async function autoLinkVehicle(vehicleId: number): Promise<boolean> {
   const vehicle = await prisma.tachographVehicle.findUnique({ where: { id: vehicleId } });
   if (!vehicle || vehicle.linkedVehicleId) return !!vehicle?.linkedVehicleId;
   
-  // Try to match by plate
+  // Try to match by plate (exact)
   if (vehicle.plateNumber) {
     const camion = await prisma.camion.findUnique({
       where: { matricula: vehicle.plateNumber }
@@ -441,6 +501,21 @@ async function autoLinkVehicle(vehicleId: number): Promise<boolean> {
         data: { linkedVehicleId: camion.id }
       });
       return true;
+    }
+    
+    // Fuzzy match — search all camiones and compare normalized plates
+    const allCamiones = await prisma.camion.findMany({
+      where: { matricula: { not: '' } },
+      select: { id: true, matricula: true }
+    });
+    for (const c of allCamiones) {
+      if (c.matricula && platesMatch(vehicle.plateNumber, c.matricula)) {
+        await prisma.tachographVehicle.update({
+          where: { id: vehicleId },
+          data: { linkedVehicleId: c.id }
+        });
+        return true;
+      }
     }
   }
   
