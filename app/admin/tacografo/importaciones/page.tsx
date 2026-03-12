@@ -100,6 +100,21 @@ export default function ImportacionesPage() {
         </div>
       </div>
 
+      {/* Hidden file input - fuera del dropzone para evitar conflictos de click */}
+      <input
+        id="fileInput"
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleUpload(e.target.files);
+          }
+          // Reset the input so the same file can be selected again
+          e.target.value = '';
+        }}
+      />
+
       {/* Upload Dropzone */}
       <div
         className={`border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer ${
@@ -110,16 +125,12 @@ export default function ImportacionesPage() {
         onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
         onDragLeave={() => setDragActive(false)}
         onDrop={handleDrop}
-        onClick={() => document.getElementById('fileInput')?.click()}
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          document.getElementById('fileInput')?.click();
+        }}
       >
-        <input
-          id="fileInput"
-          type="file"
-          multiple
-          className="hidden"
-          accept=".ddd,.dtco,.tgd,.v1b,.c1b,.esm"
-          onChange={(e) => e.target.files && handleUpload(e.target.files)}
-        />
         {uploading ? (
           <div className="flex flex-col items-center gap-3">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
