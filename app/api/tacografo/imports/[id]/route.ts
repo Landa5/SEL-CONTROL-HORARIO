@@ -95,12 +95,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const { id } = await params;
     const importId = parseInt(id);
 
-    // Delete related records first (FK constraints)
-    await prisma.tachographIncident.deleteMany({ where: { importId } });
-    await prisma.tachographActivity.deleteMany({ where: { importId } });
-
-    // Delete the import itself
-    await prisma.tachographImport.delete({ where: { id: importId } });
+    // Use a transaction to ensure writes go to primary (not read replica)
+    await prisma.$transaction(async (tx) => {
+      await tx.tachographIncident.deleteMany({ where: { importId } });
+      await tx.tachographActivity.deleteMany({ where: { importId } });
+      await tx.tachographImport.delete({ where: { id: importId } });
+    });
 
     return NextResponse.json({ success: true, message: 'Importación eliminada correctamente' });
   } catch (error: any) {
