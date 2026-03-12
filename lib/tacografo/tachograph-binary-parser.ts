@@ -155,12 +155,21 @@ export function parseBinaryTachograph(buffer: Buffer, fileName: string): Tachogr
   const metadata: TachographParseResult['metadata'] = {};
   let fileType: 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' = 'UNKNOWN';
   
-  // Determinar tipo por extensión primera
+  // Determinar tipo por extensión y convención de nombre
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  const baseName = fileName.split(/[\\/]/).pop()?.toUpperCase() || '';
+  
   if (['esm', 'v1b'].includes(ext)) {
     fileType = 'VEHICLE_UNIT';
   } else if (['c1b', 'tgd'].includes(ext)) {
     fileType = 'DRIVER_CARD';
+  } else if (ext === 'ddd' || ext === 'dtco') {
+    // Standard tachograph naming: C_ = driver Card, S_/M_ = vehicle Speed/Mass unit
+    if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) {
+      fileType = 'DRIVER_CARD';
+    } else if (baseName.startsWith('S_') || baseName.startsWith('M_')) {
+      fileType = 'VEHICLE_UNIT';
+    }
   }
 
   if (buffer.length < 10) {
@@ -243,12 +252,17 @@ export function parseBinaryTachograph(buffer: Buffer, fileName: string): Tachogr
 
     // Determinar tipo si aún desconocido
     if (fileType === 'UNKNOWN') {
-      // Heurística: si tiene VRN/VIN → vehículo, si tiene cardNumber → conductor
-      if (metadata.vin || (metadata.plateNumber && !metadata.cardNumber)) {
-        fileType = 'VEHICLE_UNIT';
-      } else if (metadata.cardNumber) {
+      // Heurística: cardNumber → conductor (aunque tenga matrícula, la tarjeta del conductor registra el vehículo)
+      if (metadata.cardNumber) {
         fileType = 'DRIVER_CARD';
+      } else if (metadata.vin || metadata.plateNumber) {
+        fileType = 'VEHICLE_UNIT';
       }
+    }
+    // Si se detectó cardNumber pero fue marcado como VEHICLE_UNIT por extensión/nombre, corregir
+    if (fileType === 'VEHICLE_UNIT' && metadata.cardNumber && !metadata.vin) {
+      fileType = 'DRIVER_CARD';
+      warnings.push('Reclasificado como tarjeta de conductor: se encontró número de tarjeta.');
     }
 
     if (activities.length === 0) {

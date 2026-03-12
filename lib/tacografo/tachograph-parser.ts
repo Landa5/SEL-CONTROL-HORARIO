@@ -49,6 +49,7 @@ const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm'];
  */
 function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' {
   const lower = fileName.toLowerCase();
+  const baseName = fileName.split(/[\\/]/).pop()?.toUpperCase() || '';
   
   // Driver card files typically have C1B extension or contain "driver"/"conductor"/"card"
   if (lower.endsWith('.c1b') || lower.includes('driver') || lower.includes('card') || lower.includes('conductor') || lower.includes('tarjeta')) {
@@ -60,9 +61,16 @@ function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNK
     return 'VEHICLE_UNIT';
   }
   
-  // DDD and DTCO can be either - try to detect from filename patterns
+  // DDD and DTCO can be either - check standard tachograph naming convention first
   if (lower.endsWith('.ddd') || lower.endsWith('.dtco') || lower.endsWith('.tgd') || lower.endsWith('.esm')) {
-    // If filename contains a plate pattern (e.g., 1234ABC, AB1234CD), likely vehicle unit
+    // Standard naming: C_ = driver Card download, S_/M_ = vehicle Speed/Mass unit download
+    if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) {
+      return 'DRIVER_CARD';
+    }
+    if (baseName.startsWith('S_') || baseName.startsWith('M_') || baseName.startsWith('E_')) {
+      return 'VEHICLE_UNIT';
+    }
+    // Fallback: plate pattern detection
     if (/\d{4}[a-z]{3}/i.test(fileName) || /[a-z]{2}\d{4}[a-z]{2}/i.test(fileName)) {
       return 'VEHICLE_UNIT';
     }
