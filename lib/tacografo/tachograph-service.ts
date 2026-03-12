@@ -359,7 +359,33 @@ async function autoLinkDriver(driverId: number): Promise<boolean> {
   const driver = await prisma.tachographDriver.findUnique({ where: { id: driverId } });
   if (!driver || driver.linkedEmployeeId) return !!driver?.linkedEmployeeId;
   
-  // Try to match by name (simple fuzzy: exact match on nombre)
+  // ========================================
+  // Strategy 1: Match by DNI in card number
+  // ========================================
+  // Spanish tachograph cards often embed the DNI digits.
+  // Card number examples: E12805000000, EA9606492800
+  // Employee DNI examples: 29028003W, 44795380M
+  // We extract digits from DNI and check if the card number contains them.
+  if (driver.cardNumber) {
+    const allEmployees = await prisma.empleado.findMany({
+      where: { activo: true, dni: { not: null } }
+    });
+    
+    for (const emp of allEmployees) {
+      if (!emp.dni) continue;
+      if (dniMatchesCard(emp.dni, driver.cardNumber)) {
+        await prisma.tachographDriver.update({
+          where: { id: driverId },
+          data: { linkedEmployeeId: emp.id }
+        });
+        return true;
+      }
+    }
+  }
+  
+  // ========================================
+  // Strategy 2: Match by name (fuzzy)
+  // ========================================
   if (driver.fullName && driver.fullName !== 'Desconocido') {
     const employees = await prisma.empleado.findMany({
       where: {
@@ -378,6 +404,55 @@ async function autoLinkDriver(driverId: number): Promise<boolean> {
       return true;
     }
   }
+  
+  return false;
+}
+
+// =====================
+// DNI Matching Utilities
+// =====================
+
+/**
+ * Normalize a Spanish DNI/NIE to just its numeric digits.
+ * DNI: 8 digits + letter (e.g. 44795380M → 44795380)
+ * NIE: X/Y/Z + 7 digits + letter (e.g. X1234567L → 1234567)
+ */
+function normalizeDni(dni: string): string {
+  // Remove spaces, dashes, dots
+  const clean = dni.replace(/[\s\-\.]/g, '').toUpperCase();
+  // Extract only digits
+  return clean.replace(/[^0-9]/g, '');
+}
+
+/**
+ * Check if an employee's DNI matches a tachograph card number.
+ * Spanish tachograph cards embed DNI digits within the card number.
+ * We check if the card number contains the DNI digits (minimum 6 matching).
+ * 
+ * Examples:
+ *   DNI "29028003W" → digits "29028003"
+ *   Card "E29028003000" → contains "29028003" → MATCH
+ *   Card "E12805000000" vs DNI "44795380M" → no match
+ */
+function dniMatchesCard(dni: string, cardNumber: string): boolean {
+  if (!dni || !cardNumber) return false;
+  
+  const dniDigits = normalizeDni(dni);
+  const cardClean = cardNumber.replace(/[\s\-\.]/g, '').toUpperCase();
+  const cardDigits = cardClean.replace(/[^0-9]/g, '');
+  
+  // Need at least 6 digits from DNI to avoid false positives
+  if (dniDigits.length < 6) return false;
+  
+  // Check if card contains the full DNI digits
+  if (cardDigits.includes(dniDigits)) return true;
+  
+  // Check if the card number (including letters) contains the full DNI digits
+  if (cardClean.includes(dniDigits)) return true;
+  
+  // Check with DNI letter included (e.g., "44795380M" in "E44795380M00")
+  const dniWithLetter = dni.replace(/[\s\-\.]/g, '').toUpperCase();
+  if (dniWithLetter.length >= 8 && cardClean.includes(dniWithLetter)) return true;
   
   return false;
 }
