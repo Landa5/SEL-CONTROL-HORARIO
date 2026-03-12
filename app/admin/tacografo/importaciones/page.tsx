@@ -51,8 +51,19 @@ export default function ImportacionesPage() {
         const data = await res.json();
         setUploadResults(data.results);
         fetchImports();
+      } else {
+        // Mostrar el error de la API
+        let errorMsg = `Error del servidor (${res.status})`;
+        try {
+          const errData = await res.json();
+          errorMsg = errData.error || errorMsg;
+        } catch {}
+        setUploadResults([{ fileName: 'Error de importación', success: false, status: 'ERROR', errors: [errorMsg], warnings: [] }]);
       }
-    } catch (e) { console.error(e); }
+    } catch (e: any) {
+      console.error('Upload error:', e);
+      setUploadResults([{ fileName: 'Error de conexión', success: false, status: 'ERROR', errors: [e.message || 'No se pudo conectar con el servidor'], warnings: [] }]);
+    }
     setUploading(false);
   };
 

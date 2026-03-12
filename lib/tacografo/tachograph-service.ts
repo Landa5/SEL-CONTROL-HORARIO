@@ -20,16 +20,42 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 
-const UPLOAD_DIR = path.join(process.cwd(), 'public', 'uploads', 'tacografo');
+// Detectar si estamos en Vercel (filesystem de solo lectura)
+const IS_VERCEL = !!process.env.VERCEL;
+const UPLOAD_DIR = IS_VERCEL
+  ? '/tmp/tacografo'
+  : path.join(process.cwd(), 'public', 'uploads', 'tacografo');
 const PROCESSED_DIR = path.join(UPLOAD_DIR, 'processed');
 const ERROR_DIR = path.join(UPLOAD_DIR, 'errors');
 
-// Ensure upload directories exist
+/**
+ * Intenta crear directorios. En Vercel solo funciona en /tmp.
+ * Falla silenciosamente si no puede crear.
+ */
 function ensureDirectories() {
-  for (const dir of [UPLOAD_DIR, PROCESSED_DIR, ERROR_DIR]) {
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+  try {
+    for (const dir of [UPLOAD_DIR, PROCESSED_DIR, ERROR_DIR]) {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
     }
+  } catch {
+    // En Vercel u otro entorno read-only, ignorar
+  }
+}
+
+/**
+ * Intenta guardar archivo en disco. Devuelve la ruta relativa o null si falla.
+ */
+function trySaveFile(buffer: Buffer, safeFileName: string): string | null {
+  try {
+    ensureDirectories();
+    const filePath = path.join(UPLOAD_DIR, safeFileName);
+    fs.writeFileSync(filePath, buffer);
+    return IS_VERCEL ? `/tmp/tacografo/${safeFileName}` : `/uploads/tacografo/${safeFileName}`;
+  } catch {
+    // Filesystem read-only (Vercel, etc.) — no guardamos archivo
+    return null;
   }
 }
 
@@ -63,7 +89,6 @@ export async function processImport(
   uploadedById: number,
   sourceType: 'MANUAL_UPLOAD' | 'LOCAL_FOLDER' = 'MANUAL_UPLOAD'
 ): Promise<ImportProcessResult> {
-  ensureDirectories();
   
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -104,11 +129,13 @@ export async function processImport(
     };
   }
   
-  // 4. Save original file
+  // 4. Intentar guardar archivo original en disco
   const timestamp = Date.now();
   const safeFileName = `${timestamp}_${fileName.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
-  const filePath = path.join(UPLOAD_DIR, safeFileName);
-  fs.writeFileSync(filePath, fileBuffer);
+  const savedPath = trySaveFile(fileBuffer, safeFileName);
+  if (!savedPath) {
+    warnings.push('El archivo no se pudo guardar en disco (entorno serverless). Los datos se procesarán y guardarán en BD.');
+  }
   
   // 5. Create import record
   const importRecord = await prisma.tachographImport.create({
@@ -120,7 +147,7 @@ export async function processImport(
       fileSize: fileBuffer.length,
       fileHash,
       importStatus: 'PROCESSING',
-      rawFilePath: `/uploads/tacografo/${safeFileName}`,
+      rawFilePath: savedPath || `cloud-pending:${safeFileName}`,
       uploadedById,
     }
   });
