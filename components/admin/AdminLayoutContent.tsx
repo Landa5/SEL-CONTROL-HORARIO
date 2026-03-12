@@ -65,7 +65,8 @@ export default function AdminLayoutContent({ children }: { children: React.React
     // State for collapsible groups
     const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
         'Personas (RRHH)': true,
-        'Flota y Operaciones': true
+        'Flota y Operaciones': true,
+        'Tacógrafo Digital': true
     });
 
     const [mounted, setMounted] = useState(false);
@@ -172,6 +173,14 @@ export default function AdminLayoutContent({ children }: { children: React.React
         }
     ];
 
+    // For OFICINA role: only show "back to panel" + Tacógrafo Digital
+    const filteredNav = isOficina
+        ? [
+            { type: 'single', href: '/oficina/dashboard', label: '← Volver a Mi Panel', icon: LayoutDashboard },
+            ...navStructure.filter((item: any) => item.label === 'Tacógrafo Digital')
+          ]
+        : navStructure;
+
     const handleLogout = async () => {
         await fetch('/api/auth/logout', { method: 'POST' });
         window.location.href = '/login';
@@ -193,7 +202,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
                 </div>
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700">
-                    {navStructure.map((item: any, idx) => {
+                    {filteredNav.map((item: any, idx) => {
                         if (item.type === 'single') {
                             const isActive = pathname === item.href;
                             const Icon = item.icon;
