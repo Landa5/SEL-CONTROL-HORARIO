@@ -32,7 +32,7 @@ export async function middleware(request: NextRequest) {
 
         const rolePermissions: Record<string, string[]> = {
             'ADMIN': ['/admin', '/oficina', '/mecanico', '/empleado'],
-            'OFICINA': ['/oficina', '/empleado', '/admin/formacion'],
+            'OFICINA': ['/oficina', '/empleado', '/admin/formacion', '/admin/tacografo'],
             'MECANICO': ['/mecanico', '/empleado'],
             'CONDUCTOR': ['/empleado'],
             'EMPLEADO': ['/empleado']
