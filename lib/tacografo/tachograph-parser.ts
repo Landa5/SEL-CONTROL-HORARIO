@@ -137,49 +137,64 @@ function extractDatesFromFileName(fileName: string): { dateFrom?: Date; dateTo?:
  */
 export async function parseTachographFile(
   fileName: string,
-  _fileBuffer: Buffer,
+  fileBuffer: Buffer,
   _extension: string
 ): Promise<TachographParseResult> {
-  const warnings: string[] = [];
-  const errors: string[] = [];
-  
-  // Detect file type
-  const fileType = detectFileType(fileName);
-  if (fileType === 'UNKNOWN') {
-    warnings.push('No se pudo determinar el tipo de archivo (tarjeta conductor / unidad vehículo). Se requiere revisión manual.');
+  // Intentar parseo binario real del contenido del archivo
+  try {
+    const { parseBinaryTachograph } = await import('./tachograph-binary-parser');
+    const result = parseBinaryTachograph(fileBuffer, fileName);
+    
+    // Si el binario no detectó matrícula, intentar del nombre
+    if (!result.metadata.plateNumber) {
+      const plate = extractPlateFromFileName(fileName);
+      if (plate) {
+        result.metadata.plateNumber = plate;
+        result.warnings.push('La matrícula se extrajo del nombre del archivo.');
+      }
+    }
+
+    // Si no detectó fechas, intentar del nombre
+    if (!result.metadata.dateFrom) {
+      const dates = extractDatesFromFileName(fileName);
+      if (dates.dateFrom) result.metadata.dateFrom = dates.dateFrom;
+      if (dates.dateTo) result.metadata.dateTo = dates.dateTo;
+    }
+
+    // Si el binario no determinó tipo, intentar por nombre
+    if (result.fileType === 'UNKNOWN') {
+      result.fileType = detectFileType(fileName);
+    }
+
+    return result;
+  } catch (binaryError: any) {
+    // Si falla el parser binario, caer al parser de nombre de archivo
+    console.error('Binary parser error, falling back to filename parser:', binaryError);
+    
+    const warnings: string[] = [];
+    const errors: string[] = [];
+    
+    warnings.push(`El parseo binario falló (${binaryError.message}). Se extrajeron metadatos del nombre del archivo.`);
+    
+    const fileType = detectFileType(fileName);
+    const plate = extractPlateFromFileName(fileName);
+    const dates = extractDatesFromFileName(fileName);
+    
+    const metadata: TachographParseResult['metadata'] = {};
+    if (plate) metadata.plateNumber = plate;
+    if (dates.dateFrom) metadata.dateFrom = dates.dateFrom;
+    if (dates.dateTo) metadata.dateTo = dates.dateTo;
+    
+    return {
+      success: true,
+      parserVersion: 'fallback-filename-v1',
+      fileType,
+      metadata,
+      activities: [],
+      warnings,
+      errors
+    };
   }
-  
-  // Extract metadata from filename
-  const plate = extractPlateFromFileName(fileName);
-  const dates = extractDatesFromFileName(fileName);
-  
-  const metadata: TachographParseResult['metadata'] = {};
-  
-  if (plate) {
-    metadata.plateNumber = plate;
-  } else if (fileType === 'VEHICLE_UNIT') {
-    warnings.push('Archivo de unidad de vehículo sin matrícula detectable en el nombre.');
-  }
-  
-  if (dates.dateFrom) metadata.dateFrom = dates.dateFrom;
-  if (dates.dateTo) metadata.dateTo = dates.dateTo;
-  
-  if (!dates.dateFrom) {
-    warnings.push('No se detectaron fechas en el nombre del archivo.');
-  }
-  
-  // STUB: In FASE 2, binary parsing would extract activities here
-  warnings.push('Parser stub v1: el parseo binario completo no está implementado. Los datos de actividad se generarán cuando se integre un parser DDD/DTCO real.');
-  
-  return {
-    success: true,
-    parserVersion: 'stub-v1',
-    fileType,
-    metadata,
-    activities: [], // Empty in stub - real parser would populate this
-    warnings,
-    errors
-  };
 }
 
 /**
