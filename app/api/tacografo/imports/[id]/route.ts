@@ -95,12 +95,20 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const { id } = await params;
     const importId = parseInt(id);
 
-    // Use a transaction to ensure writes go to primary (not read replica)
-    await prisma.$transaction(async (tx) => {
-      await tx.tachographIncident.deleteMany({ where: { importId } });
-      await tx.tachographActivity.deleteMany({ where: { importId } });
-      await tx.tachographImport.delete({ where: { id: importId } });
+    // Use DIRECT_URL to bypass PgBouncer/connection pooling (which routes to read replicas)
+    const { PrismaClient } = await import('@prisma/client');
+    const directUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+    const directPrisma = new PrismaClient({
+      datasources: { db: { url: directUrl } },
     });
+
+    try {
+      await directPrisma.$executeRawUnsafe(`DELETE FROM "TachographIncident" WHERE "importId" = $1`, importId);
+      await directPrisma.$executeRawUnsafe(`DELETE FROM "TachographActivity" WHERE "importId" = $1`, importId);
+      await directPrisma.$executeRawUnsafe(`DELETE FROM "TachographImport" WHERE "id" = $1`, importId);
+    } finally {
+      await directPrisma.$disconnect();
+    }
 
     return NextResponse.json({ success: true, message: 'Importación eliminada correctamente' });
   } catch (error: any) {
