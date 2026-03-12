@@ -98,7 +98,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     // Delete related records first (FK constraints)
     await prisma.tachographIncident.deleteMany({ where: { importId } });
     await prisma.tachographActivity.deleteMany({ where: { importId } });
-    await prisma.tachographDailySummary.deleteMany({ where: { importId } });
 
     // Delete the import itself
     await prisma.tachographImport.delete({ where: { id: importId } });
