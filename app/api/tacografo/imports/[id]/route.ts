@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { prisma, withWriteClient } from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { processImport } from '@/lib/tacografo/tachograph-service';
@@ -95,10 +95,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const { id } = await params;
     const importId = parseInt(id);
 
-    // Delete related records first (FK constraints), then the import
-    await prisma.$executeRawUnsafe(`DELETE FROM "TachographIncident" WHERE "importId" = $1`, importId);
-    await prisma.$executeRawUnsafe(`DELETE FROM "TachographActivity" WHERE "importId" = $1`, importId);
-    await prisma.$executeRawUnsafe(`DELETE FROM "TachographImport" WHERE "id" = $1`, importId);
+    // Use DIRECT_URL for writes (pooler may route to read-only replicas)
+    await withWriteClient(async (client) => {
+      await client.$executeRawUnsafe(`DELETE FROM "TachographIncident" WHERE "importId" = $1`, importId);
+      await client.$executeRawUnsafe(`DELETE FROM "TachographActivity" WHERE "importId" = $1`, importId);
+      await client.$executeRawUnsafe(`DELETE FROM "TachographImport" WHERE "id" = $1`, importId);
+    });
 
     return NextResponse.json({ success: true, message: 'Importación eliminada correctamente' });
   } catch (error: any) {
