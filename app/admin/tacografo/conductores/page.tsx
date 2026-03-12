@@ -1,7 +1,26 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Link2, Unlink, Users, Search } from 'lucide-react';
+import { UserCheck, Link2, Unlink, Users, Search, CreditCard } from 'lucide-react';
+
+/**
+ * Extract DNI from Spanish tachograph card number.
+ * Spanish card format: E + 8 digits DNI + letter + 4 control digits
+ * Example: E012345678A0001 → DNI: 12345678A
+ * Also handles: E-12345678-A-0001 or similar variations
+ */
+function extractDniFromCard(cardNumber: string | null): string | null {
+  if (!cardNumber) return null;
+  // Remove spaces, dashes
+  const clean = cardNumber.replace(/[\s\-\.]/g, '').toUpperCase();
+  // Spanish card: starts with E, then 8-9 digits, then a letter
+  const match = clean.match(/^E(\d{8,9}[A-Z])/);
+  if (match) return match[1];
+  // Try to find a DNI pattern anywhere (8 digits + letter)
+  const dniMatch = clean.match(/(\d{8}[A-Z])/);
+  if (dniMatch) return dniMatch[1];
+  return null;
+}
 
 export default function ConductoresPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
@@ -10,6 +29,7 @@ export default function ConductoresPage() {
   const [filter, setFilter] = useState<'all'|'linked'|'unlinked'>('all');
   const [linkingId, setLinkingId] = useState<number|null>(null);
   const [selectedEmployee, setSelectedEmployee] = useState<number|0>(0);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const fetchData = async () => {
     setLoading(true);
@@ -69,6 +89,14 @@ export default function ConductoresPage() {
     fetchData();
   };
 
+  // Filter employees for dropdown based on search
+  const filteredEmployees = searchTerm
+    ? employees.filter((e: any) => {
+        const fullName = `${e.nombre} ${e.apellidos || ''} ${e.dni || ''}`.toLowerCase();
+        return fullName.includes(searchTerm.toLowerCase());
+      })
+    : employees;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -78,7 +106,7 @@ export default function ConductoresPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Conductores</h1>
-            <p className="text-sm text-gray-500">Conductores detectados en archivos de tacógrafo</p>
+            <p className="text-sm text-gray-500">Conductores detectados en archivos de tacógrafo — vincula con empleados por DNI</p>
           </div>
         </div>
       </div>
@@ -109,25 +137,41 @@ export default function ConductoresPage() {
             <thead>
               <tr className="text-left text-xs font-bold text-gray-500 uppercase tracking-wider border-b bg-gray-50/50">
                 <th className="px-6 py-3">Nombre</th>
+                <th className="px-6 py-3">DNI</th>
                 <th className="px-6 py-3">Nº Tarjeta</th>
                 <th className="px-6 py-3">Caducidad</th>
                 <th className="px-6 py-3">Empleado vinculado</th>
                 <th className="px-6 py-3">Imports</th>
-                <th className="px-6 py-3">Incidencias</th>
                 <th className="px-6 py-3 text-right">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y">
-              {drivers.map((d) => (
+              {drivers.map((d) => {
+                const dni = extractDniFromCard(d.cardNumber);
+                return (
                 <tr key={d.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-6 py-4 font-medium text-gray-900">{d.fullName}</td>
-                  <td className="px-6 py-4 text-gray-600 font-mono text-xs">{d.cardNumber || '—'}</td>
+                  <td className="px-6 py-4">
+                    {dni ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200 font-mono">
+                        <CreditCard className="w-3 h-3" />{dni}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">—</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 text-gray-400 font-mono text-[11px]">{d.cardNumber || '—'}</td>
                   <td className="px-6 py-4 text-gray-600">{d.cardExpiry ? new Date(d.cardExpiry).toLocaleDateString('es-ES') : '—'}</td>
                   <td className="px-6 py-4">
                     {d.linkedEmployee ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 border border-green-200">
-                        <Link2 className="w-3 h-3" />{d.linkedEmployee.nombre} {d.linkedEmployee.apellidos || ''}
-                      </span>
+                      <div>
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 border border-green-200">
+                          <Link2 className="w-3 h-3" />{d.linkedEmployee.nombre} {d.linkedEmployee.apellidos || ''}
+                        </span>
+                        {d.linkedEmployee.dni && (
+                          <span className="block text-[10px] text-gray-400 font-mono mt-0.5 ml-1">DNI: {d.linkedEmployee.dni}</span>
+                        )}
+                      </div>
                     ) : (
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-yellow-100 text-yellow-800 border border-yellow-200">
                         <Unlink className="w-3 h-3" />Sin vincular
@@ -135,20 +179,21 @@ export default function ConductoresPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 text-gray-500">{d._count?.imports || 0}</td>
-                  <td className="px-6 py-4">
-                    {d._count?.incidents > 0 ? (
-                      <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full text-xs font-bold">{d._count.incidents}</span>
-                    ) : <span className="text-gray-300">0</span>}
-                  </td>
                   <td className="px-6 py-4 text-right">
                     {linkingId === d.id ? (
-                      <div className="flex items-center gap-2 justify-end">
-                        <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(parseInt(e.target.value))} className="text-xs border rounded-lg px-2 py-1.5 max-w-[180px]">
+                      <div className="flex flex-col items-end gap-2">
+                        <select value={selectedEmployee} onChange={(e) => setSelectedEmployee(parseInt(e.target.value))} className="text-xs border rounded-lg px-2 py-1.5 w-full max-w-[250px]">
                           <option value={0}>Seleccionar empleado...</option>
-                          {employees.map((e: any) => <option key={e.id} value={e.id}>{e.nombre} {e.apellidos || ''}</option>)}
+                          {employees.map((e: any) => (
+                            <option key={e.id} value={e.id}>
+                              {e.nombre} {e.apellidos || ''}{e.dni ? ` — DNI: ${e.dni}` : ''}
+                            </option>
+                          ))}
                         </select>
-                        <button onClick={() => linkDriver(d.id)} disabled={!selectedEmployee} className="px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium disabled:opacity-50 hover:bg-blue-700">Vincular</button>
-                        <button onClick={() => { setLinkingId(null); setSelectedEmployee(0); }} className="px-2.5 py-1.5 border rounded-lg text-xs hover:bg-gray-50">Cancelar</button>
+                        <div className="flex gap-1">
+                          <button onClick={() => linkDriver(d.id)} disabled={!selectedEmployee} className="px-2.5 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium disabled:opacity-50 hover:bg-blue-700">Vincular</button>
+                          <button onClick={() => { setLinkingId(null); setSelectedEmployee(0); }} className="px-2.5 py-1.5 border rounded-lg text-xs hover:bg-gray-50">Cancelar</button>
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 justify-end">
@@ -163,7 +208,8 @@ export default function ConductoresPage() {
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -171,3 +217,4 @@ export default function ConductoresPage() {
     </div>
   );
 }
+

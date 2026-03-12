@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     const drivers = await prisma.tachographDriver.findMany({
       where,
       include: {
-        linkedEmployee: { select: { id: true, nombre: true, apellidos: true, rol: true } },
+        linkedEmployee: { select: { id: true, nombre: true, apellidos: true, rol: true, dni: true } },
         _count: { select: { imports: true, activities: true, incidents: true } },
       },
       orderBy: { fullName: 'asc' },
