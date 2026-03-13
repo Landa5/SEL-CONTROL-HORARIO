@@ -395,23 +395,25 @@ function extractActivities(buf: Buffer): ParsedActivity[] {
   //   Bits 10-0: time (minutos desde 00:00 del día, max 1440)
   
   // Buscar secuencias de activity change records
-  // Heurística: buscar timestamps válidos seguidos de pares de bytes con patrones de actividad
+  // OPTIMIZACIÓN: en vez de escanear cada byte, solo probar en posiciones
+  // donde se encontraron timestamps válidos (single pass).
   
-  const timestamps = findAllTimestamps(buf);
+  const tsPositions = findTimestampPositions(buf);
+  const usedPositions = new Set<number>();
   
-  for (let i = 0; i < buf.length - 4; i++) {
-    const ts = readTimestamp(buf, i);
-    if (!ts) continue;
+  for (const { offset, date } of tsPositions) {
+    if (usedPositions.has(offset)) continue;
     
     // Verificar si hay activity records después del timestamp
-    // Pueden haber varios valores de 2 bytes tras un timestamp
-    const dayActivities = tryParseActivityRecords(buf, i + 4, ts);
-    if (dayActivities.length >= 3) { // Mínimo 3 registros para considerar válido
-      // Verificar que las actividades cubran al menos 30 minutos del día
+    const dayActivities = tryParseActivityRecords(buf, offset + 4, date);
+    if (dayActivities.length >= 3) {
       const totalMinutes = dayActivities.reduce((sum, a) => sum + a.durationMinutes, 0);
       if (totalMinutes >= 30) {
         activities.push(...dayActivities);
-        i += 4 + (dayActivities.length * 2);
+        // Mark positions as used to avoid re-processing
+        for (let j = 0; j < dayActivities.length * 2 + 4; j++) {
+          usedPositions.add(offset + j);
+        }
       }
     }
   }
@@ -522,26 +524,44 @@ function consolidateActivities(activities: ParsedActivity[]): ParsedActivity[] {
 }
 
 // ====================================
-// Búsqueda de timestamps en el archivo
+// Búsqueda de timestamps en el archivo (con posiciones)
 // ====================================
 
-function findAllTimestamps(buf: Buffer): Date[] {
-  const dates: Date[] = [];
+interface TimestampPosition {
+  offset: number;
+  date: Date;
+}
+
+function findTimestampPositions(buf: Buffer): TimestampPosition[] {
+  const results: TimestampPosition[] = [];
   const seen = new Set<number>();
   
-  for (let i = 0; i < buf.length - 3; i++) {
-    const ts = readUint32BE(buf, i);
-    // Timestamps válidos de tacógrafo: entre 2000-01-01 y 2035-01-01
-    if (ts >= 946684800 && ts <= 2051222400) {
-      if (!seen.has(ts)) {
-        seen.add(ts);
-        dates.push(new Date(ts * 1000));
+  // Saltar de 4 en 4 bytes para buscar timestamps alineados
+  // (los timestamps en archivos de tacógrafo están típicamente alineados)
+  // También probamos con stride de 1 en un segundo pass limitado
+  
+  for (let stride = 4; stride >= 1; stride = stride === 4 ? 1 : 0) {
+    for (let i = 0; i < buf.length - 3; i += stride) {
+      const ts = readUint32BE(buf, i);
+      if (ts >= 946684800 && ts <= 2051222400) {
+        if (!seen.has(ts)) {
+          seen.add(ts);
+          results.push({ offset: i, date: new Date(ts * 1000) });
+        }
       }
+      // Limitar resultados para evitar procesamiento excesivo
+      if (results.length >= 500) break;
     }
+    if (results.length >= 500) break;
   }
   
-  dates.sort((a, b) => a.getTime() - b.getTime());
-  return dates;
+  results.sort((a, b) => a.date.getTime() - b.date.getTime());
+  return results;
+}
+
+// Keep findAllTimestamps for metadata date range detection
+function findAllTimestamps(buf: Buffer): Date[] {
+  return findTimestampPositions(buf).map(tp => tp.date);
 }
 
 // ====================================
