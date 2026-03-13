@@ -381,71 +381,90 @@ export default function ImportacionesPage() {
                 {selectedImport.rawMetadataJson && (
                   <div>
                     <h3 className="font-bold text-gray-900 mb-2 text-sm">Metadatos Extraídos</h3>
-                    <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto border">{JSON.stringify(JSON.parse(selectedImport.rawMetadataJson), null, 2)}</pre>
+                    <pre className="bg-gray-50 p-3 rounded-lg text-xs overflow-x-auto border">{JSON.stringify(typeof selectedImport.rawMetadataJson === 'string' ? JSON.parse(selectedImport.rawMetadataJson) : selectedImport.rawMetadataJson, null, 2)}</pre>
                   </div>
                 )}
 
-                {/* Activities - Jornada */}
+                {/* Eventos Normalizados v2 */}
                 <div>
                   <h3 className="font-bold text-gray-900 mb-2 text-sm">
-                    Actividades / Jornada {selectedImport.activities?.length > 0 ? `(${selectedImport.activities.length})` : ''}
+                    Eventos Normalizados {selectedImport.normalizedEvents?.length > 0 ? `(${selectedImport.normalizedEvents.length})` : ''}
                   </h3>
-                  {selectedImport.activities?.length > 0 ? (
+                  {selectedImport.normalizedEvents?.length > 0 ? (
                     <div className="space-y-1">
                       {/* Summary bar */}
                       <div className="flex h-8 rounded-lg overflow-hidden mb-3 border">
-                        {selectedImport.activities.map((act: any, idx: number) => {
-                          const totalMinutes = selectedImport.activities.reduce((s: number, a: any) => s + (a.durationMinutes || 0), 0);
+                        {selectedImport.normalizedEvents.map((act: any, idx: number) => {
+                          const totalMinutes = selectedImport.normalizedEvents.reduce((s: number, a: any) => s + (a.durationMinutes || 0), 0);
                           const pct = totalMinutes > 0 ? ((act.durationMinutes || 0) / totalMinutes * 100) : 0;
                           if (pct < 1) return null;
+                          const actType = act.normalizedActivityType || act.activityType;
                           return (
                             <div
                               key={idx}
-                              className={`${ACTIVITY_COLORS[act.activityType]?.split(' ')[0] || 'bg-gray-200'} flex items-center justify-center text-[10px] font-bold`}
+                              className={`${ACTIVITY_COLORS[actType]?.split(' ')[0] || 'bg-gray-200'} flex items-center justify-center text-[10px] font-bold`}
                               style={{ width: `${pct}%` }}
-                              title={`${ACTIVITY_LABELS[act.activityType] || act.activityType}: ${act.durationMinutes} min`}
+                              title={`${ACTIVITY_LABELS[actType] || actType}: ${act.durationMinutes} min`}
                             >
-                              {pct > 8 ? ACTIVITY_LABELS[act.activityType]?.substring(0, 4) : ''}
+                              {pct > 8 ? ACTIVITY_LABELS[actType]?.substring(0, 4) : ''}
                             </div>
                           );
                         })}
                       </div>
-                      {/* Activity list */}
+                      {/* Event list */}
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="text-left text-[10px] font-bold text-gray-500 uppercase border-b">
                               <th className="pb-1 pr-3">Actividad</th>
-                              <th className="pb-1 pr-3">Inicio</th>
-                              <th className="pb-1 pr-3">Fin</th>
+                              <th className="pb-1 pr-3">Inicio (local)</th>
+                              <th className="pb-1 pr-3">Fin (local)</th>
                               <th className="pb-1 pr-3">Duración</th>
+                              <th className="pb-1 pr-3">Fiabilidad</th>
+                              <th className="pb-1 pr-3">Estado</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-gray-100">
-                            {selectedImport.activities.map((act: any, idx: number) => (
+                            {selectedImport.normalizedEvents.map((act: any, idx: number) => {
+                              const actType = act.normalizedActivityType || act.activityType;
+                              const startLocal = act.startAtLocal || act.startAtUtc || act.startTime;
+                              const endLocal = act.endAtLocal || act.endAtUtc || act.endTime;
+                              return (
                               <tr key={act.id || idx} className="hover:bg-gray-50">
                                 <td className="py-1.5 pr-3">
-                                  <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${ACTIVITY_COLORS[act.activityType] || ACTIVITY_COLORS.UNKNOWN}`}>
-                                    {ACTIVITY_LABELS[act.activityType] || act.activityType}
+                                  <span className={`inline-flex px-2 py-0.5 rounded text-[10px] font-bold border ${ACTIVITY_COLORS[actType] || ACTIVITY_COLORS.UNKNOWN}`}>
+                                    {ACTIVITY_LABELS[actType] || actType}
                                   </span>
+                                  {act.isSplitCrossMidnight && <span className="ml-1 text-[8px] text-violet-600 font-bold">SPLIT</span>}
                                 </td>
-                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.startTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}</td>
-                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.endTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                <td className="py-1.5 pr-3 text-gray-600">{new Date(startLocal).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</td>
+                                <td className="py-1.5 pr-3 text-gray-600">{new Date(endLocal).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</td>
                                 <td className="py-1.5 pr-3 font-medium">
                                   {act.durationMinutes >= 60
                                     ? `${Math.floor(act.durationMinutes / 60)}h ${act.durationMinutes % 60}min`
                                     : `${act.durationMinutes} min`}
                                 </td>
+                                <td className="py-1.5 pr-3">
+                                  <span className={`text-[10px] font-bold ${act.confidenceLevel === 'high' ? 'text-green-700' : act.confidenceLevel === 'low' ? 'text-red-700' : 'text-amber-700'}`}>
+                                    {act.confidenceLevel || '—'}
+                                  </span>
+                                </td>
+                                <td className="py-1.5 pr-3">
+                                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${act.consolidationStatus === 'operative' ? 'bg-green-50 text-green-700' : act.consolidationStatus === 'excluded' ? 'bg-red-50 text-red-700' : 'bg-amber-50 text-amber-700'}`}>
+                                    {act.consolidationStatus || '—'}
+                                  </span>
+                                </td>
                               </tr>
-                            ))}
+                              );
+                            })}
                           </tbody>
                         </table>
                       </div>
                       {/* Totals */}
                       <div className="mt-3 pt-3 border-t grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                         {(['DRIVING', 'REST', 'OTHER_WORK', 'AVAILABILITY'] as const).map(type => {
-                          const totalMin = selectedImport.activities
-                            .filter((a: any) => a.activityType === type)
+                          const totalMin = selectedImport.normalizedEvents
+                            .filter((a: any) => (a.normalizedActivityType || a.activityType) === type)
                             .reduce((s: number, a: any) => s + (a.durationMinutes || 0), 0);
                           if (totalMin === 0) return null;
                           return (
@@ -460,7 +479,7 @@ export default function ImportacionesPage() {
                   ) : (
                     <div className="text-center py-8 bg-gray-50 rounded-lg border border-dashed">
                       <FileText className="w-8 h-8 mx-auto mb-2 text-gray-300" />
-                      <p className="text-sm text-gray-500 font-medium">No se detectaron actividades en este archivo</p>
+                      <p className="text-sm text-gray-500 font-medium">No se detectaron eventos en este archivo</p>
                       <p className="text-xs text-gray-400 mt-1">El parser binario no pudo extraer registros de actividad del contenido del archivo.</p>
                       <p className="text-xs text-gray-400">Los datos visibles se limitan a la identificación del vehículo/conductor.</p>
                     </div>
@@ -468,32 +487,38 @@ export default function ImportacionesPage() {
                 </div>
 
                 {/* Warnings */}
-                {selectedImport.warningsJson && JSON.parse(selectedImport.warningsJson).length > 0 && (
-                  <div>
-                    <h3 className="font-bold text-orange-700 mb-2 text-sm">Avisos ({JSON.parse(selectedImport.warningsJson).length})</h3>
-                    <ul className="space-y-1">
-                      {JSON.parse(selectedImport.warningsJson).map((w: string, i: number) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{w}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {(() => {
+                  const warnings = typeof selectedImport.warningsJson === 'string' ? JSON.parse(selectedImport.warningsJson || '[]') : (selectedImport.warningsJson || []);
+                  return warnings.length > 0 && (
+                    <div>
+                      <h3 className="font-bold text-orange-700 mb-2 text-sm">Avisos ({warnings.length})</h3>
+                      <ul className="space-y-1">
+                        {warnings.map((w: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-orange-700 bg-orange-50 p-2 rounded">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{w}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
 
                 {/* Errors */}
-                {selectedImport.errorsJson && JSON.parse(selectedImport.errorsJson).length > 0 && (
-                  <div>
-                    <h3 className="font-bold text-red-700 mb-2 text-sm">Errores ({JSON.parse(selectedImport.errorsJson).length})</h3>
-                    <ul className="space-y-1">
-                      {JSON.parse(selectedImport.errorsJson).map((e: string, i: number) => (
-                        <li key={i} className="flex items-start gap-2 text-xs text-red-700 bg-red-50 p-2 rounded">
-                          <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{e}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                {(() => {
+                  const errors = typeof selectedImport.errorsJson === 'string' ? JSON.parse(selectedImport.errorsJson || '[]') : (selectedImport.errorsJson || []);
+                  return errors.length > 0 && (
+                    <div>
+                      <h3 className="font-bold text-red-700 mb-2 text-sm">Errores ({errors.length})</h3>
+                      <ul className="space-y-1">
+                        {errors.map((e: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2 text-xs text-red-700 bg-red-50 p-2 rounded">
+                            <XCircle className="w-3.5 h-3.5 mt-0.5 shrink-0" />{e}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
 
                 {/* Incidents */}
                 {selectedImport.incidents?.length > 0 && (

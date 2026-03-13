@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       where,
       include: {
         linkedVehicle: { select: { id: true, matricula: true, marca: true, modelo: true } },
-        _count: { select: { imports: true, activities: true, incidents: true } },
+        _count: { select: { imports: true, normalizedEvents: true, incidents: true } },
       },
       orderBy: { plateNumber: 'asc' },
     });

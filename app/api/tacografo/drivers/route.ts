@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       where,
       include: {
         linkedEmployee: { select: { id: true, nombre: true, apellidos: true, rol: true, dni: true } },
-        _count: { select: { imports: true, activities: true, incidents: true } },
+        _count: { select: { imports: true, normalizedEvents: true, incidents: true } },
       },
       orderBy: { fullName: 'asc' },
     });

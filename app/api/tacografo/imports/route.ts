@@ -48,7 +48,7 @@ export async function GET(request: Request) {
           driver: { select: { id: true, fullName: true, cardNumber: true, linkedEmployeeId: true, linkedEmployee: { select: { nombre: true, apellidos: true } } } },
           vehicle: { select: { id: true, plateNumber: true, vin: true, linkedVehicleId: true, linkedVehicle: { select: { matricula: true, marca: true, modelo: true } } } },
           uploadedBy: { select: { id: true, nombre: true } },
-          _count: { select: { activities: true, incidents: true } },
+          _count: { select: { normalizedEvents: true, incidents: true } },
         },
         orderBy: { importDate: 'desc' },
         skip: (page - 1) * limit,

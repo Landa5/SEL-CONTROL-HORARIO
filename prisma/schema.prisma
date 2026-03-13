@@ -1132,6 +1132,13 @@ enum TachographIncidentType {
   DRIVING_TIME_EXCEEDED
   DAILY_DRIVING_EXCEEDED
   INSUFFICIENT_REST
+  // Nuevos tipos v3
+  DUPLICATE_EVENT
+  DATE_OUT_OF_RANGE
+  NEGATIVE_DURATION
+  SOURCE_CONFLICT
+  PARTIAL_DAY
+  NORMALIZATION_ERROR
 }
 
 enum TachographSeverity {
@@ -1148,6 +1155,41 @@ enum TachographResolutionStatus {
   DISMISSED
 }
 
+// ====================================
+// Processing Run — agrupa tandas de importación/reprocesado
+// ====================================
+
+model TachographProcessingRun {
+  id              Int      @id @default(autoincrement())
+  runType         String   // IMPORT_BATCH | REPROCESS | MANUAL_CORRECTION
+  status          String   @default("RUNNING") // RUNNING | COMPLETED | FAILED | PARTIAL
+
+  triggeredById   Int?
+
+  parserVersion         String @default("binary-v2")
+  normalizationVersion  String @default("norm-v1")
+  matchingVersion       String @default("match-v1")
+  aggregationVersion    String @default("agg-v1")
+
+  totalFiles      Int @default(0)
+  processedFiles  Int @default(0)
+  errorFiles      Int @default(0)
+
+  startedAt       DateTime @default(now())
+  completedAt     DateTime?
+
+  notesJson       Json?
+
+  imports         TachographImport[]
+
+  @@index([status])
+  @@index([startedAt])
+}
+
+// ====================================
+// Import — archivo importado
+// ====================================
+
 model TachographImport {
   id Int @id @default(autoincrement())
 
@@ -1161,17 +1203,30 @@ model TachographImport {
   importStatus   TachographImportStatus  @default(PENDING)
   importDate     DateTime                @default(now())
   processedAt    DateTime?
-  parserVersion  String                  @default("stub-v1")
-  rawMetadataJson String?                // JSON string
-  warningsJson   String?                 // JSON string
-  errorsJson     String?                 // JSON string
-  rawFilePath    String                  // path to original file
+
+  // Versionado por capa
+  parserVersion         String  @default("binary-v2")
+  normalizationVersion  String  @default("norm-v1")
+  matchingVersion       String  @default("match-v1")
+  aggregationVersion    String  @default("agg-v1")
+
+  rawMetadataJson Json?
+  warningsJson    Json?
+  errorsJson      Json?
+
+  // Storage del archivo raw
+  rawFilePath         String            // path/key en el storage adapter
+  rawFileProvider     String  @default("tmp") // local | supabase | tmp
 
   // Who uploaded
   uploadedById   Int?
   uploadedBy     Empleado?               @relation("TachographUploader", fields: [uploadedById], references: [id])
 
-  // Detected data
+  // Processing run
+  processingRunId Int?
+  processingRun   TachographProcessingRun? @relation(fields: [processingRunId], references: [id])
+
+  // Detected data (from parser)
   detectedDriverName  String?
   detectedCardNumber  String?
   detectedPlate       String?
@@ -1179,7 +1234,7 @@ model TachographImport {
   detectedDateFrom    DateTime?
   detectedDateTo      DateTime?
 
-  // Linked after processing
+  // Linked after processing (import-level, legacy compat)
   driverId       Int?
   driver         TachographDriver?       @relation(fields: [driverId], references: [id])
   vehicleId      Int?
@@ -1189,8 +1244,11 @@ model TachographImport {
   reviewedAt     DateTime?
   reviewedById   Int?
 
-  activities     TachographActivity[]
-  incidents      TachographIncident[]
+  // Relations
+  rawEvents          TachographRawEvent[]
+  normalizedEvents   TachographNormalizedEvent[]
+  legacyActivities   TachographActivityLegacy[]
+  incidents          TachographIncident[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1198,7 +1256,12 @@ model TachographImport {
   @@index([importStatus])
   @@index([importDate])
   @@index([fileHash])
+  @@index([processingRunId])
 }
+
+// ====================================
+// Driver — conductor del tacógrafo
+// ====================================
 
 model TachographDriver {
   id Int @id @default(autoincrement())
@@ -1213,10 +1276,11 @@ model TachographDriver {
   driverIdentifier String?
   active           Boolean   @default(true)
 
-  imports      TachographImport[]
-  activities   TachographActivity[]
-  dailySummaries TachographDailySummary[]
-  incidents    TachographIncident[]
+  imports            TachographImport[]
+  normalizedEvents   TachographNormalizedEvent[]
+  legacyActivities   TachographActivityLegacy[]
+  dailySummaries     TachographDailySummary[]
+  incidents          TachographIncident[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1224,6 +1288,10 @@ model TachographDriver {
   @@index([cardNumber])
   @@index([linkedEmployeeId])
 }
+
+// ====================================
+// Vehicle — vehículo del tacógrafo
+// ====================================
 
 model TachographVehicle {
   id Int @id @default(autoincrement())
@@ -1238,10 +1306,11 @@ model TachographVehicle {
   tachographBrand String?
   active          Boolean  @default(true)
 
-  imports      TachographImport[]
-  activities   TachographActivity[]
-  dailySummaries TachographDailySummary[]
-  incidents    TachographIncident[]
+  imports            TachographImport[]
+  normalizedEvents   TachographNormalizedEvent[]
+  legacyActivities   TachographActivityLegacy[]
+  dailySummaries     TachographDailySummary[]
+  incidents          TachographIncident[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1250,7 +1319,128 @@ model TachographVehicle {
   @@index([linkedVehicleId])
 }
 
-model TachographActivity {
+// ====================================
+// Raw Event — evento bruto extraído del parser
+// ====================================
+
+model TachographRawEvent {
+  id              Int      @id @default(autoincrement())
+
+  importId        Int
+  import          TachographImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  sourceType      String   // DRIVER_CARD | VEHICLE_UNIT
+
+  rawStartAt      DateTime
+  rawEndAt        DateTime
+  rawActivityType String   // REST, DRIVING, OTHER_WORK, AVAILABILITY, BREAK, UNKNOWN
+
+  rawDriverIdentifier  String?  // cardNumber o nombre del conductor detectado
+  rawVehicleIdentifier String?  // matrícula o VIN detectado en este período
+
+  rawPayloadJson  Json?    // Datos extra del parser (slot, card inserted, offset, etc.)
+
+  // Fiabilidad de la extracción
+  extractionMethod  String  @default("heuristic") // spec | heuristic | derived
+  extractionNotes   String? // Justificación: "Tag 0x0522 at offset 1234" o "Midnight scan"
+  extractionStatus  String  @default("OK")        // OK | SUSPECT | ERROR
+
+  // Deduplicación
+  fingerprint     String?  // hash(source+driver+vehicle+type+startUTC+endUTC)
+
+  normalizedEvents TachographNormalizedEvent[]
+
+  createdAt       DateTime @default(now())
+
+  @@index([importId])
+  @@index([fingerprint])
+  @@index([rawStartAt])
+}
+
+// ====================================
+// Normalized Event — evento normalizado con timezone y 4 dimensiones
+// ====================================
+
+model TachographNormalizedEvent {
+  id              Int      @id @default(autoincrement())
+
+  importId        Int
+  import          TachographImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  sourceType      String   // DRIVER_CARD | VEHICLE_UNIT
+
+  driverId        Int?
+  driver          TachographDriver? @relation(fields: [driverId], references: [id])
+  vehicleId       Int?
+  vehicle         TachographVehicle? @relation(fields: [vehicleId], references: [id])
+
+  // Timestamps
+  startAtUtc      DateTime
+  endAtUtc        DateTime
+  startAtLocal    DateTime // Europe/Madrid
+  endAtLocal      DateTime // Europe/Madrid
+  operationalDayLocal DateTime @db.Date // Fecha operativa en hora local
+
+  normalizedActivityType String // DRIVING, REST, OTHER_WORK, AVAILABILITY, BREAK, UNKNOWN
+  durationMinutes        Int
+
+  // === 4 dimensiones semánticas separadas ===
+  extractionMethod      String  @default("derived")     // spec | heuristic | derived
+  confidenceLevel       String  @default("medium")      // high | medium | low
+  matchingStatus        String  @default("unmatched")    // matched | unmatched | pending_review | manual
+  consolidationStatus   String  @default("provisional")  // operative | provisional | excluded
+  consolidationReason   String? // "Single source DC, no conflict" etc.
+
+  matchingMethod    String?  // card_number_exact, dni_from_filename, plate_exact, temporal_cross...
+  isSplitCrossMidnight Boolean @default(false)
+
+  parentRawEventId  Int?
+  parentRawEvent    TachographRawEvent? @relation(fields: [parentRawEventId], references: [id])
+
+  matchAudits       TachographMatchAudit[]
+
+  createdAt         DateTime @default(now())
+
+  @@index([importId])
+  @@index([driverId])
+  @@index([vehicleId])
+  @@index([operationalDayLocal])
+  @@index([startAtUtc])
+  @@index([consolidationStatus])
+}
+
+// ====================================
+// Match Audit — auditoría de cada decisión de asociación
+// ====================================
+
+model TachographMatchAudit {
+  id                  Int      @id @default(autoincrement())
+
+  normalizedEventId   Int
+  normalizedEvent     TachographNormalizedEvent @relation(fields: [normalizedEventId], references: [id], onDelete: Cascade)
+
+  entityType          String   // DRIVER | VEHICLE
+  candidateId         Int?     // ID del candidato (TachographDriver.id o TachographVehicle.id)
+  candidateLabel      String?  // Nombre/matrícula para visualización
+
+  method              String   // card_number_exact, dni_from_filename, dni_digits_in_card, name_fuzzy, plate_exact, plate_fuzzy, vin_exact, temporal_cross, manual
+  score               Float    @default(1.0) // 0.0-1.0
+  reason              String   // Explicación legible
+  decision            String   // ACCEPTED | REJECTED | PENDING_REVIEW
+  isAutomatic         Boolean  @default(true)
+
+  createdAt           DateTime @default(now())
+
+  @@index([normalizedEventId])
+  @@index([entityType])
+}
+
+// ====================================
+// Legacy Activity — tabla original preservada para comparación/auditoría
+// Se eliminará cuando el nuevo pipeline esté validado.
+// ====================================
+
+model TachographActivityLegacy {
   id Int @id @default(autoincrement())
 
   importId      Int
@@ -1272,16 +1462,21 @@ model TachographActivity {
   countryStart  String?
   countryEnd    String?
 
-  rawPayloadJson String? // JSON string
-  confidenceLevel String @default("low") // low, medium, high
+  rawPayloadJson String?
+  confidenceLevel String @default("low")
 
   createdAt DateTime @default(now())
 
+  @@map("TachographActivityLegacy")
   @@index([importId])
   @@index([driverId])
   @@index([vehicleId])
   @@index([startTime])
 }
+
+// ====================================
+// Daily Summary — resumen diario construido desde normalized events
+// ====================================
 
 model TachographDailySummary {
   id Int @id @default(autoincrement())
@@ -1294,14 +1489,17 @@ model TachographDailySummary {
 
   date        DateTime @db.Date
 
-  totalDrivingMinutes     Int @default(0)
-  totalOtherWorkMinutes   Int @default(0)
+  totalDrivingMinutes      Int @default(0)
+  totalOtherWorkMinutes    Int @default(0)
   totalAvailabilityMinutes Int @default(0)
-  totalRestMinutes        Int @default(0)
-  totalBreakMinutes       Int @default(0)
+  totalRestMinutes         Int @default(0)
+  totalBreakMinutes        Int @default(0)
+  gapMinutes               Int @default(0)
 
   importedFromCount       Int @default(0)
-  consistencyStatus       String @default("pending") // pending, ok, warning, error
+  consistencyStatus       String @default("pending") // pending, ok, warning, error, conflict
+  sourceDataOrigin        String? // DRIVER_CARD | VEHICLE_UNIT | MIXED
+  averageConfidence       String @default("medium") // low, medium, high
   notes                   String?
 
   createdAt DateTime @default(now())
@@ -1311,6 +1509,10 @@ model TachographDailySummary {
   @@index([driverId])
   @@index([date])
 }
+
+// ====================================
+// Incident — incidencias detectadas
+// ====================================
 
 model TachographIncident {
   id Int @id @default(autoincrement())
@@ -1347,12 +1549,16 @@ model TachographIncident {
   @@index([vehicleId])
 }
 
+// ====================================
+// Config — configuración del módulo
+// ====================================
+
 model TachographConfig {
   id Int @id @default(autoincrement())
 
-  key   String @unique // e.g. "input_folder", "processed_folder", "error_folder", etc.
-  value String          // JSON string for complex values, plain string for simple ones
-  label String          // Human-readable label
+  key   String @unique
+  value String
+  label String
 
   updatedAt DateTime @updatedAt
   updatedBy Int?

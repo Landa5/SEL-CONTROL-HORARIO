@@ -1,20 +1,22 @@
 /**
- * TachographParser - Stub Parser v1
+ * TachographParser v2 — Capa de abstracción para parseo de archivos de tacógrafo
  * 
- * Capa de abstracción para parseo de archivos de tacógrafo.
- * En FASE 1 se implementa como stub: extrae metadatos básicos del nombre del archivo.
- * En FASE 2 se reemplazará por un parser real DDD/DTCO o microservicio externo.
+ * Delega al parser binario real (tachograph-binary-parser.ts) y aplica
+ * fallbacks del nombre del archivo para datos faltantes.
  * 
- * IMPORTANTE: No modificar la interfaz TachographParseResult.
- * Toda la capa de servicios depende de esta interfaz.
+ * CAMBIO v2: Retorna rawEvents (BinaryRawEvent[]) además de activities
+ * legacy para compatibilidad durante la transición.
  */
+
+import type { BinaryRawEvent, BinaryParseResult } from './tachograph-binary-parser';
+
+export { BinaryRawEvent, BinaryParseResult };
 
 export interface TachographParseResult {
   success: boolean;
   parserVersion: string;
   fileType: 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN';
   
-  // Metadatos extraídos
   metadata: {
     driverName?: string;
     cardNumber?: string;
@@ -22,10 +24,14 @@ export interface TachographParseResult {
     vin?: string;
     dateFrom?: Date;
     dateTo?: Date;
+    driverDni?: string;
     [key: string]: any;
   };
   
-  // Actividades extraídas
+  // v2: Raw events sin consolidar
+  rawEvents: BinaryRawEvent[];
+  
+  // Legacy: actividades consolidadas (para compatibilidad con TachographActivityLegacy)
   activities: {
     activityType: 'DRIVING' | 'OTHER_WORK' | 'AVAILABILITY' | 'REST' | 'BREAK' | 'UNKNOWN';
     startTime: Date;
@@ -41,55 +47,39 @@ export interface TachographParseResult {
   errors: string[];
 }
 
-// Supported file extensions for tachograph data
+// Supported file extensions
 const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm'];
 
-/**
- * Detecta el tipo de archivo basándose en la extensión y nombre.
- */
 function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' {
   const lower = fileName.toLowerCase();
   const baseName = fileName.split(/[\\/]/).pop()?.toUpperCase() || '';
   
-  // Driver card files typically have C1B extension or contain "driver"/"conductor"/"card"
   if (lower.endsWith('.c1b') || lower.includes('driver') || lower.includes('card') || lower.includes('conductor') || lower.includes('tarjeta')) {
     return 'DRIVER_CARD';
   }
-  
-  // Vehicle unit files typically have V1B extension or contain "vehicle"/"vehiculo"/"vu"
   if (lower.endsWith('.v1b') || lower.includes('vehicle') || lower.includes('vehiculo') || lower.includes('_vu_') || lower.includes('_vu.')) {
     return 'VEHICLE_UNIT';
   }
-  
-  // DDD and DTCO can be either - check standard tachograph naming convention first
   if (lower.endsWith('.ddd') || lower.endsWith('.dtco') || lower.endsWith('.tgd') || lower.endsWith('.esm')) {
-    // Standard naming: C_ = driver Card download, S_/M_ = vehicle Speed/Mass unit download
     if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) {
       return 'DRIVER_CARD';
     }
     if (baseName.startsWith('S_') || baseName.startsWith('M_') || baseName.startsWith('E_')) {
       return 'VEHICLE_UNIT';
     }
-    // Fallback: plate pattern detection
     if (/\d{4}[a-z]{3}/i.test(fileName) || /[a-z]{2}\d{4}[a-z]{2}/i.test(fileName)) {
       return 'VEHICLE_UNIT';
     }
     return 'UNKNOWN';
   }
-  
   return 'UNKNOWN';
 }
 
-/**
- * Intenta extraer matrícula del nombre del archivo.
- */
 function extractPlateFromFileName(fileName: string): string | undefined {
-  // Spanish plate formats: 1234ABC, B1234AB
   const patterns = [
-    /(\d{4}[A-Z]{3})/i,        // 1234ABC (new format)
-    /([A-Z]{1,2}\d{4}[A-Z]{2})/i, // B1234AB (old format)
+    /(\d{4}[A-Z]{3})/i,
+    /([A-Z]{1,2}\d{4}[A-Z]{2})/i,
   ];
-  
   for (const pattern of patterns) {
     const match = fileName.match(pattern);
     if (match) return match[1].toUpperCase();
@@ -97,43 +87,23 @@ function extractPlateFromFileName(fileName: string): string | undefined {
   return undefined;
 }
 
-/**
- * Extracts card number and DNI from tachograph driver card filename.
- * Spanish driver card filenames follow: C_E{DNI}{version}
- * The E is the country code (Spain), followed by 8 digits + 1 letter = DNI.
- * 
- * Examples:
- *   C_E44798563Z000003_E... → cardNumber: E44798563Z000003, DNI: 44798563Z
- *   C_E45802660T000001_E... → cardNumber: E45802660T000001, DNI: 45802660T
- *   E__E45802660T0000202... → cardNumber: E45802660T0000202, DNI: 45802660T
- */
 function extractCardInfoFromFileName(fileName: string): { cardNumber?: string; dni?: string } {
   const baseName = fileName.split(/[\\/]/).pop() || '';
-  // Match: E (country) + 8 digits + 1 letter (DNI) + 4-8 version digits
   const match = baseName.match(/E(\d{8}[A-Za-z])(\d{4,8})/);
   if (match) {
     const dni = match[1].toUpperCase();
     const version = match[2];
-    return {
-      cardNumber: `E${dni}${version}`,
-      dni: dni,
-    };
+    return { cardNumber: `E${dni}${version}`, dni };
   }
   return {};
 }
 
-/**
- * Intenta extraer fechas del nombre del archivo.
- * Busca patrones como YYYYMMDD, YYYY-MM-DD
- */
 function extractDatesFromFileName(fileName: string): { dateFrom?: Date; dateTo?: Date } {
   const datePatterns = [
-    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})/g,  // YYYYMMDD or YYYY-MM-DD
-    /(\d{2})[-_](\d{2})[-_](\d{4})/g      // DD-MM-YYYY
+    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})/g,
+    /(\d{2})[-_](\d{2})[-_](\d{4})/g,
   ];
-  
   const dates: Date[] = [];
-  
   for (const pattern of datePatterns) {
     let match;
     while ((match = pattern.exec(fileName)) !== null) {
@@ -147,38 +117,79 @@ function extractDatesFromFileName(fileName: string): { dateFrom?: Date; dateTo?:
         month = parseInt(match[2]) - 1;
         year = parseInt(match[3]);
       }
-      
       if (year >= 2000 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
         dates.push(new Date(year, month, day));
       }
     }
   }
-  
   if (dates.length === 0) return {};
   dates.sort((a, b) => a.getTime() - b.getTime());
-  
   return {
     dateFrom: dates[0],
-    dateTo: dates.length > 1 ? dates[dates.length - 1] : dates[0]
+    dateTo: dates.length > 1 ? dates[dates.length - 1] : dates[0],
   };
 }
 
 /**
- * Parser stub principal.
- * En FASE 1 solo extrae lo que puede del nombre del archivo.
- * En FASE 2 se reemplazará por parseo binario real.
+ * Convierte BinaryRawEvent[] a legacy activities[] (consolidados)
+ * para mantener compatibilidad con TachographActivityLegacy
+ */
+function rawEventsToLegacyActivities(rawEvents: BinaryRawEvent[]): TachographParseResult['activities'] {
+  if (rawEvents.length === 0) return [];
+  
+  // Ordenar y consolidar actividades consecutivas del mismo tipo
+  const sorted = [...rawEvents]
+    .filter(e => e.extractionStatus !== 'ERROR')
+    .sort((a, b) => a.rawStartAt.getTime() - b.rawStartAt.getTime());
+  
+  if (sorted.length === 0) return [];
+  
+  const consolidated: TachographParseResult['activities'] = [{
+    activityType: sorted[0].rawActivityType as any,
+    startTime: sorted[0].rawStartAt,
+    endTime: sorted[0].rawEndAt,
+    durationMinutes: Math.round((sorted[0].rawEndAt.getTime() - sorted[0].rawStartAt.getTime()) / 60000),
+    confidenceLevel: sorted[0].extractionStatus === 'SUSPECT' ? 'low' : 'medium',
+  }];
+  
+  for (let i = 1; i < sorted.length; i++) {
+    const current = sorted[i];
+    const prev = consolidated[consolidated.length - 1];
+    
+    const sameType = prev.activityType === current.rawActivityType;
+    const sameDay = prev.startTime.toISOString().substring(0, 10) === current.rawStartAt.toISOString().substring(0, 10);
+    const smallGap = Math.abs(prev.endTime.getTime() - current.rawStartAt.getTime()) < 120000;
+    
+    if (sameType && sameDay && smallGap) {
+      prev.endTime = current.rawEndAt;
+      prev.durationMinutes = Math.round((prev.endTime.getTime() - prev.startTime.getTime()) / 60000);
+    } else {
+      consolidated.push({
+        activityType: current.rawActivityType as any,
+        startTime: current.rawStartAt,
+        endTime: current.rawEndAt,
+        durationMinutes: Math.round((current.rawEndAt.getTime() - current.rawStartAt.getTime()) / 60000),
+        confidenceLevel: current.extractionStatus === 'SUSPECT' ? 'low' : 'medium',
+      });
+    }
+  }
+  
+  return consolidated.filter(a => a.durationMinutes > 0 && a.durationMinutes <= 1440);
+}
+
+/**
+ * Parser principal.
  */
 export async function parseTachographFile(
   fileName: string,
   fileBuffer: Buffer,
   _extension: string
 ): Promise<TachographParseResult> {
-  // Intentar parseo binario real del contenido del archivo
   try {
     const { parseBinaryTachograph } = await import('./tachograph-binary-parser');
     const result = parseBinaryTachograph(fileBuffer, fileName);
     
-    // Si el binario no detectó matrícula, intentar del nombre
+    // Suplementar metadatos del nombre de archivo
     if (!result.metadata.plateNumber) {
       const plate = extractPlateFromFileName(fileName);
       if (plate) {
@@ -187,31 +198,38 @@ export async function parseTachographFile(
       }
     }
 
-    // Si no detectó fechas, intentar del nombre
     if (!result.metadata.dateFrom) {
       const dates = extractDatesFromFileName(fileName);
       if (dates.dateFrom) result.metadata.dateFrom = dates.dateFrom;
       if (dates.dateTo) result.metadata.dateTo = dates.dateTo;
     }
 
-    // Extraer tarjeta y DNI del nombre de archivo (C_E44798563Z000003 → card E44798563Z000003, DNI 44798563Z)
-    // IMPORTANTE: El nombre del archivo es más fiable que el parseo binario para el cardNumber!
     const cardInfo = extractCardInfoFromFileName(fileName);
     if (cardInfo.cardNumber) {
-      result.metadata.cardNumber = cardInfo.cardNumber; // Override binary parser's incorrect extraction
+      result.metadata.cardNumber = cardInfo.cardNumber;
     }
     if (cardInfo.dni) {
       result.metadata.driverDni = cardInfo.dni;
     }
 
-    // Si el binario no determinó tipo, intentar por nombre
     if (result.fileType === 'UNKNOWN') {
       result.fileType = detectFileType(fileName);
     }
 
-    return result;
+    // Generar legacy activities desde raw events
+    const legacyActivities = rawEventsToLegacyActivities(result.rawEvents);
+
+    return {
+      success: result.success,
+      parserVersion: result.parserVersion,
+      fileType: result.fileType,
+      metadata: result.metadata,
+      rawEvents: result.rawEvents,
+      activities: legacyActivities,
+      warnings: result.warnings,
+      errors: result.errors,
+    };
   } catch (binaryError: any) {
-    // Si falla el parser binario, caer al parser de nombre de archivo
     console.error('Binary parser error, falling back to filename parser:', binaryError);
     
     const warnings: string[] = [];
@@ -233,23 +251,18 @@ export async function parseTachographFile(
       parserVersion: 'fallback-filename-v1',
       fileType,
       metadata,
+      rawEvents: [],
       activities: [],
       warnings,
-      errors
+      errors,
     };
   }
 }
 
-/**
- * Valida si la extensión del archivo es soportada.
- */
 export function isValidTachographExtension(extension: string): boolean {
   return KNOWN_EXTENSIONS.includes(extension.toLowerCase());
 }
 
-/**
- * Devuelve las extensiones soportadas.
- */
 export function getSupportedExtensions(): string[] {
   return [...KNOWN_EXTENSIONS];
 }

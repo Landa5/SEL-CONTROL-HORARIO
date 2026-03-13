@@ -32,9 +32,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json({ error: 'Archivo original no encontrado en disco' }, { status: 404 });
     }
 
-    // Delete old activities and incidents for this import
-    await prisma.tachographActivity.deleteMany({ where: { importId: importRecord.id } });
+    // Delete old data for this import (in dependency order)
+    // MatchAudit → NormalizedEvent → RawEvent → Incident → ActivityLegacy
+    const normalizedIds = await prisma.tachographNormalizedEvent.findMany({
+      where: { importId: importRecord.id },
+      select: { id: true },
+    });
+    if (normalizedIds.length > 0) {
+      await prisma.tachographMatchAudit.deleteMany({
+        where: { normalizedEventId: { in: normalizedIds.map(n => n.id) } }
+      });
+    }
+    await prisma.tachographNormalizedEvent.deleteMany({ where: { importId: importRecord.id } });
+    await prisma.tachographRawEvent.deleteMany({ where: { importId: importRecord.id } });
     await prisma.tachographIncident.deleteMany({ where: { importId: importRecord.id } });
+    await prisma.tachographActivityLegacy.deleteMany({ where: { importId: importRecord.id } });
 
     // Delete the import record (hash will allow re-insert)
     const oldHash = importRecord.fileHash;

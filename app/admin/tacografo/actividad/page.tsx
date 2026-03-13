@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Activity, CalendarDays, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, CalendarDays, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, ShieldCheck, AlertTriangle, Filter } from 'lucide-react';
 
 const ACTIVITY_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   DRIVING: { bg: 'bg-blue-500', text: 'text-blue-700', label: 'Conducción' },
@@ -12,6 +12,18 @@ const ACTIVITY_COLORS: Record<string, { bg: string; text: string; label: string 
   UNKNOWN: { bg: 'bg-gray-400', text: 'text-gray-600', label: 'Desconocido' },
 };
 
+const CONSOLIDATION_LABELS: Record<string, { label: string; color: string }> = {
+  operative: { label: 'Operativo', color: 'text-green-700 bg-green-50' },
+  provisional: { label: 'Provisional', color: 'text-amber-700 bg-amber-50' },
+  excluded: { label: 'Excluido', color: 'text-red-700 bg-red-50' },
+};
+
+const CONFIDENCE_LABELS: Record<string, { label: string; color: string }> = {
+  high: { label: 'Alta', color: 'text-green-700' },
+  medium: { label: 'Media', color: 'text-amber-700' },
+  low: { label: 'Baja', color: 'text-red-700' },
+};
+
 const WORK_TYPES = ['DRIVING', 'OTHER_WORK', 'AVAILABILITY'];
 const REST_TYPES = ['REST', 'BREAK'];
 
@@ -19,21 +31,35 @@ interface JornadaSummary {
   date: string;
   driverName: string;
   driverId: number | null;
-  vehiclePlate: string;
-  inicioJornada: Date | null;
-  inicioComida: Date | null;
-  finComida: Date | null;
-  finJornada: Date | null;
+  vehiclePlates: string[];
+  inicioJornada: string | null;
+  inicioComida: string | null;
+  finComida: string | null;
+  finJornada: string | null;
   totalDriving: number;
   totalOtherWork: number;
   totalAvailability: number;
   totalRest: number;
   totalBreak: number;
   totalWork: number;
+  averageConfidence: string;
+  consolidationStatus: string;
   activities: any[];
 }
 
-// Convert UTC date to Spain local time string (HH:mm)
+/**
+ * Formatea una hora local del servidor (ya es hora España) como HH:mm
+ * El servidor envía startAtLocal/endAtLocal como UTC-encoded local times
+ */
+function formatLocalTime(isoString: string | null): string {
+  if (!isoString) return '—';
+  const d = new Date(isoString);
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * Fallback: convierte UTC a España usando toLocaleString (para legacy data sin startAtLocal)
+ */
 function toSpainTime(date: Date | null): string {
   if (!date) return '—';
   return date.toLocaleTimeString('es-ES', {
@@ -43,74 +69,68 @@ function toSpainTime(date: Date | null): string {
   });
 }
 
-// Calculate jornada times from activities
 function calcJornada(activities: any[]): {
-  inicioJornada: Date | null;
-  inicioComida: Date | null;
-  finComida: Date | null;
-  finJornada: Date | null;
+  inicioJornada: string | null;
+  inicioComida: string | null;
+  finComida: string | null;
+  finJornada: string | null;
 } {
   if (!activities.length) return { inicioJornada: null, inicioComida: null, finComida: null, finJornada: null };
 
+  // Usar startAtLocal si está disponible, si no fallback a startTime
+  const getLocalStart = (a: any) => a.startAtLocal || a.startTime;
+  const getLocalEnd = (a: any) => a.endAtLocal || a.endTime;
+  const getType = (a: any) => a.activityType;
+
   const sorted = [...activities].sort(
-    (a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()
+    (a, b) => new Date(getLocalStart(a)).getTime() - new Date(getLocalStart(b)).getTime()
   );
 
-  // Inicio Jornada: first non-REST/BREAK activity
-  let inicioJornada: Date | null = null;
+  let inicioJornada: string | null = null;
   for (const act of sorted) {
-    if (WORK_TYPES.includes(act.activityType)) {
-      inicioJornada = new Date(act.startTime);
+    if (WORK_TYPES.includes(getType(act))) {
+      inicioJornada = getLocalStart(act);
       break;
     }
   }
 
-  // Fin Jornada: end of last DRIVING or OTHER_WORK activity
-  let finJornada: Date | null = null;
+  let finJornada: string | null = null;
   for (let i = sorted.length - 1; i >= 0; i--) {
-    if (['DRIVING', 'OTHER_WORK'].includes(sorted[i].activityType)) {
-      finJornada = new Date(sorted[i].endTime);
+    if (['DRIVING', 'OTHER_WORK'].includes(getType(sorted[i]))) {
+      finJornada = getLocalEnd(sorted[i]);
       break;
     }
   }
 
-  // Comida: longest REST/BREAK period during the workday
-  // Only consider rest periods that start after the jornada starts
-  // and are not the overnight rest (i.e., there's still work activity after)
-  let inicioComida: Date | null = null;
-  let finComida: Date | null = null;
+  let inicioComida: string | null = null;
+  let finComida: string | null = null;
   let maxRestMinutes = 0;
 
   for (let i = 0; i < sorted.length; i++) {
     const act = sorted[i];
-    if (!REST_TYPES.includes(act.activityType)) continue;
+    if (!REST_TYPES.includes(getType(act))) continue;
 
-    const restStart = new Date(act.startTime);
-    const restEnd = new Date(act.endTime);
     const restMins = act.durationMinutes || 0;
+    const hasWorkBefore = sorted.slice(0, i).some((a: any) => WORK_TYPES.includes(getType(a)));
+    const hasWorkAfter = sorted.slice(i + 1).some((a: any) => WORK_TYPES.includes(getType(a)));
 
-    // Check if there's work activity BEFORE and AFTER this rest (it's a mid-day break, not overnight)
-    const hasWorkBefore = sorted.slice(0, i).some((a: any) => WORK_TYPES.includes(a.activityType));
-    const hasWorkAfter = sorted.slice(i + 1).some((a: any) => WORK_TYPES.includes(a.activityType));
-
-    if (hasWorkBefore && hasWorkAfter && restMins > maxRestMinutes) {
-      // Check for consecutive rest blocks (REST followed immediately by another REST/BREAK)
-      let cumulativeEnd = restEnd;
+    if (hasWorkBefore && hasWorkAfter) {
+      let cumulativeEnd = getLocalEnd(act);
       let cumulativeMins = restMins;
       for (let j = i + 1; j < sorted.length; j++) {
-        if (REST_TYPES.includes(sorted[j].activityType)) {
-          const nextStart = new Date(sorted[j].startTime);
-          const gap = (nextStart.getTime() - cumulativeEnd.getTime()) / 60000;
-          if (gap <= 5) { // Allow 5 min gap between consecutive rests
-            cumulativeEnd = new Date(sorted[j].endTime);
+        if (REST_TYPES.includes(getType(sorted[j]))) {
+          const nextStart = new Date(getLocalStart(sorted[j]));
+          const prevEnd = new Date(cumulativeEnd);
+          const gap = (nextStart.getTime() - prevEnd.getTime()) / 60000;
+          if (gap <= 5) {
+            cumulativeEnd = getLocalEnd(sorted[j]);
             cumulativeMins += sorted[j].durationMinutes || 0;
           } else break;
         } else break;
       }
-
       if (cumulativeMins > maxRestMinutes) {
         maxRestMinutes = cumulativeMins;
-        inicioComida = restStart;
+        inicioComida = getLocalStart(act);
         finComida = cumulativeEnd;
       }
     }
@@ -124,6 +144,7 @@ export default function ActividadPage() {
   const [drivers, setDrivers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState('');
+  const [selectedConsolidation, setSelectedConsolidation] = useState('');
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState(() => {
     const now = new Date();
@@ -142,6 +163,7 @@ export default function ActividadPage() {
       if (selectedDriver) params.set('driverId', selectedDriver);
       if (dateRange.from) params.set('dateFrom', dateRange.from);
       if (dateRange.to) params.set('dateTo', dateRange.to);
+      if (selectedConsolidation) params.set('consolidationStatus', selectedConsolidation);
 
       const [actRes, drvRes] = await Promise.all([
         fetch(`/api/tacografo/activities?${params}`),
@@ -151,40 +173,42 @@ export default function ActividadPage() {
       let actData: any[] = [];
       if (actRes.ok) {
         const json = await actRes.json();
-        const raw = json.data || [];
-        // Deduplicate activities (same file imported multiple times)
-        const seen = new Set<string>();
-        actData = raw.filter((act: any) => {
-          const key = `${act.startTime}_${act.endTime}_${act.activityType}_${act.driverId}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
+        actData = json.data || [];
       }
       if (drvRes.ok) setDrivers(await drvRes.json());
 
-      // Group activities by day + driver
+      // Agrupar por día operativo + conductor
+      // v2: usar operationalDayLocal del servidor (ya es fecha local España)
       const byDay = new Map<string, JornadaSummary>();
       for (const act of actData) {
-        // Use Spain timezone to determine the date
-        const utcDate = new Date(act.startTime);
-        const spainDate = new Date(utcDate.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
-        const key = `${spainDate.getFullYear()}-${String(spainDate.getMonth() + 1).padStart(2, '0')}-${String(spainDate.getDate()).padStart(2, '0')}`;
+        // v2: operationalDayLocal viene del servidor como fecha local España
+        let dayKey: string;
+        if (act.operationalDayLocal) {
+          dayKey = new Date(act.operationalDayLocal).toISOString().substring(0, 10);
+        } else {
+          // Fallback para datos legacy
+          const utcDate = new Date(act.startTime);
+          const spainDate = new Date(utcDate.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
+          dayKey = `${spainDate.getFullYear()}-${String(spainDate.getMonth() + 1).padStart(2, '0')}-${String(spainDate.getDate()).padStart(2, '0')}`;
+        }
+
         const driverId = act.driverId;
         const driverName = act.driver?.linkedEmployee
           ? `${act.driver.linkedEmployee.nombre} ${act.driver.linkedEmployee.apellidos || ''}`.trim()
           : act.driver?.fullName || 'Desconocido';
-        const compositeKey = `${key}_${driverId || 'none'}`;
+        const compositeKey = `${dayKey}_${driverId || 'none'}`;
 
         if (!byDay.has(compositeKey)) {
           byDay.set(compositeKey, {
-            date: key,
+            date: dayKey,
             driverName,
             driverId,
-            vehiclePlate: act.vehicle?.plateNumber || act.vehicle?.linkedVehicle?.matricula || '—',
+            vehiclePlates: [],
             inicioJornada: null, inicioComida: null, finComida: null, finJornada: null,
             totalDriving: 0, totalOtherWork: 0, totalAvailability: 0,
             totalRest: 0, totalBreak: 0, totalWork: 0,
+            averageConfidence: 'medium',
+            consolidationStatus: 'provisional',
             activities: [],
           });
         }
@@ -197,10 +221,17 @@ export default function ActividadPage() {
           case 'REST': ds.totalRest += mins; break;
           case 'BREAK': ds.totalBreak += mins; break;
         }
+
+        // Recopilar vehículos del día
+        const plate = act.vehicle?.plateNumber || act.vehicle?.linkedVehicle?.matricula;
+        if (plate && !ds.vehiclePlates.includes(plate)) {
+          ds.vehiclePlates.push(plate);
+        }
+
         ds.activities.push(act);
       }
 
-      // Calculate jornada times for each day
+      // Calcular jornada para cada día
       for (const ds of byDay.values()) {
         const jornada = calcJornada(ds.activities);
         ds.inicioJornada = jornada.inicioJornada;
@@ -208,6 +239,18 @@ export default function ActividadPage() {
         ds.finComida = jornada.finComida;
         ds.finJornada = jornada.finJornada;
         ds.totalWork = ds.totalDriving + ds.totalOtherWork + ds.totalAvailability;
+
+        // Determinar confianza promedio
+        const confidences = ds.activities.map((a: any) => a.confidenceLevel).filter(Boolean);
+        if (confidences.includes('low')) ds.averageConfidence = 'low';
+        else if (confidences.includes('medium')) ds.averageConfidence = 'medium';
+        else if (confidences.includes('high')) ds.averageConfidence = 'high';
+
+        // Determinar estado de consolidación
+        const statuses = ds.activities.map((a: any) => a.consolidationStatus).filter(Boolean);
+        if (statuses.includes('excluded')) ds.consolidationStatus = 'excluded';
+        else if (statuses.every((s: string) => s === 'operative')) ds.consolidationStatus = 'operative';
+        else ds.consolidationStatus = 'provisional';
       }
 
       const sorted = Array.from(byDay.values()).sort((a, b) => b.date.localeCompare(a.date));
@@ -216,7 +259,7 @@ export default function ActividadPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchData(); }, [selectedDriver, dateRange]);
+  useEffect(() => { fetchData(); }, [selectedDriver, dateRange, selectedConsolidation]);
 
   const shiftDate = (days: number) => {
     const from = new Date(dateRange.from);
@@ -238,8 +281,13 @@ export default function ActividadPage() {
 
   const calcWorkHours = (s: JornadaSummary): string => {
     if (!s.inicioJornada || !s.finJornada) return '—';
-    const totalMs = s.finJornada.getTime() - s.inicioJornada.getTime();
-    const lunchMs = (s.inicioComida && s.finComida) ? s.finComida.getTime() - s.inicioComida.getTime() : 0;
+    const start = new Date(s.inicioJornada);
+    const end = new Date(s.finJornada);
+    const totalMs = end.getTime() - start.getTime();
+    let lunchMs = 0;
+    if (s.inicioComida && s.finComida) {
+      lunchMs = new Date(s.finComida).getTime() - new Date(s.inicioComida).getTime();
+    }
     const netMs = totalMs - lunchMs;
     const netMin = Math.round(netMs / 60000);
     return formatMinutes(netMin);
@@ -254,7 +302,7 @@ export default function ActividadPage() {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Jornadas / Actividad</h1>
-            <p className="text-sm text-gray-500">Resumen de jornada diaria — horas en zona horaria España</p>
+            <p className="text-sm text-gray-500">Resumen de jornada diaria — horas en zona horaria España (CET/CEST)</p>
           </div>
         </div>
       </div>
@@ -270,6 +318,16 @@ export default function ActividadPage() {
             </option>
           ))}
         </select>
+
+        {/* v2: filtro por estado de consolidación */}
+        <select value={selectedConsolidation} onChange={(e) => setSelectedConsolidation(e.target.value)}
+          className="px-3 py-2 border rounded-lg text-sm bg-white">
+          <option value="">Todos los estados</option>
+          <option value="operative">✅ Operativo</option>
+          <option value="provisional">⚠️ Provisional</option>
+          <option value="excluded">❌ Excluido</option>
+        </select>
+
         <div className="flex items-center gap-1">
           <button onClick={() => shiftDate(-7)} className="p-2 hover:bg-gray-100 rounded-lg"><ChevronLeft className="w-4 h-4" /></button>
           <input type="date" value={dateRange.from} onChange={(e) => setDateRange(r => ({...r, from: e.target.value}))} className="px-3 py-2 border rounded-lg text-sm" />
@@ -297,19 +355,22 @@ export default function ActividadPage() {
                   <th className="px-4 py-3 w-8"></th>
                   <th className="px-4 py-3">Fecha</th>
                   <th className="px-4 py-3">Conductor</th>
-                  <th className="px-4 py-3">Vehículo</th>
-                  <th className="px-4 py-3 text-center">Inicio Jornada</th>
-                  <th className="px-4 py-3 text-center">Inicio Comida</th>
+                  <th className="px-4 py-3">Vehículo(s)</th>
+                  <th className="px-4 py-3 text-center">Inicio</th>
+                  <th className="px-4 py-3 text-center">Comida</th>
                   <th className="px-4 py-3 text-center">Fin Comida</th>
                   <th className="px-4 py-3 text-center">Fin Jornada</th>
-                  <th className="px-4 py-3 text-center">Jornada Neta</th>
+                  <th className="px-4 py-3 text-center">Neta</th>
                   <th className="px-4 py-3 text-center">Conducción</th>
+                  <th className="px-4 py-3 text-center">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {daySummaries.map((s) => {
                   const rowKey = `${s.date}_${s.driverId}`;
                   const isExpanded = expandedDay === rowKey;
+                  const consInfo = CONSOLIDATION_LABELS[s.consolidationStatus] || CONSOLIDATION_LABELS.provisional;
+                  const confInfo = CONFIDENCE_LABELS[s.averageConfidence] || CONFIDENCE_LABELS.medium;
                   return (
                   <React.Fragment key={rowKey}>
                     <tr
@@ -323,18 +384,20 @@ export default function ActividadPage() {
                         {new Date(s.date + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' })}
                       </td>
                       <td className="px-4 py-3 text-gray-700 font-medium">{s.driverName}</td>
-                      <td className="px-4 py-3 text-gray-600 font-mono text-xs">{s.vehiclePlate}</td>
-                      <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-emerald-700 text-base">{toSpainTime(s.inicioJornada)}</span>
+                      <td className="px-4 py-3 text-gray-600 font-mono text-xs">
+                        {s.vehiclePlates.length > 0 ? s.vehiclePlates.join(', ') : '—'}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-orange-600">{toSpainTime(s.inicioComida)}</span>
+                        <span className="font-bold text-emerald-700 text-base">{formatLocalTime(s.inicioJornada)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-orange-600">{toSpainTime(s.finComida)}</span>
+                        <span className="text-orange-600">{formatLocalTime(s.inicioComida)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-red-700 text-base">{toSpainTime(s.finJornada)}</span>
+                        <span className="text-orange-600">{formatLocalTime(s.finComida)}</span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className="font-bold text-red-700 text-base">{formatLocalTime(s.finJornada)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="font-bold text-gray-900">{calcWorkHours(s)}</span>
@@ -342,12 +405,17 @@ export default function ActividadPage() {
                       <td className="px-4 py-3 text-center">
                         <span className="text-blue-700 font-bold">{formatMinutes(s.totalDriving)}</span>
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${consInfo.color}`}>
+                          {consInfo.label}
+                        </span>
+                      </td>
                     </tr>
 
                     {/* Expanded detail */}
                     {isExpanded && (
                       <tr>
-                        <td colSpan={10} className="p-0">
+                        <td colSpan={11} className="p-0">
                           <div className="bg-gray-50 px-6 py-4 border-t">
                             {/* Summary chips */}
                             <div className="flex flex-wrap gap-3 mb-4">
@@ -371,24 +439,27 @@ export default function ActividadPage() {
                                 <span className="text-[10px] uppercase font-bold text-yellow-600 block">Pausas</span>
                                 <span className="text-sm font-bold text-yellow-800">{formatMinutes(s.totalBreak)}</span>
                               </div>
+                              {/* v2: Confidence + consolidation detail */}
+                              <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 ml-auto">
+                                <span className="text-[10px] uppercase font-bold text-gray-500 block">Fiabilidad</span>
+                                <span className={`text-sm font-bold ${confInfo.color}`}>{confInfo.label}</span>
+                              </div>
                             </div>
 
-                            {/* Activity bar — time-based with hour markers */}
+                            {/* Activity bar */}
                             {(() => {
-                              const sortedActs = [...s.activities].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+                              const getStart = (a: any) => a.startAtLocal || a.startTime;
+                              const getEnd = (a: any) => a.endAtLocal || a.endTime;
+                              const sortedActs = [...s.activities].sort((a, b) => new Date(getStart(a)).getTime() - new Date(getStart(b)).getTime());
                               if (sortedActs.length === 0) return null;
 
-                              // Get the day's time range using Spain timezone
-                              const toSpainDate = (d: Date) => new Date(d.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
-                              const firstAct = toSpainDate(new Date(sortedActs[0].startTime));
-                              const lastAct = toSpainDate(new Date(sortedActs[sortedActs.length - 1].endTime));
+                              const firstStart = new Date(getStart(sortedActs[0]));
+                              const lastEnd = new Date(getEnd(sortedActs[sortedActs.length - 1]));
 
-                              // Round to the nearest hour (floor start, ceil end)
-                              const startHour = Math.max(0, Math.floor(firstAct.getHours()));
-                              const endHour = Math.min(24, Math.ceil(lastAct.getHours() + (lastAct.getMinutes() > 0 ? 1 : 0)));
+                              const startHour = Math.max(0, firstStart.getUTCHours());
+                              const endHour = Math.min(24, lastEnd.getUTCHours() + (lastEnd.getUTCMinutes() > 0 ? 1 : 0));
                               const totalHours = Math.max(endHour - startHour, 1);
 
-                              // Generate hour markers
                               const hourMarkers = [];
                               for (let h = startHour; h <= endHour; h++) {
                                 const pct = ((h - startHour) / totalHours) * 100;
@@ -397,8 +468,7 @@ export default function ActividadPage() {
 
                               return (
                                 <div className="mb-4">
-                                  {/* Hour labels */}
-                                  <div className="relative h-4 mb-0.5" style={{ marginLeft: 0, marginRight: 0 }}>
+                                  <div className="relative h-4 mb-0.5">
                                     {hourMarkers.map(({ hour, pct }) => (
                                       <span
                                         key={hour}
@@ -409,9 +479,7 @@ export default function ActividadPage() {
                                       </span>
                                     ))}
                                   </div>
-                                  {/* Activity blocks */}
                                   <div className="relative h-8 rounded-lg overflow-hidden border shadow-inner bg-gray-100">
-                                    {/* Hour grid lines */}
                                     {hourMarkers.map(({ hour, pct }) => (
                                       <div
                                         key={`line-${hour}`}
@@ -419,27 +487,23 @@ export default function ActividadPage() {
                                         style={{ left: `${pct}%` }}
                                       />
                                     ))}
-                                    {/* Activity segments */}
                                     {sortedActs.map((act, idx) => {
-                                      const actStart = toSpainDate(new Date(act.startTime));
-                                      const actEnd = toSpainDate(new Date(act.endTime));
-
-                                      const startMinutes = actStart.getHours() * 60 + actStart.getMinutes();
-                                      const endMinutes = actEnd.getHours() * 60 + actEnd.getMinutes();
+                                      const actStart = new Date(getStart(act));
+                                      const actEnd = new Date(getEnd(act));
+                                      const startMinutes = actStart.getUTCHours() * 60 + actStart.getUTCMinutes();
+                                      const endMinutes = actEnd.getUTCHours() * 60 + actEnd.getUTCMinutes();
                                       const startOffset = (startMinutes - startHour * 60) / (totalHours * 60) * 100;
                                       const duration = (endMinutes - startMinutes) / (totalHours * 60) * 100;
-
                                       if (duration < 0.3) return null;
                                       const actColor = ACTIVITY_COLORS[act.activityType]?.bg || 'bg-gray-300';
-
                                       return (
                                         <div
                                           key={idx}
                                           className={`absolute top-0 bottom-0 ${actColor} flex items-center justify-center text-[8px] font-bold text-white/90`}
                                           style={{ left: `${Math.max(0, startOffset)}%`, width: `${Math.min(duration, 100 - startOffset)}%` }}
-                                          title={`${ACTIVITY_COLORS[act.activityType]?.label || act.activityType}: ${toSpainTime(new Date(act.startTime))} — ${toSpainTime(new Date(act.endTime))} (${act.durationMinutes} min)`}
+                                          title={`${ACTIVITY_COLORS[act.activityType]?.label || act.activityType}: ${formatLocalTime(getStart(act))} — ${formatLocalTime(getEnd(act))} (${act.durationMinutes} min)`}
                                         >
-                                          {duration > 6 ? `${toSpainTime(new Date(act.startTime))}` : ''}
+                                          {duration > 6 ? formatLocalTime(getStart(act)) : ''}
                                         </div>
                                       );
                                     })}
@@ -451,19 +515,31 @@ export default function ActividadPage() {
                             {/* Detail list */}
                             <div className="grid gap-1">
                               {s.activities
-                                .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
-                                .map((act, idx) => (
-                                  <div key={idx} className="flex items-center gap-3 text-xs py-1 px-2 rounded hover:bg-white/70 transition-colors">
-                                    <div className={`w-2.5 h-2.5 rounded-full ${ACTIVITY_COLORS[act.activityType]?.bg || 'bg-gray-400'} shadow-sm`} />
-                                    <span className="font-semibold w-24 text-gray-800">{ACTIVITY_COLORS[act.activityType]?.label || act.activityType}</span>
-                                    <span className="text-gray-500 font-mono">
-                                      {toSpainTime(new Date(act.startTime))}
-                                      {' → '}
-                                      {toSpainTime(new Date(act.endTime))}
-                                    </span>
-                                    <span className="font-bold text-gray-700 ml-auto">{formatMinutes(act.durationMinutes)}</span>
-                                  </div>
-                                ))}
+                                .sort((a, b) => new Date(a.startAtLocal || a.startTime).getTime() - new Date(b.startAtLocal || b.startTime).getTime())
+                                .map((act, idx) => {
+                                  const startStr = formatLocalTime(act.startAtLocal || act.startTime);
+                                  const endStr = formatLocalTime(act.endAtLocal || act.endTime);
+                                  const actCons = CONSOLIDATION_LABELS[act.consolidationStatus];
+                                  return (
+                                    <div key={idx} className="flex items-center gap-3 text-xs py-1 px-2 rounded hover:bg-white/70 transition-colors">
+                                      <div className={`w-2.5 h-2.5 rounded-full ${ACTIVITY_COLORS[act.activityType]?.bg || 'bg-gray-400'} shadow-sm`} />
+                                      <span className="font-semibold w-24 text-gray-800">{ACTIVITY_COLORS[act.activityType]?.label || act.activityType}</span>
+                                      <span className="text-gray-500 font-mono">
+                                        {startStr}{' → '}{endStr}
+                                      </span>
+                                      <span className="font-bold text-gray-700">{formatMinutes(act.durationMinutes)}</span>
+                                      {act.isSplitCrossMidnight && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 font-bold">SPLIT</span>
+                                      )}
+                                      {act.extractionMethod === 'derived' && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-bold">derivado</span>
+                                      )}
+                                      {actCons && (
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ml-auto ${actCons.color}`}>{actCons.label}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                             </div>
                           </div>
                         </td>
@@ -481,7 +557,7 @@ export default function ActividadPage() {
       {/* Info */}
       <div className="text-xs text-gray-400 flex items-center gap-2">
         <Clock className="w-3 h-3" />
-        <span>Todas las horas están en zona horaria España (CET/CEST). Inicio Jornada = primera actividad no-descanso. Comida = pausa más larga durante la jornada. Fin Jornada = última conducción/trabajo.</span>
+        <span>Horas en zona horaria España (CET/CEST). operationalDayLocal del servidor. Inicio Jornada = primera actividad no-descanso. Comida = pausa más larga. Fin Jornada = última conducción/trabajo.</span>
       </div>
     </div>
   );

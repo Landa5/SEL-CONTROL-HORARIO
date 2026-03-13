@@ -1,48 +1,68 @@
 /**
- * TachographNormalizer — Normalización interna de actividades
+ * TachographNormalizer v2 — Normalización de eventos brutos a eventos operativos
  * 
- * Se ejecuta DESPUÉS del parsing y ANTES de guardar en BD.
+ * Input: BinaryRawEvent[] (del parser)
+ * Output: NormalizedEventData[] + DailySummary[] + Incident[]
+ * 
  * Responsabilidades:
- *   - Fusionar actividades solapadas del mismo tipo
- *   - Rellenar huecos con REST/UNKNOWN
- *   - Dividir actividades que cruzan medianoche
- *   - Validar que no se excedan 24h por día
+ *   - Convertir UTC → Europe/Madrid (operationalDayLocal)
+ *   - Split medianoche LOCAL (no UTC)
+ *   - Calcular fingerprint por evento (dedup)
+ *   - Fusionar eventos solapados del mismo tipo
+ *   - Rellenar huecos con REST
+ *   - 4 dimensiones: extractionMethod, confidenceLevel, matchingStatus, consolidationStatus
  *   - Calcular resúmenes diarios
- *   - Deduplicar con importaciones previas
+ *   - Detectar incidencias de regulación
  */
 
-import type { TachographParseResult } from './tachograph-parser';
+import crypto from 'crypto';
+import type { BinaryRawEvent } from './tachograph-binary-parser';
 
-// Re-export the activity type for convenience
+// ====================================
+// Tipos exportados
+// ====================================
+
 export type ActivityType = 'DRIVING' | 'OTHER_WORK' | 'AVAILABILITY' | 'REST' | 'BREAK' | 'UNKNOWN';
 
-export interface NormalizedActivity {
-  activityType: ActivityType;
-  startTime: Date;
-  endTime: Date;
+export interface NormalizedEventData {
+  sourceType: string;
+  startAtUtc: Date;
+  endAtUtc: Date;
+  startAtLocal: Date;
+  endAtLocal: Date;
+  operationalDayLocal: Date; // Solo fecha, sin hora
+  normalizedActivityType: ActivityType;
   durationMinutes: number;
-  confidenceLevel: 'low' | 'medium' | 'high';
-  countryStart?: string;
-  countryEnd?: string;
-  rawPayload?: any;
+  extractionMethod: 'spec' | 'heuristic' | 'derived';
+  confidenceLevel: 'high' | 'medium' | 'low';
+  matchingStatus: 'matched' | 'unmatched' | 'pending_review' | 'manual';
+  consolidationStatus: 'operative' | 'provisional' | 'excluded';
+  consolidationReason: string;
+  isSplitCrossMidnight: boolean;
+  fingerprint: string;
+  parentRawEventIndex: number; // Índice en el array de raw events para vincular
+  rawDriverIdentifier: string | null;
+  rawVehicleIdentifier: string | null;
 }
 
 export interface DailySummary {
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD (local)
   totalDrivingMinutes: number;
   totalOtherWorkMinutes: number;
   totalAvailabilityMinutes: number;
   totalRestMinutes: number;
   totalBreakMinutes: number;
-  totalUnknownMinutes: number;
-  coveragePercent: number; // 0-100, how much of the day is covered
-  consistencyStatus: 'OK' | 'INCOMPLETE' | 'OVERFLOW' | 'CONFLICT';
+  gapMinutes: number;
+  coveragePercent: number;
+  consistencyStatus: 'pending' | 'ok' | 'warning' | 'error' | 'conflict';
+  sourceDataOrigin: string | null;
+  averageConfidence: 'low' | 'medium' | 'high';
   importedFromCount: number;
 }
 
 export interface RegulationIncident {
-  type: 'DRIVING_TIME_EXCEEDED' | 'DAILY_DRIVING_EXCEEDED' | 'INSUFFICIENT_REST';
-  severity: 'LOW' | 'MEDIUM' | 'HIGH';
+  type: string; // TachographIncidentType values
+  severity: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   title: string;
   description: string;
   date: string;
@@ -50,317 +70,494 @@ export interface RegulationIncident {
 }
 
 export interface NormalizationResult {
-  activities: NormalizedActivity[];
+  normalizedEvents: NormalizedEventData[];
   dailySummaries: DailySummary[];
   incidents: RegulationIncident[];
   warnings: string[];
 }
 
 // ====================================
-// Main normalization pipeline
+// Timezone: UTC → Europe/Madrid
 // ====================================
 
-export function normalizeActivities(
-  rawActivities: TachographParseResult['activities'],
-  existingActivities?: { startTime: Date; endTime: Date; activityType: string }[]
-): NormalizationResult {
-  const warnings: string[] = [];
+/**
+ * Convierte una fecha UTC a hora local de España (Europe/Madrid).
+ * Usa Intl.DateTimeFormat para manejar CET/CEST automáticamente.
+ */
+function utcToMadrid(utcDate: Date): Date {
+  // Obtener la representación en Europe/Madrid
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
   
-  if (rawActivities.length === 0) {
-    return { activities: [], dailySummaries: [], incidents: [], warnings: ['No hay actividades para normalizar.'] };
-  }
+  const parts = formatter.formatToParts(utcDate);
+  const get = (type: string) => parts.find(p => p.type === type)?.value || '0';
+  
+  const year = parseInt(get('year'));
+  const month = parseInt(get('month')) - 1;
+  const day = parseInt(get('day'));
+  const hour = parseInt(get('hour'));
+  const minute = parseInt(get('minute'));
+  const second = parseInt(get('second'));
+  
+  // Crear un Date que represente la hora local (guardamos como UTC para que Prisma lo persista correctamente)
+  return new Date(Date.UTC(year, month, day, hour, minute, second));
+}
 
-  // 1. Convert to NormalizedActivity and sort by start time
-  let activities: NormalizedActivity[] = rawActivities
-    .map(a => ({
-      activityType: a.activityType as ActivityType,
-      startTime: new Date(a.startTime),
-      endTime: new Date(a.endTime),
-      durationMinutes: a.durationMinutes,
-      confidenceLevel: a.confidenceLevel,
-      countryStart: a.countryStart,
-      countryEnd: a.countryEnd,
-      rawPayload: a.rawPayload,
-    }))
-    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+/**
+ * Obtiene la fecha operativa local (YYYY-MM-DD) en Europe/Madrid
+ */
+function getOperationalDayLocal(utcDate: Date): Date {
+  const local = utcToMadrid(utcDate);
+  return new Date(Date.UTC(
+    local.getUTCFullYear(),
+    local.getUTCMonth(),
+    local.getUTCDate()
+  ));
+}
 
-  // 2. Merge overlapping activities of the same type
-  activities = mergeOverlappingActivities(activities);
+/**
+ * Siguiente medianoche local (Europe/Madrid) después de una fecha UTC
+ */
+function nextLocalMidnight(utcDate: Date): Date {
+  const local = utcToMadrid(utcDate);
+  const nextDay = new Date(Date.UTC(
+    local.getUTCFullYear(),
+    local.getUTCMonth(),
+    local.getUTCDate() + 1,
+    0, 0, 0
+  ));
+  // Convertir la medianoche local de vuelta a UTC
+  // Necesitamos encontrar qué hora UTC corresponde a las 00:00 locales del día siguiente
+  return localMidnightToUtc(nextDay.getUTCFullYear(), nextDay.getUTCMonth(), nextDay.getUTCDate());
+}
 
-  // 3. Deduplicate with existing activities in DB
-  if (existingActivities && existingActivities.length > 0) {
-    const { deduplicated, removedCount } = deduplicateAcrossImports(activities, existingActivities);
-    activities = deduplicated;
-    if (removedCount > 0) {
-      warnings.push(`Se eliminaron ${removedCount} actividades duplicadas con importaciones anteriores.`);
-    }
-  }
-
-  // 4. Split activities crossing midnight
-  activities = splitByDay(activities);
-
-  // 5. Fill gaps between consecutive activities (> 5 min gap → REST)
-  activities = fillGaps(activities);
-
-  // 6. Validate time limits (no day > 24h)
-  const { validated, overflowDays } = validateTimeLimits(activities);
-  activities = validated;
-  for (const day of overflowDays) {
-    warnings.push(`Día ${day}: las actividades suman más de 24h. Confianza reducida a 'low'.`);
-  }
-
-  // 7. Recalculate durations
-  activities = activities.map(a => ({
-    ...a,
-    durationMinutes: Math.round((a.endTime.getTime() - a.startTime.getTime()) / 60000),
-  }));
-
-  // 8. Calculate daily summaries
-  const dailySummaries = calculateDailySummaries(activities);
-
-  // 9. Check regulation limits
-  const incidents = checkRegulationLimits(activities, dailySummaries);
-
-  return { activities, dailySummaries, incidents, warnings };
+/**
+ * Convierte una fecha local (año, mes, día) a UTC asumiendo medianoche en Europe/Madrid
+ */
+function localMidnightToUtc(year: number, month: number, day: number): Date {
+  // Europa/Madrid es UTC+1 (CET) o UTC+2 (CEST)
+  // Crear una fecha tentativa y ajustar
+  const tentative = new Date(Date.UTC(year, month, day, 0, 0, 0));
+  
+  // Verificar qué offset tiene España en esta fecha
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Madrid',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  
+  // Probar con UTC-1 (CET: medianoche local = 23:00 UTC del día anterior)
+  const cetMidnight = new Date(Date.UTC(year, month, day - 1, 23, 0, 0));
+  const cetParts = formatter.formatToParts(cetMidnight);
+  const cetDay = parseInt(cetParts.find(p => p.type === 'day')?.value || '0');
+  const cetHour = parseInt(cetParts.find(p => p.type === 'hour')?.value || '0');
+  
+  if (cetDay === day && cetHour === 0) return cetMidnight;
+  
+  // Probar con UTC-2 (CEST: medianoche local = 22:00 UTC del día anterior)
+  const cestMidnight = new Date(Date.UTC(year, month, day - 1, 22, 0, 0));
+  const cestParts = formatter.formatToParts(cestMidnight);
+  const cestDay = parseInt(cestParts.find(p => p.type === 'day')?.value || '0');
+  const cestHour = parseInt(cestParts.find(p => p.type === 'hour')?.value || '0');
+  
+  if (cestDay === day && cestHour === 0) return cestMidnight;
+  
+  // Fallback: asumir CET (UTC+1)
+  return cetMidnight;
 }
 
 // ====================================
-// Merge overlapping activities
+// Fingerprint
 // ====================================
 
-function mergeOverlappingActivities(activities: NormalizedActivity[]): NormalizedActivity[] {
-  if (activities.length <= 1) return activities;
+function computeFingerprint(
+  sourceType: string,
+  driverIdentifier: string | null,
+  vehicleIdentifier: string | null,
+  activityType: string,
+  startUtc: Date,
+  endUtc: Date
+): string {
+  const data = [
+    sourceType,
+    driverIdentifier || '',
+    vehicleIdentifier || '',
+    activityType,
+    startUtc.toISOString(),
+    endUtc.toISOString(),
+  ].join('|');
+  return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
+}
 
-  const merged: NormalizedActivity[] = [{ ...activities[0] }];
+// ====================================
+// Pipeline principal
+// ====================================
 
-  for (let i = 1; i < activities.length; i++) {
-    const current = activities[i];
+export function normalizeRawEvents(
+  rawEvents: BinaryRawEvent[],
+  sourceType: string,
+  existingFingerprints?: Set<string>
+): NormalizationResult {
+  const warnings: string[] = [];
+  
+  if (rawEvents.length === 0) {
+    return { normalizedEvents: [], dailySummaries: [], incidents: [], warnings: ['No hay eventos brutos para normalizar.'] };
+  }
+
+  // 1. Convertir a normalized events con timezone
+  let events: NormalizedEventData[] = rawEvents.map((raw, index) => {
+    const startLocal = utcToMadrid(raw.rawStartAt);
+    const endLocal = utcToMadrid(raw.rawEndAt);
+    const opDay = getOperationalDayLocal(raw.rawStartAt);
+    const fingerprint = computeFingerprint(
+      sourceType,
+      raw.rawDriverIdentifier,
+      raw.rawVehicleIdentifier,
+      raw.rawActivityType,
+      raw.rawStartAt,
+      raw.rawEndAt
+    );
+    
+    let confidence: 'high' | 'medium' | 'low' = 'medium';
+    if (raw.extractionStatus === 'SUSPECT') confidence = 'low';
+    if (raw.extractionMethod === 'spec') confidence = 'high';
+    
+    return {
+      sourceType,
+      startAtUtc: raw.rawStartAt,
+      endAtUtc: raw.rawEndAt,
+      startAtLocal: startLocal,
+      endAtLocal: endLocal,
+      operationalDayLocal: opDay,
+      normalizedActivityType: raw.rawActivityType as ActivityType,
+      durationMinutes: Math.round((raw.rawEndAt.getTime() - raw.rawStartAt.getTime()) / 60000),
+      extractionMethod: raw.extractionMethod,
+      confidenceLevel: confidence,
+      matchingStatus: 'unmatched' as const,
+      consolidationStatus: 'provisional' as const,
+      consolidationReason: 'Initial normalization, pending matching',
+      isSplitCrossMidnight: false,
+      fingerprint,
+      parentRawEventIndex: index,
+      rawDriverIdentifier: raw.rawDriverIdentifier,
+      rawVehicleIdentifier: raw.rawVehicleIdentifier,
+    };
+  });
+
+  // 2. Deduplicar por fingerprint
+  if (existingFingerprints && existingFingerprints.size > 0) {
+    const before = events.length;
+    events = events.filter(e => !existingFingerprints.has(e.fingerprint));
+    const removed = before - events.length;
+    if (removed > 0) {
+      warnings.push(`Se eliminaron ${removed} eventos duplicados (fingerprint ya existente).`);
+    }
+  }
+
+  // 3. Ordenar por inicio UTC
+  events.sort((a, b) => a.startAtUtc.getTime() - b.startAtUtc.getTime());
+
+  // 4. Fusionar eventos solapados del mismo tipo
+  events = mergeOverlapping(events);
+
+  // 5. Split por medianoche LOCAL
+  events = splitByLocalMidnight(events);
+
+  // 6. Rellenar huecos > 5 min con REST (dentro del mismo día)
+  events = fillGaps(events, sourceType);
+
+  // 7. Validar límites (no más de 24h por día)
+  const { validated, overflowDays } = validateDayLimits(events);
+  events = validated;
+  for (const day of overflowDays) {
+    warnings.push(`Día ${day}: las actividades suman más de 24h. Confianza reducida.`);
+  }
+
+  // 8. Aplicar política de consolidación
+  events = applyConsolidationPolicy(events);
+
+  // 9. Recalcular duraciones
+  events = events.map(e => ({
+    ...e,
+    durationMinutes: Math.round((e.endAtUtc.getTime() - e.startAtUtc.getTime()) / 60000),
+  }));
+
+  // 10. Calcular resúmenes diarios (solo operative + provisional con confidence >= medium)
+  const dailySummaries = calculateDailySummaries(events);
+
+  // 11. Detectar incidencias de regulación
+  const incidents = checkRegulations(events, dailySummaries);
+
+  return { normalizedEvents: events, dailySummaries, incidents, warnings };
+}
+
+// ====================================
+// Merge overlapping
+// ====================================
+
+function mergeOverlapping(events: NormalizedEventData[]): NormalizedEventData[] {
+  if (events.length <= 1) return events;
+  const merged: NormalizedEventData[] = [{ ...events[0] }];
+  
+  for (let i = 1; i < events.length; i++) {
+    const current = events[i];
     const prev = merged[merged.length - 1];
-
-    // Same type and overlapping or adjacent (< 2 min gap)
+    
     if (
-      prev.activityType === current.activityType &&
-      current.startTime.getTime() <= prev.endTime.getTime() + 120000
+      prev.normalizedActivityType === current.normalizedActivityType &&
+      current.startAtUtc.getTime() <= prev.endAtUtc.getTime() + 120000
     ) {
-      // Extend previous activity
-      if (current.endTime.getTime() > prev.endTime.getTime()) {
-        prev.endTime = new Date(current.endTime);
+      if (current.endAtUtc.getTime() > prev.endAtUtc.getTime()) {
+        prev.endAtUtc = new Date(current.endAtUtc);
+        prev.endAtLocal = utcToMadrid(prev.endAtUtc);
       }
-      prev.durationMinutes = Math.round((prev.endTime.getTime() - prev.startTime.getTime()) / 60000);
-      // Keep best confidence
+      prev.durationMinutes = Math.round((prev.endAtUtc.getTime() - prev.startAtUtc.getTime()) / 60000);
       if (current.confidenceLevel === 'high') prev.confidenceLevel = 'high';
     } else {
       merged.push({ ...current });
     }
   }
-
   return merged;
 }
 
 // ====================================
-// Deduplicate across imports
+// Split por medianoche LOCAL
 // ====================================
 
-function deduplicateAcrossImports(
-  newActivities: NormalizedActivity[],
-  existingActivities: { startTime: Date; endTime: Date; activityType: string }[]
-): { deduplicated: NormalizedActivity[]; removedCount: number } {
-  const deduplicated: NormalizedActivity[] = [];
-  let removedCount = 0;
-
-  for (const act of newActivities) {
-    const isDuplicate = existingActivities.some(existing => {
-      // Consider duplicate if same type and time overlap > 80%
-      if (existing.activityType !== act.activityType) return false;
-      
-      const overlapStart = Math.max(act.startTime.getTime(), new Date(existing.startTime).getTime());
-      const overlapEnd = Math.min(act.endTime.getTime(), new Date(existing.endTime).getTime());
-      const overlapMs = Math.max(0, overlapEnd - overlapStart);
-      
-      const actDuration = act.endTime.getTime() - act.startTime.getTime();
-      if (actDuration <= 0) return true; // Zero duration → discard
-      
-      return overlapMs / actDuration > 0.8;
-    });
-
-    if (isDuplicate) {
-      removedCount++;
-    } else {
-      deduplicated.push(act);
-    }
-  }
-
-  return { deduplicated, removedCount };
-}
-
-// ====================================
-// Fill gaps between activities
-// ====================================
-
-function fillGaps(activities: NormalizedActivity[]): NormalizedActivity[] {
-  if (activities.length <= 1) return activities;
-
-  const result: NormalizedActivity[] = [activities[0]];
-
-  for (let i = 1; i < activities.length; i++) {
-    const prev = result[result.length - 1];
-    const current = activities[i];
+function splitByLocalMidnight(events: NormalizedEventData[]): NormalizedEventData[] {
+  const result: NormalizedEventData[] = [];
+  
+  for (const event of events) {
+    const startDayLocal = event.operationalDayLocal.toISOString().substring(0, 10);
+    const endLocal = utcToMadrid(event.endAtUtc);
+    const endDayLocal = `${endLocal.getUTCFullYear()}-${String(endLocal.getUTCMonth() + 1).padStart(2, '0')}-${String(endLocal.getUTCDate()).padStart(2, '0')}`;
     
-    const gapMs = current.startTime.getTime() - prev.endTime.getTime();
-    const gapMinutes = gapMs / 60000;
-
-    // If gap > 5 minutes, insert a REST block
-    if (gapMinutes > 5) {
-      result.push({
-        activityType: 'REST',
-        startTime: new Date(prev.endTime),
-        endTime: new Date(current.startTime),
-        durationMinutes: Math.round(gapMinutes),
-        confidenceLevel: 'low', // Inferred, not from data
-      });
-    }
-
-    result.push(current);
-  }
-
-  return result;
-}
-
-// ====================================
-// Split activities crossing midnight
-// ====================================
-
-function splitByDay(activities: NormalizedActivity[]): NormalizedActivity[] {
-  const result: NormalizedActivity[] = [];
-
-  for (const act of activities) {
-    const startDate = new Date(act.startTime);
-    const endDate = new Date(act.endTime);
-    
-    // Check if the activity spans multiple days
-    const startDay = startDate.toISOString().split('T')[0];
-    const endDay = endDate.toISOString().split('T')[0];
-
-    if (startDay === endDay) {
-      result.push(act);
+    if (startDayLocal === endDayLocal) {
+      result.push(event);
     } else {
-      // Split at midnight boundaries
-      let currentStart = new Date(act.startTime);
+      // Split at local midnight boundaries
+      let currentStartUtc = new Date(event.startAtUtc);
+      let safetyCounter = 0;
       
-      while (true) {
-        // Calculate next midnight
-        const nextMidnight = new Date(currentStart);
-        nextMidnight.setUTCHours(0, 0, 0, 0);
-        nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
-
-        if (nextMidnight.getTime() >= act.endTime.getTime()) {
+      while (safetyCounter < 10) {
+        safetyCounter++;
+        const midnightUtc = nextLocalMidnight(currentStartUtc);
+        
+        if (midnightUtc.getTime() >= event.endAtUtc.getTime()) {
           // Last segment
+          const startLocal = utcToMadrid(currentStartUtc);
           result.push({
-            ...act,
-            startTime: currentStart,
-            endTime: new Date(act.endTime),
-            durationMinutes: Math.round((act.endTime.getTime() - currentStart.getTime()) / 60000),
+            ...event,
+            startAtUtc: currentStartUtc,
+            endAtUtc: new Date(event.endAtUtc),
+            startAtLocal: startLocal,
+            endAtLocal: utcToMadrid(event.endAtUtc),
+            operationalDayLocal: getOperationalDayLocal(currentStartUtc),
+            durationMinutes: Math.round((event.endAtUtc.getTime() - currentStartUtc.getTime()) / 60000),
+            isSplitCrossMidnight: true,
+            extractionMethod: 'derived',
+            consolidationReason: 'Split at local midnight (Europe/Madrid)',
           });
           break;
         } else {
-          // Segment ending at midnight
+          // Segment ending at local midnight
+          const startLocal = utcToMadrid(currentStartUtc);
           result.push({
-            ...act,
-            startTime: currentStart,
-            endTime: nextMidnight,
-            durationMinutes: Math.round((nextMidnight.getTime() - currentStart.getTime()) / 60000),
+            ...event,
+            startAtUtc: currentStartUtc,
+            endAtUtc: midnightUtc,
+            startAtLocal: startLocal,
+            endAtLocal: utcToMadrid(midnightUtc),
+            operationalDayLocal: getOperationalDayLocal(currentStartUtc),
+            durationMinutes: Math.round((midnightUtc.getTime() - currentStartUtc.getTime()) / 60000),
+            isSplitCrossMidnight: true,
+            extractionMethod: 'derived',
+            consolidationReason: 'Split at local midnight (Europe/Madrid)',
+            fingerprint: event.fingerprint + '_split' + safetyCounter,
           });
-          currentStart = nextMidnight;
+          currentStartUtc = midnightUtc;
         }
       }
     }
   }
-
   return result;
 }
 
 // ====================================
-// Validate time limits
+// Fill gaps
 // ====================================
 
-function validateTimeLimits(activities: NormalizedActivity[]): {
-  validated: NormalizedActivity[];
+function fillGaps(events: NormalizedEventData[], sourceType: string): NormalizedEventData[] {
+  if (events.length <= 1) return events;
+  const result: NormalizedEventData[] = [events[0]];
+  
+  for (let i = 1; i < events.length; i++) {
+    const prev = result[result.length - 1];
+    const current = events[i];
+    
+    // Solo rellenar huecos dentro del mismo día operativo
+    const sameDay = prev.operationalDayLocal.getTime() === current.operationalDayLocal.getTime();
+    const gapMs = current.startAtUtc.getTime() - prev.endAtUtc.getTime();
+    const gapMinutes = gapMs / 60000;
+    
+    if (sameDay && gapMinutes > 5) {
+      const gapStart = new Date(prev.endAtUtc);
+      const gapEnd = new Date(current.startAtUtc);
+      const fp = computeFingerprint(sourceType, null, null, 'REST', gapStart, gapEnd);
+      
+      result.push({
+        sourceType,
+        startAtUtc: gapStart,
+        endAtUtc: gapEnd,
+        startAtLocal: utcToMadrid(gapStart),
+        endAtLocal: utcToMadrid(gapEnd),
+        operationalDayLocal: prev.operationalDayLocal,
+        normalizedActivityType: 'REST',
+        durationMinutes: Math.round(gapMinutes),
+        extractionMethod: 'derived',
+        confidenceLevel: 'low',
+        matchingStatus: 'unmatched',
+        consolidationStatus: 'provisional',
+        consolidationReason: 'Gap fill (>5min gap inferred as REST)',
+        isSplitCrossMidnight: false,
+        fingerprint: fp,
+        parentRawEventIndex: -1,
+        rawDriverIdentifier: prev.rawDriverIdentifier,
+        rawVehicleIdentifier: prev.rawVehicleIdentifier,
+      });
+    }
+    result.push(current);
+  }
+  return result;
+}
+
+// ====================================
+// Validate day limits
+// ====================================
+
+function validateDayLimits(events: NormalizedEventData[]): {
+  validated: NormalizedEventData[];
   overflowDays: string[];
 } {
-  // Group by day
-  const byDay = new Map<string, NormalizedActivity[]>();
-  for (const act of activities) {
-    const day = act.startTime.toISOString().split('T')[0];
+  const byDay = new Map<string, NormalizedEventData[]>();
+  for (const e of events) {
+    const day = e.operationalDayLocal.toISOString().substring(0, 10);
     if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day)!.push(act);
+    byDay.get(day)!.push(e);
   }
 
   const overflowDays: string[] = [];
-  const validated: NormalizedActivity[] = [];
+  const validated: NormalizedEventData[] = [];
 
-  for (const [day, dayActivities] of byDay) {
-    const totalMinutes = dayActivities.reduce((sum, a) => {
-      return sum + Math.round((a.endTime.getTime() - a.startTime.getTime()) / 60000);
-    }, 0);
-
-    if (totalMinutes > 1440 * 1.1) { // > 110% of a day
+  for (const [day, dayEvents] of byDay) {
+    const totalMinutes = dayEvents.reduce((sum, e) => sum + e.durationMinutes, 0);
+    if (totalMinutes > 1440 * 1.1) {
       overflowDays.push(day);
-      // Mark all activities of this day as low confidence
-      for (const act of dayActivities) {
-        validated.push({ ...act, confidenceLevel: 'low' });
+      for (const e of dayEvents) {
+        validated.push({ ...e, confidenceLevel: 'low' });
       }
     } else {
-      validated.push(...dayActivities);
+      validated.push(...dayEvents);
     }
   }
-
   return { validated, overflowDays };
 }
 
 // ====================================
-// Calculate daily summaries
+// Aplicar política de consolidación
 // ====================================
 
-function calculateDailySummaries(activities: NormalizedActivity[]): DailySummary[] {
-  const byDay = new Map<string, NormalizedActivity[]>();
-  for (const act of activities) {
-    const day = act.startTime.toISOString().split('T')[0];
+function applyConsolidationPolicy(events: NormalizedEventData[]): NormalizedEventData[] {
+  return events.map(e => {
+    let status: 'operative' | 'provisional' | 'excluded' = 'provisional';
+    let reason = e.consolidationReason;
+    
+    // Regla 1: confidence >= medium + no conflicto → provisional (se promoverá a operative después de matching)
+    if (e.confidenceLevel === 'low') {
+      status = 'provisional';
+      reason = 'Low confidence, pending additional data';
+    } else {
+      status = 'provisional';
+      reason = 'Awaiting matching to determine operative status';
+    }
+    
+    // La promoción a 'operative' ocurre en el servicio después del matching.
+    // Aquí solo establecemos el estado inicial.
+    
+    return { ...e, consolidationStatus: status, consolidationReason: reason };
+  });
+}
+
+// ====================================
+// Daily summaries
+// ====================================
+
+function calculateDailySummaries(events: NormalizedEventData[]): DailySummary[] {
+  const byDay = new Map<string, NormalizedEventData[]>();
+  for (const e of events) {
+    const day = e.operationalDayLocal.toISOString().substring(0, 10);
     if (!byDay.has(day)) byDay.set(day, []);
-    byDay.get(day)!.push(act);
+    byDay.get(day)!.push(e);
   }
 
   const summaries: DailySummary[] = [];
 
-  for (const [date, dayActivities] of byDay) {
-    const totalDriving = sumMinutesByType(dayActivities, 'DRIVING');
-    const totalOtherWork = sumMinutesByType(dayActivities, 'OTHER_WORK');
-    const totalAvailability = sumMinutesByType(dayActivities, 'AVAILABILITY');
-    const totalRest = sumMinutesByType(dayActivities, 'REST');
-    const totalBreak = sumMinutesByType(dayActivities, 'BREAK');
-    const totalUnknown = sumMinutesByType(dayActivities, 'UNKNOWN');
-
-    const totalCovered = totalDriving + totalOtherWork + totalAvailability + totalRest + totalBreak + totalUnknown;
+  for (const [date, dayEvents] of byDay) {
+    // Solo incluir eventos que no estén excluidos
+    const includedEvents = dayEvents.filter(e => e.consolidationStatus !== 'excluded');
+    
+    const driving = sumByType(includedEvents, 'DRIVING');
+    const otherWork = sumByType(includedEvents, 'OTHER_WORK');
+    const availability = sumByType(includedEvents, 'AVAILABILITY');
+    const rest = sumByType(includedEvents, 'REST');
+    const breakMins = sumByType(includedEvents, 'BREAK');
+    
+    const totalCovered = driving + otherWork + availability + rest + breakMins;
     const coveragePercent = Math.min(100, Math.round((totalCovered / 1440) * 100));
-
-    let consistencyStatus: DailySummary['consistencyStatus'];
-    if (totalCovered > 1440 * 1.1) {
-      consistencyStatus = 'OVERFLOW';
-    } else if (coveragePercent < 80) {
-      consistencyStatus = 'INCOMPLETE';
-    } else {
-      consistencyStatus = 'OK';
+    const gapMinutes = Math.max(0, 1440 - totalCovered);
+    
+    // Determine consistency
+    let consistency: DailySummary['consistencyStatus'] = 'ok';
+    if (dayEvents.some(e => e.consolidationStatus === 'excluded')) {
+      consistency = 'conflict';
+    } else if (totalCovered > 1440 * 1.1) {
+      consistency = 'error';
+    } else if (coveragePercent < 50) {
+      consistency = 'warning';
     }
+    
+    // Source origin
+    const sources = new Set(dayEvents.map(e => e.sourceType));
+    const sourceDataOrigin = sources.size > 1 ? 'MIXED' : sources.values().next().value || null;
+    
+    // Average confidence
+    const confidences = includedEvents.map(e => e.confidenceLevel);
+    const avgConf = confidences.includes('low') ? 'low' : confidences.includes('medium') ? 'medium' : 'high';
 
     summaries.push({
       date,
-      totalDrivingMinutes: totalDriving,
-      totalOtherWorkMinutes: totalOtherWork,
-      totalAvailabilityMinutes: totalAvailability,
-      totalRestMinutes: totalRest,
-      totalBreakMinutes: totalBreak,
-      totalUnknownMinutes: totalUnknown,
+      totalDrivingMinutes: driving,
+      totalOtherWorkMinutes: otherWork,
+      totalAvailabilityMinutes: availability,
+      totalRestMinutes: rest,
+      totalBreakMinutes: breakMins,
+      gapMinutes,
       coveragePercent,
-      consistencyStatus,
+      consistencyStatus: consistency,
+      sourceDataOrigin,
+      averageConfidence: avgConf,
       importedFromCount: 1,
     });
   }
@@ -368,90 +565,132 @@ function calculateDailySummaries(activities: NormalizedActivity[]): DailySummary
   return summaries.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-function sumMinutesByType(activities: NormalizedActivity[], type: ActivityType): number {
-  return activities
-    .filter(a => a.activityType === type)
-    .reduce((sum, a) => sum + a.durationMinutes, 0);
+function sumByType(events: NormalizedEventData[], type: ActivityType): number {
+  return events.filter(e => e.normalizedActivityType === type).reduce((sum, e) => sum + e.durationMinutes, 0);
 }
 
 // ====================================
 // Regulation checks
 // ====================================
 
-function checkRegulationLimits(
-  activities: NormalizedActivity[],
-  dailySummaries: DailySummary[]
-): RegulationIncident[] {
+function checkRegulations(events: NormalizedEventData[], summaries: DailySummary[]): RegulationIncident[] {
   const incidents: RegulationIncident[] = [];
-
-  // 1. Check continuous driving > 4h30min without a break of >= 45 min
-  const sortedActivities = [...activities].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   
-  let continuousDrivingMinutes = 0;
-  let drivingBlockStart: Date | null = null;
-
-  for (const act of sortedActivities) {
-    if (act.activityType === 'DRIVING') {
-      if (drivingBlockStart === null) {
-        drivingBlockStart = act.startTime;
-      }
-      continuousDrivingMinutes += act.durationMinutes;
-
-      if (continuousDrivingMinutes > 270) { // 4h30min = 270 min
+  // 1. Conducción continua > 4h30min sin pausa >= 45min
+  const sorted = [...events]
+    .filter(e => e.consolidationStatus !== 'excluded')
+    .sort((a, b) => a.startAtUtc.getTime() - b.startAtUtc.getTime());
+  
+  let continuousDriving = 0;
+  let drivingStart: Date | null = null;
+  
+  for (const e of sorted) {
+    if (e.normalizedActivityType === 'DRIVING') {
+      if (!drivingStart) drivingStart = e.startAtUtc;
+      continuousDriving += e.durationMinutes;
+      
+      if (continuousDriving > 270) {
         incidents.push({
           type: 'DRIVING_TIME_EXCEEDED',
           severity: 'HIGH',
           title: `Conducción continua > 4h30min`,
-          description: `El conductor acumuló ${Math.round(continuousDrivingMinutes)} min de conducción continua sin pausa reglamentaria (≥45min). Inicio: ${drivingBlockStart!.toISOString()}.`,
-          date: act.startTime.toISOString().split('T')[0],
-          durationMinutes: continuousDrivingMinutes,
+          description: `${Math.round(continuousDriving)} min de conducción continua sin pausa reglamentaria (≥45min). Inicio: ${drivingStart!.toISOString()}.`,
+          date: e.operationalDayLocal.toISOString().substring(0, 10),
+          durationMinutes: continuousDriving,
         });
-        // Reset to avoid duplicating incident for same block
-        continuousDrivingMinutes = 0;
-        drivingBlockStart = null;
+        continuousDriving = 0;
+        drivingStart = null;
       }
-    } else if (act.activityType === 'REST' || act.activityType === 'BREAK') {
-      // Only reset if the rest/break is >= 45 min (regulation requirement)
-      if (act.durationMinutes >= 45) {
-        continuousDrivingMinutes = 0;
-        drivingBlockStart = null;
+    } else if (e.normalizedActivityType === 'REST' || e.normalizedActivityType === 'BREAK') {
+      if (e.durationMinutes >= 45) {
+        continuousDriving = 0;
+        drivingStart = null;
       }
-      // Partial breaks: 15+30 split is allowed but complex to detect — skip for now
-    } else {
-      // OTHER_WORK and AVAILABILITY don't reset the driving counter
-      // but they also don't count as driving
     }
   }
 
-  // 2. Check daily driving > 9h (can be 10h max 2x per week, but we flag >9h always)
-  for (const summary of dailySummaries) {
-    if (summary.totalDrivingMinutes > 540) { // 9h = 540 min
-      const severity = summary.totalDrivingMinutes > 600 ? 'HIGH' : 'MEDIUM'; // >10h = HIGH
+  // 2. Conducción diaria > 9h
+  for (const s of summaries) {
+    if (s.totalDrivingMinutes > 540) {
+      const severity = s.totalDrivingMinutes > 600 ? 'HIGH' : 'MEDIUM';
       incidents.push({
         type: 'DAILY_DRIVING_EXCEEDED',
-        severity,
-        title: `Jornada conducción > ${summary.totalDrivingMinutes > 600 ? '10h' : '9h'} el ${summary.date}`,
-        description: `El conductor acumuló ${Math.round(summary.totalDrivingMinutes / 60 * 10) / 10}h de conducción en el día ${summary.date}. Máximo general: 9h (10h excepcional 2x/semana).`,
-        date: summary.date,
-        durationMinutes: summary.totalDrivingMinutes,
+        severity: severity as 'HIGH' | 'MEDIUM',
+        title: `Jornada conducción > ${s.totalDrivingMinutes > 600 ? '10h' : '9h'} el ${s.date}`,
+        description: `${Math.round(s.totalDrivingMinutes / 60 * 10) / 10}h de conducción el ${s.date}. Máx general: 9h (10h excepcional 2x/semana).`,
+        date: s.date,
+        durationMinutes: s.totalDrivingMinutes,
       });
     }
   }
 
-  // 3. Check insufficient daily rest (< 11h, or < 9h reduced)
-  for (const summary of dailySummaries) {
-    const totalRest = summary.totalRestMinutes + summary.totalBreakMinutes;
-    if (totalRest < 540 && summary.coveragePercent >= 80) { // < 9h rest and we have enough data
+  // 3. Descanso diario insuficiente < 9h
+  for (const s of summaries) {
+    const totalRest = s.totalRestMinutes + s.totalBreakMinutes;
+    if (totalRest < 540 && s.coveragePercent >= 80) {
       incidents.push({
         type: 'INSUFFICIENT_REST',
-        severity: totalRest < 480 ? 'HIGH' : 'MEDIUM', // < 8h = HIGH
-        title: `Descanso insuficiente el ${summary.date}`,
-        description: `El conductor solo descansó ${Math.round(totalRest / 60 * 10) / 10}h el día ${summary.date}. Mínimo: 11h (reducido: 9h).`,
-        date: summary.date,
+        severity: totalRest < 480 ? 'HIGH' : 'MEDIUM',
+        title: `Descanso insuficiente el ${s.date}`,
+        description: `Solo ${Math.round(totalRest / 60 * 10) / 10}h de descanso el ${s.date}. Mínimo: 11h (reducido: 9h).`,
+        date: s.date,
         durationMinutes: totalRest,
       });
     }
   }
 
   return incidents;
+}
+
+// ====================================
+// Legacy compatibility: normalizeActivities (old interface)
+// ====================================
+
+export function normalizeActivities(
+  rawActivities: any[],
+  existingActivities?: { startTime: Date; endTime: Date; activityType: string }[]
+): {
+  activities: any[];
+  dailySummaries: DailySummary[];
+  incidents: RegulationIncident[];
+  warnings: string[];
+} {
+  // Convertir old format a BinaryRawEvent format
+  const fakeRawEvents: BinaryRawEvent[] = rawActivities.map(a => ({
+    rawStartAt: new Date(a.startTime),
+    rawEndAt: new Date(a.endTime),
+    rawActivityType: a.activityType,
+    rawDriverIdentifier: null,
+    rawVehicleIdentifier: null,
+    rawPayload: { slot: 0, cardInserted: false, byteOffset: 0, headerOffset: 0, dayTimestamp: 0 },
+    extractionMethod: 'heuristic' as const,
+    extractionNotes: 'Legacy compatibility conversion',
+    extractionStatus: 'OK' as const,
+  }));
+
+  const existingFps = new Set<string>();
+  if (existingActivities) {
+    for (const ea of existingActivities) {
+      existingFps.add(computeFingerprint('UNKNOWN', null, null, ea.activityType, new Date(ea.startTime), new Date(ea.endTime)));
+    }
+  }
+
+  const result = normalizeRawEvents(fakeRawEvents, 'UNKNOWN', existingFps);
+  
+  // Convert back to old format
+  return {
+    activities: result.normalizedEvents.map(e => ({
+      activityType: e.normalizedActivityType,
+      startTime: e.startAtUtc,
+      endTime: e.endAtUtc,
+      durationMinutes: e.durationMinutes,
+      confidenceLevel: e.confidenceLevel,
+      countryStart: null,
+      countryEnd: null,
+      rawPayload: null,
+    })),
+    dailySummaries: result.dailySummaries,
+    incidents: result.incidents,
+    warnings: result.warnings,
+  };
 }

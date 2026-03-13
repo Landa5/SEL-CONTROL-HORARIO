@@ -28,8 +28,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
           include: { linkedVehicle: { select: { id: true, matricula: true, marca: true, modelo: true } } }
         },
         uploadedBy: { select: { id: true, nombre: true } },
-        activities: {
-          orderBy: { startTime: 'asc' }
+        normalizedEvents: {
+          orderBy: { startAtUtc: 'asc' as const }
+        },
+        rawEvents: {
+          orderBy: { rawStartAt: 'asc' as const }
+        },
+        legacyActivities: {
+          orderBy: { startTime: 'asc' as const }
         },
         incidents: {
           orderBy: { createdAt: 'desc' }
@@ -97,8 +103,12 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     // Use DIRECT_URL for writes (pooler may route to read-only replicas)
     await withWriteClient(async (client) => {
+      // Delete in dependency order: MatchAudit → NormalizedEvent → RawEvent → Incident → ActivityLegacy → Import
+      await client.$executeRawUnsafe(`DELETE FROM "TachographMatchAudit" WHERE "normalizedEventId" IN (SELECT "id" FROM "TachographNormalizedEvent" WHERE "importId" = $1)`, importId);
+      await client.$executeRawUnsafe(`DELETE FROM "TachographNormalizedEvent" WHERE "importId" = $1`, importId);
+      await client.$executeRawUnsafe(`DELETE FROM "TachographRawEvent" WHERE "importId" = $1`, importId);
       await client.$executeRawUnsafe(`DELETE FROM "TachographIncident" WHERE "importId" = $1`, importId);
-      await client.$executeRawUnsafe(`DELETE FROM "TachographActivity" WHERE "importId" = $1`, importId);
+      await client.$executeRawUnsafe(`DELETE FROM "TachographActivityLegacy" WHERE "importId" = $1`, importId);
       await client.$executeRawUnsafe(`DELETE FROM "TachographImport" WHERE "id" = $1`, importId);
     });
 
