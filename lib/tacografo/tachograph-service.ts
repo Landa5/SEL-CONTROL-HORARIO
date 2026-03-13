@@ -244,11 +244,21 @@ export async function processImport(
     
     // 10. Normalize and create activities
     if (parseResult.activities.length > 0) {
-      // Fetch existing activities for this driver to deduplicate
+      // Fetch existing activities for this driver (only in the relevant date range) to deduplicate
       let existingActivities: { startTime: Date; endTime: Date; activityType: string }[] = [];
-      if (updateData.driverId) {
+      if (updateData.driverId && parseResult.activities.length > 0) {
+        // Calculate the date range of the new activities
+        const startTimes = parseResult.activities.map(a => new Date(a.startTime).getTime());
+        const endTimes = parseResult.activities.map(a => new Date(a.endTime).getTime());
+        const rangeStart = new Date(Math.min(...startTimes) - 86400000); // 1 day before
+        const rangeEnd = new Date(Math.max(...endTimes) + 86400000); // 1 day after
+        
         existingActivities = await prisma.tachographActivity.findMany({
-          where: { driverId: updateData.driverId },
+          where: { 
+            driverId: updateData.driverId,
+            startTime: { gte: rangeStart },
+            endTime: { lte: rangeEnd },
+          },
           select: { startTime: true, endTime: true, activityType: true },
         });
       }

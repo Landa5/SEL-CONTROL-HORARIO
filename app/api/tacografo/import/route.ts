@@ -3,6 +3,9 @@ import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
 import { processImport } from '@/lib/tacografo/tachograph-service';
 
+// Extend Vercel serverless function timeout to 60s (default is 10s)
+export const maxDuration = 60;
+
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();
