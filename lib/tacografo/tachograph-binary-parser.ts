@@ -380,48 +380,58 @@ function findDriverData(buf: Buffer): DriverIdentification {
 // ====================================
 
 function extractActivities(buf: Buffer): ParsedActivity[] {
-  const activities: ParsedActivity[] = [];
-  
-  // En archivos VU, las actividades se almacenan como registros diarios.
+  // En archivos VU/DC, las actividades se almacenan como registros diarios.
   // Cada registro de actividad diaria tiene:
-  //   - Fecha del registro (timestamp Unix 4 bytes)
-  //   - Registros de cambio de actividad (activity change records)
+  //   - Fecha del registro (timestamp Unix 4 bytes, alineado a medianoche UTC)
+  //   - Registros de cambio de actividad (activity change records, 2 bytes c/u)
   //
-  // Un Activity Change Record (2 bytes) tiene esta estructura:
+  // Un Activity Change Record (2 bytes):
   //   Bit 15: slot (0=driver1, 1=driver2)
   //   Bit 14: driving status (0=single, 1=crew)  
   //   Bit 13: card inserted (0=no, 1=yes)
   //   Bits 12-11: activity (00=REST, 01=AVAIL, 10=OTHER_WORK, 11=DRIVING)
-  //   Bits 10-0: time (minutos desde 00:00 del día, max 1440)
-  
-  // Buscar secuencias de activity change records
-  // OPTIMIZACIÓN: en vez de escanear cada byte, solo probar en posiciones
-  // donde se encontraron timestamps válidos (single pass).
+  //   Bits 10-0: time (minutos desde 00:00, max 1440)
   
   const tsPositions = findTimestampPositions(buf);
-  const usedPositions = new Set<number>();
+  
+  // Recopilar TODOS los bloques de actividad encontrados
+  // Un mismo día puede aparecer varias veces con datos distintos
+  const dayBlocks: Map<string, { activities: ParsedActivity[]; totalMinutes: number }[]> = new Map();
+  const usedRanges: { start: number; end: number }[] = [];
   
   for (const { offset, date } of tsPositions) {
-    if (usedPositions.has(offset)) continue;
+    // No reutilizar posiciones ya procesadas
+    if (usedRanges.some(r => offset >= r.start && offset < r.end)) continue;
     
-    // Verificar si hay activity records después del timestamp
     const dayActivities = tryParseActivityRecords(buf, offset + 4, date);
-    if (dayActivities.length >= 3) {
+    if (dayActivities.length >= 2) {
       const totalMinutes = dayActivities.reduce((sum, a) => sum + a.durationMinutes, 0);
-      if (totalMinutes >= 30) {
-        activities.push(...dayActivities);
-        // Mark positions as used to avoid re-processing
-        for (let j = 0; j < dayActivities.length * 2 + 4; j++) {
-          usedPositions.add(offset + j);
-        }
+      if (totalMinutes >= 10) {
+        // Marcar rango como usado
+        const endPos = offset + 4 + (dayActivities.length * 2);
+        usedRanges.push({ start: offset, end: endPos });
+        
+        // Agrupar por día (YYYY-MM-DD)
+        const dayKey = date.toISOString().substring(0, 10);
+        if (!dayBlocks.has(dayKey)) dayBlocks.set(dayKey, []);
+        dayBlocks.get(dayKey)!.push({ activities: dayActivities, totalMinutes });
       }
     }
   }
+  
+  // Para cada día, si hay múltiples bloques, mantener el que tiene más cobertura
+  const allActivities: ParsedActivity[] = [];
+  for (const [_dayKey, blocks] of dayBlocks) {
+    // Ordenar bloques por cobertura (más minutos primero)
+    blocks.sort((a, b) => b.totalMinutes - a.totalMinutes);
+    // Usar el bloque con más cobertura
+    allActivities.push(...blocks[0].activities);
+  }
 
   // Filtrar actividades de duración < 1 minuto (ruido del parser)
-  const filtered = activities.filter(a => a.durationMinutes >= 1);
+  const filtered = allActivities.filter(a => a.durationMinutes >= 1);
 
-  // Deduplicar y consolidar actividades
+  // Consolidar actividades consecutivas del mismo tipo
   return consolidateActivities(filtered);
 }
 
@@ -430,32 +440,40 @@ function tryParseActivityRecords(buf: Buffer, offset: number, dayStart: Date): P
   let prevMinutes = -1;
   let validCount = 0;
   let invalidCount = 0;
+  let consecutiveInvalid = 0;
   
-  for (let j = 0; j < 150; j++) { // Max 150 cambios de actividad por día
+  for (let j = 0; j < 200; j++) { // Max 200 cambios de actividad por día
     const pos = offset + (j * 2);
     if (pos + 1 >= buf.length) break;
     
     const record = readUint16BE(buf, pos);
+    
+    // 0x0000 y 0xFFFF son separadores/padding
     if (record === 0 || record === 0xffff) {
-      if (validCount > 0) break; // Fin de registros
+      consecutiveInvalid++;
+      if (validCount > 0 && consecutiveInvalid >= 2) break; // Fin de registros
       continue;
     }
+    consecutiveInvalid = 0;
     
     const slot = (record >> 15) & 1;
     const cardInserted = ((record >> 13) & 1) === 1;
     const activityCode = (record >> 11) & 0x03;
     const minutes = record & 0x07ff; // 11 bits = max 2047
     
-    // Validar: minutos <= 1440 y en orden ascendente
+    // Validar: minutos <= 1440
     if (minutes > 1440) {
       invalidCount++;
-      if (invalidCount > 3) break;
+      consecutiveInvalid++;
+      if (consecutiveInvalid >= 3) break;
       continue;
     }
     
-    if (prevMinutes >= 0 && minutes <= prevMinutes) {
+    // Permitir >= (mismo minuto) para registros con distinto slot/actividad
+    if (prevMinutes >= 0 && minutes < prevMinutes) {
       invalidCount++;
-      if (invalidCount > 3) break;
+      consecutiveInvalid++;
+      if (consecutiveInvalid >= 3) break;
       continue;
     }
     
@@ -483,8 +501,8 @@ function tryParseActivityRecords(buf: Buffer, offset: number, dayStart: Date): P
     prevMinutes = minutes;
   }
   
-  // Solo devolver si hay al menos 3 registros válidos y pocos inválidos
-  if (validCount >= 3 && validCount > invalidCount * 2) {
+  // Bajamos el umbral: al menos 2 registros válidos y no demasiados inválidos
+  if (validCount >= 2 && validCount > invalidCount) {
     // Calcular duración del último registro
     if (activities.length > 0) {
       const last = activities[activities.length - 1];
@@ -534,28 +552,42 @@ interface TimestampPosition {
 
 function findTimestampPositions(buf: Buffer): TimestampPosition[] {
   const results: TimestampPosition[] = [];
-  const seen = new Set<number>();
+  const seenOffsets = new Set<number>();
   
-  // Saltar de 4 en 4 bytes para buscar timestamps alineados
-  // (los timestamps en archivos de tacógrafo están típicamente alineados)
-  // También probamos con stride de 1 en un segundo pass limitado
+  // IMPORTANTE: NO deduplicar por valor de timestamp.
+  // Un mismo día (mismo timestamp de medianoche) puede aparecer en
+  // múltiples posiciones del archivo con diferentes bloques de actividad.
+  // Solo deduplicamos por posición (offset).
   
-  for (let stride = 4; stride >= 1; stride = stride === 4 ? 1 : 0) {
-    for (let i = 0; i < buf.length - 3; i += stride) {
-      const ts = readUint32BE(buf, i);
-      if (ts >= 946684800 && ts <= 2051222400) {
-        if (!seen.has(ts)) {
-          seen.add(ts);
-          results.push({ offset: i, date: new Date(ts * 1000) });
-        }
-      }
-      // Limitar resultados para evitar procesamiento excesivo
-      if (results.length >= 500) break;
+  // Timestamps válidos de tacógrafo: entre 2000-01-01 y 2035-01-01
+  const TS_MIN = 946684800;  // 2000-01-01
+  const TS_MAX = 2051222400; // 2035-01-01
+  
+  // Primer pass: alineados a 4 bytes (más común en archivos bien formados)
+  for (let i = 0; i < buf.length - 3; i += 4) {
+    const ts = readUint32BE(buf, i);
+    if (ts >= TS_MIN && ts <= TS_MAX && !seenOffsets.has(i)) {
+      seenOffsets.add(i);
+      results.push({ offset: i, date: new Date(ts * 1000) });
     }
-    if (results.length >= 500) break;
+    if (results.length >= 1000) break;
   }
   
-  results.sort((a, b) => a.date.getTime() - b.date.getTime());
+  // Segundo pass: byte a byte para timestamps no alineados
+  // Solo si encontramos pocos en el primer pass
+  if (results.length < 50) {
+    for (let i = 0; i < buf.length - 3; i++) {
+      if (seenOffsets.has(i)) continue;
+      const ts = readUint32BE(buf, i);
+      if (ts >= TS_MIN && ts <= TS_MAX) {
+        seenOffsets.add(i);
+        results.push({ offset: i, date: new Date(ts * 1000) });
+      }
+      if (results.length >= 1000) break;
+    }
+  }
+  
+  results.sort((a, b) => a.offset - b.offset); // Ordenar por posición en el archivo
   return results;
 }
 
