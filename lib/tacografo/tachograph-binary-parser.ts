@@ -416,19 +416,40 @@ function extractActivities(buf: Buffer, fileType: string, fileDate: Date | null)
       date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0
     ));
     
-    const dayActivities = tryParseActivityRecords(buf, offset + 4, dayStartDate);
-    if (dayActivities.length >= 3) { // Mínimo 3 registros
-      const totalMinutes = dayActivities.reduce((sum, a) => sum + a.durationMinutes, 0);
-      if (totalMinutes >= 20) { // Mínimo 20 min de cobertura
-        // Marcar rango como usado
-        const endPos = offset + 4 + (dayActivities.length * 2);
-        usedRanges.push({ start: offset, end: endPos });
-        
-        // Agrupar por día (YYYY-MM-DD)
-        const dayKey = dayStartDate.toISOString().substring(0, 10);
-        if (!dayBlocks.has(dayKey)) dayBlocks.set(dayKey, []);
-        dayBlocks.get(dayKey)!.push({ activities: dayActivities, totalMinutes });
+    // Estructura de un registro de día de actividad:
+    // - Timestamp (4 bytes) ← ya lo tenemos en 'offset'
+    // - [Para tarjetas de conductor] recordLength(2) + presenceCounter(2) + dayDistance(2) = 6 bytes cabecera
+    // - [Para VU] puede ser directo (offset+4) o tener cabecera variable
+    // Los activity change records empiezan DESPUÉS de la cabecera.
+    // Probamos múltiples offsets y nos quedamos con el que produce más resultados válidos.
+    const headerOffsets = [4, 10, 8, 6, 12]; // offset+4 (VU directo), +10 (DC estándar), +8, +6, +12 (variantes)
+    
+    let bestActivities: ParsedActivity[] = [];
+    let bestTotalMinutes = 0;
+    let bestHeaderOffset = 4;
+    
+    for (const hOffset of headerOffsets) {
+      const candidate = tryParseActivityRecords(buf, offset + hOffset, dayStartDate);
+      if (candidate.length >= 2) {
+        const candidateMinutes = candidate.reduce((sum, a) => sum + a.durationMinutes, 0);
+        if (candidate.length > bestActivities.length || 
+            (candidate.length === bestActivities.length && candidateMinutes > bestTotalMinutes)) {
+          bestActivities = candidate;
+          bestTotalMinutes = candidateMinutes;
+          bestHeaderOffset = hOffset;
+        }
       }
+    }
+    
+    if (bestActivities.length >= 2 && bestTotalMinutes >= 10) {
+      // Marcar rango como usado
+      const endPos = offset + bestHeaderOffset + (bestActivities.length * 2);
+      usedRanges.push({ start: offset, end: endPos });
+      
+      // Agrupar por día (YYYY-MM-DD)
+      const dayKey = dayStartDate.toISOString().substring(0, 10);
+      if (!dayBlocks.has(dayKey)) dayBlocks.set(dayKey, []);
+      dayBlocks.get(dayKey)!.push({ activities: bestActivities, totalMinutes: bestTotalMinutes });
     }
   }
   
