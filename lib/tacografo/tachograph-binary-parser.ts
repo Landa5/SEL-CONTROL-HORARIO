@@ -177,20 +177,30 @@ export function parseBinaryTachograph(buffer: Buffer, fileName: string): BinaryP
   }
 
   try {
-    // 1. Buscar VRN (matrícula) — solo para archivos de vehículo
-    if (fileType !== 'DRIVER_CARD') {
-      const vrn = findVRN(buffer);
-      if (vrn) {
-        metadata.plateNumber = vrn;
+    // 1. Buscar VRN (matrícula) — ahora en TODOS los tipos de archivo
+    // DRIVER_CARD contiene "vehicle_used_records" con matrículas de vehículos usados
+    const vrn = findVRN(buffer);
+    if (vrn) {
+      metadata.plateNumber = vrn;
+    }
+    
+    // 1b. Para DRIVER_CARD, buscar vehicle used records con matrículas por día
+    if (fileType === 'DRIVER_CARD') {
+      const vehicleRecords = findVehicleUsedRecords(buffer);
+      if (vehicleRecords.length > 0) {
+        metadata.vehicleUsedRecords = vehicleRecords;
+        // Usar la primera matrícula encontrada si no tenemos una del nombre de archivo
+        if (!metadata.plateNumber && vehicleRecords[0].vrn) {
+          metadata.plateNumber = vehicleRecords[0].vrn;
+          warnings.push('La matrícula se extrajo de vehicle_used_records del binario.');
+        }
       }
     }
 
-    // 2. Buscar VIN — solo para archivos de vehículo
-    if (fileType !== 'DRIVER_CARD') {
-      const vin = findVIN(buffer);
-      if (vin) {
-        metadata.vin = vin;
-      }
+    // 2. Buscar VIN — en TODOS los tipos
+    const vin = findVIN(buffer);
+    if (vin) {
+      metadata.vin = vin;
     }
 
     // 3. Buscar datos del conductor
@@ -295,7 +305,8 @@ function extractRawEvents(
   const tsPositions = findTimestampPositions(buf, minDate, maxDate);
   
   const allEvents: BinaryRawEvent[] = [];
-  const usedRanges: { start: number; end: number }[] = [];
+  // Track which timestamp offsets have been successfully parsed as day headers
+  const usedTimestampOffsets = new Set<number>();
   
   // Rango "plausible" (cercano a fileDate) para scoring, NO para descarte
   const plausibleMin = fileDate 
@@ -306,7 +317,7 @@ function extractRawEvents(
     : maxDate;
   
   for (const { offset, date } of tsPositions) {
-    if (usedRanges.some(r => offset >= r.start && offset < r.end)) continue;
+    if (usedTimestampOffsets.has(offset)) continue;
     
     // Los timestamps de día deben estar alineados a medianoche UTC
     const dayStartDate = new Date(Date.UTC(
@@ -337,9 +348,9 @@ function extractRawEvents(
       }
     }
     
-    if (bestRecords.length >= 2 && bestTotalMinutes >= 10) {
-      const endPos = offset + bestHeaderOffset + (bestRecords.length * 2);
-      usedRanges.push({ start: offset, end: endPos });
+    // v2 fix: lowered thresholds (>=2 records, >=1 min) to not lose short activity days
+    if (bestRecords.length >= 2 && bestTotalMinutes >= 1) {
+      usedTimestampOffsets.add(offset);
       
       // Convertir records a raw events (SIN consolidar)
       for (let i = 0; i < bestRecords.length; i++) {
@@ -568,6 +579,79 @@ function findAllTimestamps(buf: Buffer, fileDate?: Date | null): Date[] {
   const minDate = fileDate ? new Date(fileDate.getTime() - 3 * 365.25 * 24 * 60 * 60 * 1000) : undefined;
   const maxDate = fileDate ? new Date(fileDate.getTime() + 30 * 24 * 60 * 60 * 1000) : undefined;
   return findTimestampPositions(buf, minDate, maxDate).map(tp => tp.date);
+}
+
+// ====================================
+// Vehicle Used Records extraction (DRIVER_CARD)
+// ====================================
+
+interface VehicleUsedRecord {
+  vrn: string;
+  startDate: Date | null;
+  endDate: Date | null;
+  odometerStart: number | null;
+  odometerEnd: number | null;
+}
+
+/**
+ * Finds vehicle registration numbers embedded in DRIVER_CARD files.
+ * EU spec: CardVehiclesUsed structure contains VRN (reg number) with timestamps.
+ * 
+ * We scan for Spanish plate patterns (NNNNXXX or XXNNNNXX) near timestamps.
+ */
+function findVehicleUsedRecords(buf: Buffer): VehicleUsedRecord[] {
+  const results: VehicleUsedRecord[] = [];
+  const seenPlates = new Map<string, VehicleUsedRecord>();
+  
+  // Spanish plate patterns
+  const platePatternNew = /^(\d{4}[A-Z]{3})$/;
+  const platePatternOld = /^([A-Z]{1,2}\d{4}[A-Z]{2,3})$/;
+  
+  // Scan for plate-like ASCII strings near timestamps
+  for (let i = 0; i < buf.length - 20; i++) {
+    // Try to read 7-8 chars at this position
+    const chunk7 = readAscii(buf, i, 7);
+    const chunk8 = readAscii(buf, i, 8);
+    
+    let plate: string | null = null;
+    if (chunk7.length === 7 && platePatternNew.test(chunk7)) {
+      plate = chunk7;
+    } else if (chunk8.length >= 7) {
+      const matchOld = chunk8.match(platePatternOld);
+      if (matchOld) plate = matchOld[1];
+    }
+    
+    if (!plate) continue;
+    
+    // Found a plate — look for timestamps nearby (within ±20 bytes)
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
+    
+    // In the EU spec, vehicle usage records have the structure:
+    // VRN(15) + Nation(2) + vehicleFirstUse(4) + vehicleLastUse(4)
+    // Or similar layouts. Timestamps are usually after the VRN+padding.
+    for (const tsOffset of [15, 17, 19, 21, -4, -8]) {
+      const tsPos = i + tsOffset;
+      if (tsPos < 0 || tsPos + 4 > buf.length) continue;
+      
+      const ts = readTimestamp(buf, tsPos);
+      if (ts) {
+        if (!startDate || ts < startDate) startDate = ts;
+        if (!endDate || ts > endDate) endDate = ts;
+      }
+    }
+    
+    // Deduplicate: keep the one with most info
+    const normalized = plate.toUpperCase().replace(/[\s\-]/g, '');
+    if (!seenPlates.has(normalized) || (startDate && !seenPlates.get(normalized)!.startDate)) {
+      seenPlates.set(normalized, { vrn: normalized, startDate, endDate, odometerStart: null, odometerEnd: null });
+    }
+    
+    // Skip past this plate to avoid double-detection
+    i += plate.length - 1;
+  }
+  
+  return Array.from(seenPlates.values());
 }
 
 // ====================================
