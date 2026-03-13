@@ -16,6 +16,7 @@
 import { prisma } from '@/lib/prisma';
 import { parseTachographFile, isValidTachographExtension } from './tachograph-parser';
 import type { TachographParseResult } from './tachograph-parser';
+import { normalizeActivities } from './tachograph-normalizer';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -241,27 +242,108 @@ export async function processImport(
       }
     }
     
-    // 10. Create activities (if parsed)
+    // 10. Normalize and create activities
     if (parseResult.activities.length > 0) {
-      await prisma.tachographActivity.createMany({
-        data: parseResult.activities.map(act => ({
-          importId: importRecord.id,
-          sourceType: parseResult.fileType,
-          driverId: updateData.driverId || null,
-          vehicleId: updateData.vehicleId || null,
-          activityType: act.activityType,
-          startTime: act.startTime,
-          endTime: act.endTime,
-          durationMinutes: act.durationMinutes,
-          countryStart: act.countryStart || null,
-          countryEnd: act.countryEnd || null,
-          rawPayloadJson: act.rawPayload ? JSON.stringify(act.rawPayload) : null,
-          confidenceLevel: act.confidenceLevel,
-        }))
-      });
+      // Fetch existing activities for this driver to deduplicate
+      let existingActivities: { startTime: Date; endTime: Date; activityType: string }[] = [];
+      if (updateData.driverId) {
+        existingActivities = await prisma.tachographActivity.findMany({
+          where: { driverId: updateData.driverId },
+          select: { startTime: true, endTime: true, activityType: true },
+        });
+      }
+
+      // Run normalization pipeline
+      const normResult = normalizeActivities(parseResult.activities, existingActivities);
+      warnings.push(...normResult.warnings);
+
+      // Save normalized activities
+      if (normResult.activities.length > 0) {
+        await prisma.tachographActivity.createMany({
+          data: normResult.activities.map(act => ({
+            importId: importRecord.id,
+            sourceType: parseResult.fileType,
+            driverId: updateData.driverId || null,
+            vehicleId: updateData.vehicleId || null,
+            activityType: act.activityType,
+            startTime: act.startTime,
+            endTime: act.endTime,
+            durationMinutes: act.durationMinutes,
+            countryStart: act.countryStart || null,
+            countryEnd: act.countryEnd || null,
+            rawPayloadJson: act.rawPayload ? JSON.stringify(act.rawPayload) : null,
+            confidenceLevel: act.confidenceLevel,
+          }))
+        });
+      }
+
+      // 11. Generate/update daily summaries
+      if (normResult.dailySummaries.length > 0 && updateData.driverId) {
+        for (const summary of normResult.dailySummaries) {
+          const summaryDate = new Date(summary.date + 'T00:00:00Z');
+          
+          // Check if a summary already exists for this driver+date
+          const existingSummary = await prisma.tachographDailySummary.findFirst({
+            where: {
+              driverId: updateData.driverId,
+              date: summaryDate,
+            }
+          });
+
+          if (existingSummary) {
+            // Update existing summary with merged data
+            await prisma.tachographDailySummary.update({
+              where: { id: existingSummary.id },
+              data: {
+                totalDrivingMinutes: { increment: summary.totalDrivingMinutes },
+                totalOtherWorkMinutes: { increment: summary.totalOtherWorkMinutes },
+                totalAvailabilityMinutes: { increment: summary.totalAvailabilityMinutes },
+                totalRestMinutes: { increment: summary.totalRestMinutes },
+                totalBreakMinutes: { increment: summary.totalBreakMinutes },
+                importedFromCount: { increment: 1 },
+                consistencyStatus: summary.consistencyStatus,
+              }
+            });
+          } else {
+            await prisma.tachographDailySummary.create({
+              data: {
+                driverId: updateData.driverId,
+                vehicleId: updateData.vehicleId || null,
+                date: summaryDate,
+                totalDrivingMinutes: summary.totalDrivingMinutes,
+                totalOtherWorkMinutes: summary.totalOtherWorkMinutes,
+                totalAvailabilityMinutes: summary.totalAvailabilityMinutes,
+                totalRestMinutes: summary.totalRestMinutes,
+                totalBreakMinutes: summary.totalBreakMinutes,
+                importedFromCount: summary.importedFromCount,
+                consistencyStatus: summary.consistencyStatus,
+              }
+            });
+          }
+        }
+      }
+
+      // 12. Create regulation incidents
+      if (normResult.incidents.length > 0 && updateData.driverId) {
+        for (const incident of normResult.incidents) {
+          await prisma.tachographIncident.create({
+            data: {
+              incidentType: incident.type,
+              severity: incident.severity,
+              importId: importRecord.id,
+              driverId: updateData.driverId,
+              title: incident.title,
+              description: incident.description,
+            }
+          });
+        }
+        if (normResult.incidents.length > 0) {
+          warnings.push(`Se detectaron ${normResult.incidents.length} incidencia(s) de regulación.`);
+        }
+      }
     }
     
-    // 11. Determine final status
+    // 13. Determine final status
     const finalStatus = errors.length > 0
       ? 'ERROR'
       : warnings.length > 0

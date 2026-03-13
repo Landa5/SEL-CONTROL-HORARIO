@@ -178,26 +178,31 @@ export function parseBinaryTachograph(buffer: Buffer, fileName: string): Tachogr
   }
 
   try {
-    // 1. Buscar VRN (matrícula) en el archivo
-    const vrn = findVRN(buffer);
-    if (vrn) {
-      metadata.plateNumber = vrn;
+    // 1. Buscar VRN (matrícula) en el archivo — solo para archivos de vehículo
+    // Los archivos de tarjeta de conductor contienen matrículas de vehículos visitados,
+    // NO la matrícula "del conductor". Se ignoran para evitar confusión.
+    if (fileType !== 'DRIVER_CARD') {
+      const vrn = findVRN(buffer);
+      if (vrn) {
+        metadata.plateNumber = vrn;
+      }
     }
 
-    // 2. Buscar VIN
-    const vin = findVIN(buffer);
-    if (vin) {
-      metadata.vin = vin;
+    // 2. Buscar VIN — solo para archivos de vehículo
+    if (fileType !== 'DRIVER_CARD') {
+      const vin = findVIN(buffer);
+      if (vin) {
+        metadata.vin = vin;
+      }
     }
 
     // 3. Buscar datos del conductor
+    // NOTA: No buscamos cardNumber en el binario (genera falsos positivos).
+    // El cardNumber correcto viene del nombre del archivo (tachograph-parser.ts).
     const driver = findDriverData(buffer);
     if (driver.surname || driver.firstName) {
       metadata.driverName = [driver.surname, driver.firstName].filter(Boolean).join(' ').trim();
       if (fileType === 'UNKNOWN') fileType = 'DRIVER_CARD';
-    }
-    if (driver.cardNumber) {
-      metadata.cardNumber = driver.cardNumber;
     }
     if (driver.cardExpiry) {
       metadata.cardExpiry = driver.cardExpiry;
@@ -353,30 +358,19 @@ function findDriverData(buf: Buffer): DriverIdentification {
   const result: DriverIdentification = {
     surname: null,
     firstName: null,
-    cardNumber: null,
+    cardNumber: null, // No se extrae del binario — viene del filename
     cardExpiry: null,
     issuingNation: null,
   };
 
-  // Buscar tarjeta de conductor: formato XXYYYYYYYYYYYYY (2 letras país + 14 caracteres)
-  // Las tarjetas de conductor EU tienen un formato estándar: P CCXXXXXXXXXXXXXXX
-  // donde CC = código país, X = número
-  const cardPattern = /[A-Z]{1,3}\d{10,16}/;
-  
-  for (let i = 0; i < buf.length - 16; i++) {
-    const chunk = readAscii(buf, i, 16);
-    if (chunk.length >= 12) {
-      const match = chunk.match(cardPattern);
-      if (match && match[0].length >= 12) {
-        result.cardNumber = match[0];
-        break;
-      }
-    }
-  }
+  // NO buscamos cardNumber en el binario:
+  // El escaneo heurístico de byte a byte produce falsos positivos
+  // (ej: EA9606492800, DY2929428577). El cardNumber correcto
+  // se extrae del nombre del archivo en tachograph-parser.ts.
 
-  // Buscar nombres: en Driver Card, el nombre está en bloques con codePage
-  // Nombres son secuencias de letras (con posibilidad de acentos en UTF-8)
-  // Esto es una heurística — buscar secuencias de letras largas después de secuencias conocidas
+  // Buscar nombres: en Driver Card, el nombre puede aparecer como
+  // cadena ASCII legible. Heurística básica.
+  // TODO: Implementar lectura de bloques TLV para Driver Card Application
   
   return result;
 }
@@ -412,14 +406,21 @@ function extractActivities(buf: Buffer): ParsedActivity[] {
     // Verificar si hay activity records después del timestamp
     // Pueden haber varios valores de 2 bytes tras un timestamp
     const dayActivities = tryParseActivityRecords(buf, i + 4, ts);
-    if (dayActivities.length >= 2) {
-      activities.push(...dayActivities);
-      i += 4 + (dayActivities.length * 2); // Saltar los registros ya parseados
+    if (dayActivities.length >= 3) { // Mínimo 3 registros para considerar válido
+      // Verificar que las actividades cubran al menos 30 minutos del día
+      const totalMinutes = dayActivities.reduce((sum, a) => sum + a.durationMinutes, 0);
+      if (totalMinutes >= 30) {
+        activities.push(...dayActivities);
+        i += 4 + (dayActivities.length * 2);
+      }
     }
   }
 
+  // Filtrar actividades de duración < 1 minuto (ruido del parser)
+  const filtered = activities.filter(a => a.durationMinutes >= 1);
+
   // Deduplicar y consolidar actividades
-  return consolidateActivities(activities);
+  return consolidateActivities(filtered);
 }
 
 function tryParseActivityRecords(buf: Buffer, offset: number, dayStart: Date): ParsedActivity[] {
@@ -480,8 +481,8 @@ function tryParseActivityRecords(buf: Buffer, offset: number, dayStart: Date): P
     prevMinutes = minutes;
   }
   
-  // Solo devolver si hay al menos 2 registros válidos y pocos inválidos
-  if (validCount >= 2 && validCount > invalidCount * 2) {
+  // Solo devolver si hay al menos 3 registros válidos y pocos inválidos
+  if (validCount >= 3 && validCount > invalidCount * 2) {
     // Calcular duración del último registro
     if (activities.length > 0) {
       const last = activities[activities.length - 1];
