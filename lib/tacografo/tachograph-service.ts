@@ -263,23 +263,24 @@ export async function processImport(
       const normResult = normalizeRawEvents(parseResult.rawEvents, parseResult.fileType, existingFingerprints);
       warnings.push(...normResult.warnings);
       
-      // 12. Persist NormalizedEvents + MatchAudit
+      // 12. Persist NormalizedEvents in BATCH (performance: single createMany instead of N creates)
       if (normResult.normalizedEvents.length > 0) {
-        for (const ne of normResult.normalizedEvents) {
-          // Determine matchingStatus based on driver/vehicle matching
+        // Pre-compute matching info (same for all events in one file)
+        const matchingMethod: string | null = updateData.driverId
+          ? (parseResult.metadata.cardNumber ? 'card_number_exact' : 
+             parseResult.metadata.driverDni ? 'dni_from_filename' : 
+             parseResult.metadata.driverName ? 'name_fuzzy' : 'import_level')
+          : null;
+        
+        // Build all normalized event data for batch insert
+        const normalizedBatch = normResult.normalizedEvents.map(ne => {
           let matchingStatus = ne.matchingStatus;
-          let matchingMethod: string | null = null;
           let consolidationStatus = ne.consolidationStatus;
           let consolidationReason = ne.consolidationReason;
           
           if (updateData.driverId) {
             matchingStatus = 'matched';
-            matchingMethod = parseResult.metadata.cardNumber ? 'card_number_exact' : 
-                            parseResult.metadata.driverDni ? 'dni_from_filename' : 
-                            parseResult.metadata.driverName ? 'name_fuzzy' : 'import_level';
           }
-          
-          // Apply consolidation policy
           if (matchingStatus === 'matched' && ne.confidenceLevel !== 'low') {
             consolidationStatus = 'operative';
             consolidationReason = `Single source ${parseResult.fileType}, driver matched via ${matchingMethod}`;
@@ -288,47 +289,70 @@ export async function processImport(
             consolidationReason = 'Low confidence, provisional until confirmed';
           }
           
-          // Determine parent raw event ID
           const parentRawEventId = ne.parentRawEventIndex >= 0 && ne.parentRawEventIndex < rawEventIds.length
-            ? rawEventIds[ne.parentRawEventIndex]
-            : null;
+            ? rawEventIds[ne.parentRawEventIndex] : null;
           
-          const created = await prisma.tachographNormalizedEvent.create({
-            data: {
-              importId: importRecord.id,
-              sourceType: parseResult.fileType,
-              driverId: updateData.driverId || null,
-              vehicleId: updateData.vehicleId || null,
-              startAtUtc: ne.startAtUtc,
-              endAtUtc: ne.endAtUtc,
-              startAtLocal: ne.startAtLocal,
-              endAtLocal: ne.endAtLocal,
-              operationalDayLocal: ne.operationalDayLocal,
-              normalizedActivityType: ne.normalizedActivityType,
-              durationMinutes: ne.durationMinutes,
-              extractionMethod: ne.extractionMethod,
-              confidenceLevel: ne.confidenceLevel,
-              matchingStatus,
-              consolidationStatus,
-              consolidationReason,
-              matchingMethod,
-              isSplitCrossMidnight: ne.isSplitCrossMidnight,
-              parentRawEventId,
-            }
+          return {
+            importId: importRecord.id,
+            sourceType: parseResult.fileType,
+            driverId: updateData.driverId || null,
+            vehicleId: updateData.vehicleId || null,
+            startAtUtc: ne.startAtUtc,
+            endAtUtc: ne.endAtUtc,
+            startAtLocal: ne.startAtLocal,
+            endAtLocal: ne.endAtLocal,
+            operationalDayLocal: ne.operationalDayLocal,
+            normalizedActivityType: ne.normalizedActivityType,
+            durationMinutes: ne.durationMinutes,
+            extractionMethod: ne.extractionMethod,
+            confidenceLevel: ne.confidenceLevel,
+            matchingStatus,
+            consolidationStatus,
+            consolidationReason,
+            matchingMethod,
+            isSplitCrossMidnight: ne.isSplitCrossMidnight,
+            parentRawEventId,
+          };
+        });
+        
+        // Batch insert all normalized events at once
+        await prisma.tachographNormalizedEvent.createMany({ data: normalizedBatch });
+        normalizedCount = normalizedBatch.length;
+        
+        // 12b. Create MatchAudit entries in BATCH
+        if (updateData.driverId || updateData.vehicleId) {
+          // Get created event IDs for MatchAudit references
+          const createdEvents = await prisma.tachographNormalizedEvent.findMany({
+            where: { importId: importRecord.id },
+            orderBy: { startAtUtc: 'asc' },
+            select: { id: true },
           });
           
-          // Create MatchAudit entry for driver
+          const matchAuditBatch: any[] = [];
+          
+          // Pre-fetch labels once (not per event!)
+          let driverLabel = 'Unknown';
+          let vehicleLabel = 'Unknown';
           if (updateData.driverId) {
             const driver = await prisma.tachographDriver.findUnique({ 
-              where: { id: updateData.driverId },
-              select: { fullName: true } 
+              where: { id: updateData.driverId }, select: { fullName: true } 
             });
-            await prisma.tachographMatchAudit.create({
-              data: {
-                normalizedEventId: created.id,
+            driverLabel = driver?.fullName || 'Unknown';
+          }
+          if (updateData.vehicleId) {
+            const vehicle = await prisma.tachographVehicle.findUnique({ 
+              where: { id: updateData.vehicleId }, select: { plateNumber: true } 
+            });
+            vehicleLabel = vehicle?.plateNumber || 'Unknown';
+          }
+          
+          for (const evt of createdEvents) {
+            if (updateData.driverId) {
+              matchAuditBatch.push({
+                normalizedEventId: evt.id,
                 entityType: 'DRIVER',
                 candidateId: updateData.driverId,
-                candidateLabel: driver?.fullName || 'Unknown',
+                candidateLabel: driverLabel,
                 method: matchingMethod || 'import_level',
                 score: matchingMethod === 'card_number_exact' ? 1.0 : 
                        matchingMethod === 'dni_from_filename' ? 0.95 :
@@ -336,22 +360,14 @@ export async function processImport(
                 reason: `Driver matched via ${matchingMethod || 'import_level association'}`,
                 decision: 'ACCEPTED',
                 isAutomatic: true,
-              }
-            });
-          }
-          
-          // Create MatchAudit entry for vehicle
-          if (updateData.vehicleId) {
-            const vehicle = await prisma.tachographVehicle.findUnique({ 
-              where: { id: updateData.vehicleId },
-              select: { plateNumber: true } 
-            });
-            await prisma.tachographMatchAudit.create({
-              data: {
-                normalizedEventId: created.id,
+              });
+            }
+            if (updateData.vehicleId) {
+              matchAuditBatch.push({
+                normalizedEventId: evt.id,
                 entityType: 'VEHICLE',
                 candidateId: updateData.vehicleId,
-                candidateLabel: vehicle?.plateNumber || 'Unknown',
+                candidateLabel: vehicleLabel,
                 method: parseResult.metadata.plateNumber ? 'plate_exact' : 
                        parseResult.metadata.vin ? 'vin_exact' : 'import_level',
                 score: parseResult.metadata.vin ? 1.0 : 
@@ -359,28 +375,36 @@ export async function processImport(
                 reason: `Vehicle matched via ${parseResult.metadata.vin ? 'VIN' : parseResult.metadata.plateNumber ? 'plate' : 'import association'}`,
                 decision: 'ACCEPTED',
                 isAutomatic: true,
-              }
-            });
+              });
+            }
           }
           
-          normalizedCount++;
+          // Batch insert all MatchAudit entries at once
+          if (matchAuditBatch.length > 0) {
+            await prisma.tachographMatchAudit.createMany({ data: matchAuditBatch });
+          }
         }
         
-        // 13. Generate/update daily summaries
+        // 13. Generate/update daily summaries (batch upsert)
         if (updateData.driverId && normResult.dailySummaries.length > 0) {
+          // Get existing summaries for this driver in one query
+          const summaryDates = normResult.dailySummaries.map(s => new Date(s.date + 'T00:00:00Z'));
+          const existingSummaries = await prisma.tachographDailySummary.findMany({
+            where: {
+              driverId: updateData.driverId,
+              date: { in: summaryDates },
+            }
+          });
+          const existingMap = new Map(existingSummaries.map(s => [s.date.toISOString(), s]));
+          
+          const toCreate: any[] = [];
           for (const summary of normResult.dailySummaries) {
             const summaryDate = new Date(summary.date + 'T00:00:00Z');
-            
-            const existingSummary = await prisma.tachographDailySummary.findFirst({
-              where: {
-                driverId: updateData.driverId,
-                date: summaryDate,
-              }
-            });
+            const existing = existingMap.get(summaryDate.toISOString());
 
-            if (existingSummary) {
+            if (existing) {
               await prisma.tachographDailySummary.update({
-                where: { id: existingSummary.id },
+                where: { id: existing.id },
                 data: {
                   totalDrivingMinutes: summary.totalDrivingMinutes,
                   totalOtherWorkMinutes: summary.totalOtherWorkMinutes,
@@ -395,41 +419,40 @@ export async function processImport(
                 }
               });
             } else {
-              await prisma.tachographDailySummary.create({
-                data: {
-                  driverId: updateData.driverId,
-                  vehicleId: updateData.vehicleId || null,
-                  date: summaryDate,
-                  totalDrivingMinutes: summary.totalDrivingMinutes,
-                  totalOtherWorkMinutes: summary.totalOtherWorkMinutes,
-                  totalAvailabilityMinutes: summary.totalAvailabilityMinutes,
-                  totalRestMinutes: summary.totalRestMinutes,
-                  totalBreakMinutes: summary.totalBreakMinutes,
-                  gapMinutes: summary.gapMinutes,
-                  importedFromCount: summary.importedFromCount,
-                  consistencyStatus: summary.consistencyStatus,
-                  sourceDataOrigin: summary.sourceDataOrigin,
-                  averageConfidence: summary.averageConfidence,
-                }
+              toCreate.push({
+                driverId: updateData.driverId,
+                vehicleId: updateData.vehicleId || null,
+                date: summaryDate,
+                totalDrivingMinutes: summary.totalDrivingMinutes,
+                totalOtherWorkMinutes: summary.totalOtherWorkMinutes,
+                totalAvailabilityMinutes: summary.totalAvailabilityMinutes,
+                totalRestMinutes: summary.totalRestMinutes,
+                totalBreakMinutes: summary.totalBreakMinutes,
+                gapMinutes: summary.gapMinutes,
+                importedFromCount: summary.importedFromCount,
+                consistencyStatus: summary.consistencyStatus,
+                sourceDataOrigin: summary.sourceDataOrigin,
+                averageConfidence: summary.averageConfidence,
               });
             }
           }
+          if (toCreate.length > 0) {
+            await prisma.tachographDailySummary.createMany({ data: toCreate });
+          }
         }
 
-        // 14. Create regulation incidents
+        // 14. Create regulation incidents in batch
         if (normResult.incidents.length > 0 && updateData.driverId) {
-          for (const incident of normResult.incidents) {
-            await prisma.tachographIncident.create({
-              data: {
-                incidentType: incident.type as any,
-                severity: incident.severity as any,
-                importId: importRecord.id,
-                driverId: updateData.driverId,
-                title: incident.title,
-                description: incident.description,
-              }
-            });
-          }
+          await prisma.tachographIncident.createMany({
+            data: normResult.incidents.map(incident => ({
+              incidentType: incident.type as any,
+              severity: incident.severity as any,
+              importId: importRecord.id,
+              driverId: updateData.driverId,
+              title: incident.title,
+              description: incident.description,
+            }))
+          });
           warnings.push(`Se detectaron ${normResult.incidents.length} incidencia(s) de regulación.`);
         }
       }
