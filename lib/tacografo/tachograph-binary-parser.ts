@@ -209,7 +209,9 @@ export function parseBinaryTachograph(buffer: Buffer, fileName: string): Tachogr
     }
 
     // 4. Buscar bloques de actividades
-    const parsedActivities = extractActivities(buffer);
+    // Usar la fecha del nombre del archivo como referencia para filtrar timestamps falsos
+    const fileDate = extractDateFromFileName(fileName);
+    const parsedActivities = extractActivities(buffer, fileType, fileDate);
     if (parsedActivities.length > 0) {
       // Determinar rango de fechas
       const sortedActs = parsedActivities.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
@@ -229,7 +231,7 @@ export function parseBinaryTachograph(buffer: Buffer, fileName: string): Tachogr
 
     // 5. Si no encontramos actividades directas, buscar timestamps para inferir rango
     if (activities.length === 0) {
-      const dates = findAllTimestamps(buffer);
+      const dates = findAllTimestamps(buffer, fileDate);
       if (dates.length >= 2) {
         metadata.dateFrom = dates[0];
         metadata.dateTo = dates[dates.length - 1];
@@ -379,7 +381,7 @@ function findDriverData(buf: Buffer): DriverIdentification {
 // Extracción de actividades
 // ====================================
 
-function extractActivities(buf: Buffer): ParsedActivity[] {
+function extractActivities(buf: Buffer, fileType: string, fileDate: Date | null): ParsedActivity[] {
   // En archivos VU/DC, las actividades se almacenan como registros diarios.
   // Cada registro de actividad diaria tiene:
   //   - Fecha del registro (timestamp Unix 4 bytes, alineado a medianoche UTC)
@@ -387,12 +389,18 @@ function extractActivities(buf: Buffer): ParsedActivity[] {
   //
   // Un Activity Change Record (2 bytes):
   //   Bit 15: slot (0=driver1, 1=driver2)
-  //   Bit 14: driving status (0=single, 1=crew)  
+  //   Bit 14: driving status (0=single, 1=crew)
   //   Bit 13: card inserted (0=no, 1=yes)
   //   Bits 12-11: activity (00=REST, 01=AVAIL, 10=OTHER_WORK, 11=DRIVING)
   //   Bits 10-0: time (minutos desde 00:00, max 1440)
   
-  const tsPositions = findTimestampPositions(buf);
+  // Calcular rango de timestamps válidos basado en tipo de archivo y fecha de descarga
+  const referenceDate = fileDate || new Date();
+  const maxYearsBack = fileType === 'DRIVER_CARD' ? 2 : 1; // Tarjeta: 2 años, VU: 1 año
+  const minDate = new Date(referenceDate.getTime() - maxYearsBack * 365.25 * 24 * 60 * 60 * 1000);
+  const maxDate = new Date(referenceDate.getTime() + 7 * 24 * 60 * 60 * 1000); // +7 días margen
+  
+  const tsPositions = findTimestampPositions(buf, minDate, maxDate);
   
   // Recopilar TODOS los bloques de actividad encontrados
   // Un mismo día puede aparecer varias veces con datos distintos
@@ -403,29 +411,20 @@ function extractActivities(buf: Buffer): ParsedActivity[] {
     // No reutilizar posiciones ya procesadas
     if (usedRanges.some(r => offset >= r.start && offset < r.end)) continue;
     
-    // Solo considerar timestamps alineados a medianoche UTC (hora 00:00)
-    // Los registros de actividad usan minutos-desde-medianoche, así que
-    // el timestamp de inicio del día SIEMPRE es medianoche.
-    // Permitimos cierta tolerancia (puede estar a HH:00:00)
-    const hours = date.getUTCHours();
-    const mins = date.getUTCMinutes();
-    const secs = date.getUTCSeconds();
-    const isMidnightAligned = (hours === 0 && mins === 0 && secs === 0);
-    
-    // Si no está alineado a medianoche, alinear manualmente
-    const dayStartDate = isMidnightAligned ? date : new Date(Date.UTC(
+    // Los timestamps de día deben estar alineados a medianoche UTC
+    const dayStartDate = new Date(Date.UTC(
       date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0
     ));
     
     const dayActivities = tryParseActivityRecords(buf, offset + 4, dayStartDate);
-    if (dayActivities.length >= 2) {
+    if (dayActivities.length >= 3) { // Mínimo 3 registros
       const totalMinutes = dayActivities.reduce((sum, a) => sum + a.durationMinutes, 0);
-      if (totalMinutes >= 10) {
+      if (totalMinutes >= 20) { // Mínimo 20 min de cobertura
         // Marcar rango como usado
         const endPos = offset + 4 + (dayActivities.length * 2);
         usedRanges.push({ start: offset, end: endPos });
         
-        // Agrupar por día (YYYY-MM-DD) usando la fecha alineada
+        // Agrupar por día (YYYY-MM-DD)
         const dayKey = dayStartDate.toISOString().substring(0, 10);
         if (!dayBlocks.has(dayKey)) dayBlocks.set(dayKey, []);
         dayBlocks.get(dayKey)!.push({ activities: dayActivities, totalMinutes });
@@ -572,50 +571,53 @@ interface TimestampPosition {
   date: Date;
 }
 
-function findTimestampPositions(buf: Buffer): TimestampPosition[] {
+function findTimestampPositions(buf: Buffer, minDate?: Date, maxDate?: Date): TimestampPosition[] {
   const results: TimestampPosition[] = [];
   const seenOffsets = new Set<number>();
   
-  // IMPORTANTE: NO deduplicar por valor de timestamp.
-  // Un mismo día (mismo timestamp de medianoche) puede aparecer en
-  // múltiples posiciones del archivo con diferentes bloques de actividad.
-  // Solo deduplicamos por posición (offset).
+  // Rango de timestamps Unix válidos
+  const tsMin = minDate ? Math.floor(minDate.getTime() / 1000) : 946684800;  // 2000-01-01
+  const tsMax = maxDate ? Math.floor(maxDate.getTime() / 1000) : 2051222400; // 2035-01-01
   
-  // Timestamps válidos de tacógrafo: entre 2000-01-01 y 2035-01-01
-  const TS_MIN = 946684800;  // 2000-01-01
-  const TS_MAX = 2051222400; // 2035-01-01
+  // Buscar timestamps que sean medianoche UTC (divisible por 86400)
+  // Esto es la característica clave de los timestamps de día de actividad
+  const SECONDS_PER_DAY = 86400;
   
-  // Primer pass: alineados a 4 bytes (más común en archivos bien formados)
-  for (let i = 0; i < buf.length - 3; i += 4) {
+  // Primer pass: buscar timestamps alineados a medianoche (más fiable)
+  for (let i = 0; i < buf.length - 3; i++) {
     const ts = readUint32BE(buf, i);
-    if (ts >= TS_MIN && ts <= TS_MAX && !seenOffsets.has(i)) {
-      seenOffsets.add(i);
-      results.push({ offset: i, date: new Date(ts * 1000) });
-    }
-    if (results.length >= 1000) break;
-  }
-  
-  // Segundo pass: byte a byte para timestamps no alineados
-  // Solo si encontramos pocos en el primer pass
-  if (results.length < 50) {
-    for (let i = 0; i < buf.length - 3; i++) {
-      if (seenOffsets.has(i)) continue;
-      const ts = readUint32BE(buf, i);
-      if (ts >= TS_MIN && ts <= TS_MAX) {
+    if (ts >= tsMin && ts <= tsMax && !seenOffsets.has(i)) {
+      // Verificar si está alineado a medianoche (ts % 86400 === 0)
+      if (ts % SECONDS_PER_DAY === 0) {
         seenOffsets.add(i);
         results.push({ offset: i, date: new Date(ts * 1000) });
       }
-      if (results.length >= 1000) break;
+    }
+    if (results.length >= 500) break;
+  }
+  
+  // Si no encontramos suficientes con medianoche estricta, añadir no-medianoche
+  if (results.length < 10) {
+    for (let i = 0; i < buf.length - 3; i++) {
+      if (seenOffsets.has(i)) continue;
+      const ts = readUint32BE(buf, i);
+      if (ts >= tsMin && ts <= tsMax) {
+        seenOffsets.add(i);
+        results.push({ offset: i, date: new Date(ts * 1000) });
+      }
+      if (results.length >= 500) break;
     }
   }
   
-  results.sort((a, b) => a.offset - b.offset); // Ordenar por posición en el archivo
+  results.sort((a, b) => a.offset - b.offset);
   return results;
 }
 
-// Keep findAllTimestamps for metadata date range detection
-function findAllTimestamps(buf: Buffer): Date[] {
-  return findTimestampPositions(buf).map(tp => tp.date);
+// findAllTimestamps for metadata date range — also uses file date filtering
+function findAllTimestamps(buf: Buffer, fileDate?: Date | null): Date[] {
+  const minDate = fileDate ? new Date(fileDate.getTime() - 2 * 365.25 * 24 * 60 * 60 * 1000) : undefined;
+  const maxDate = fileDate ? new Date(fileDate.getTime() + 7 * 24 * 60 * 60 * 1000) : undefined;
+  return findTimestampPositions(buf, minDate, maxDate).map(tp => tp.date);
 }
 
 // ====================================
