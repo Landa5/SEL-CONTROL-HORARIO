@@ -61,26 +61,49 @@ export default function ImportacionesPage() {
     if (!files.length) return;
     setUploading(true);
     setUploadResults(null);
-    try {
-      const formData = new FormData();
-      Array.from(files).forEach(f => formData.append('files', f));
-      const res = await fetch('/api/tacografo/import', { method: 'POST', body: formData });
-      if (res.ok) {
-        const data = await res.json();
-        setUploadResults(data.results);
-        fetchImports();
-      } else {
-        let errorMsg = `Error del servidor (${res.status})`;
-        try {
-          const errData = await res.json();
-          errorMsg = errData.error || errorMsg;
-        } catch {}
-        setUploadResults([{ fileName: 'Error de importación', success: false, status: 'ERROR', errors: [errorMsg], warnings: [] }]);
+    const results: any[] = [];
+    
+    // Upload files one by one as base64 JSON to avoid WAF blocking binary content
+    for (const file of Array.from(files)) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        let binary = '';
+        for (let i = 0; i < bytes.length; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        
+        const res = await fetch('/api/tacografo/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            files: [{
+              name: file.name,
+              type: file.type || 'application/octet-stream',
+              base64
+            }]
+          })
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          results.push(...(data.results || []));
+        } else {
+          let errorMsg = `Error del servidor (${res.status})`;
+          try {
+            const errData = await res.json();
+            errorMsg = errData.error || errorMsg;
+          } catch {}
+          results.push({ fileName: file.name, success: false, status: 'ERROR', errors: [errorMsg], warnings: [] });
+        }
+      } catch (e: any) {
+        results.push({ fileName: file.name, success: false, status: 'ERROR', errors: [e.message || 'Error desconocido'], warnings: [] });
       }
-    } catch (e: any) {
-      console.error('Upload error:', e);
-      setUploadResults([{ fileName: 'Error de conexión', success: false, status: 'ERROR', errors: [e.message || 'No se pudo conectar con el servidor'], warnings: [] }]);
     }
+    
+    setUploadResults(results);
+    fetchImports();
     setUploading(false);
   };
 

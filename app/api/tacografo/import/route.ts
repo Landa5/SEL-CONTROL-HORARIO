@@ -22,42 +22,64 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'ID de usuario inválido en sesión' }, { status: 400 });
     }
 
-    let formData: FormData;
-    try {
-      formData = await request.formData();
-    } catch (formError: any) {
-      console.error('Error parsing formData:', formError);
-      return NextResponse.json({ error: `Error al leer datos del formulario: ${formError.message}` }, { status: 400 });
+    const contentType = request.headers.get('content-type') || '';
+    
+    // Support both JSON (base64) and FormData uploads
+    let filesToProcess: { name: string; type: string; buffer: Buffer }[] = [];
+
+    if (contentType.includes('application/json')) {
+      // Base64 JSON upload (avoids WAF blocking binary content)
+      const body = await request.json();
+      if (!body.files || !Array.isArray(body.files) || body.files.length === 0) {
+        return NextResponse.json({ error: 'No se recibieron archivos' }, { status: 400 });
+      }
+
+      for (const file of body.files) {
+        if (!file.name || !file.base64) {
+          continue;
+        }
+        const buffer = Buffer.from(file.base64, 'base64');
+        filesToProcess.push({
+          name: file.name,
+          type: file.type || 'application/octet-stream',
+          buffer
+        });
+      }
+    } else {
+      // Legacy FormData upload
+      let formData: FormData;
+      try {
+        formData = await request.formData();
+      } catch (formError: any) {
+        console.error('Error parsing formData:', formError);
+        return NextResponse.json({ error: `Error al leer datos del formulario: ${formError.message}` }, { status: 400 });
+      }
+
+      const files = formData.getAll('files');
+      for (const file of files) {
+        if (file instanceof File) {
+          const arrayBuffer = await file.arrayBuffer();
+          filesToProcess.push({
+            name: file.name,
+            type: file.type || 'application/octet-stream',
+            buffer: Buffer.from(arrayBuffer)
+          });
+        }
+      }
     }
 
-    const files = formData.getAll('files');
-
-    if (!files || files.length === 0) {
-      return NextResponse.json({ error: 'No se recibieron archivos' }, { status: 400 });
+    if (filesToProcess.length === 0) {
+      return NextResponse.json({ error: 'No se recibieron archivos válidos' }, { status: 400 });
     }
 
     const results = [];
 
-    for (const file of files) {
-      if (!(file instanceof File)) {
-        results.push({
-          fileName: 'unknown',
-          success: false,
-          status: 'ERROR',
-          warnings: [],
-          errors: ['El elemento recibido no es un archivo válido']
-        });
-        continue;
-      }
-
+    for (const file of filesToProcess) {
       try {
-        const arrayBuffer = await file.arrayBuffer();
-        const buffer = Buffer.from(arrayBuffer);
-        
         const result = await processImport(
-          buffer,
+          file.buffer,
           file.name,
-          file.type || null,
+          file.type,
           userId,
           'MANUAL_UPLOAD'
         );
