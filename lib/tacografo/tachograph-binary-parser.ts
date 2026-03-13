@@ -403,7 +403,21 @@ function extractActivities(buf: Buffer): ParsedActivity[] {
     // No reutilizar posiciones ya procesadas
     if (usedRanges.some(r => offset >= r.start && offset < r.end)) continue;
     
-    const dayActivities = tryParseActivityRecords(buf, offset + 4, date);
+    // Solo considerar timestamps alineados a medianoche UTC (hora 00:00)
+    // Los registros de actividad usan minutos-desde-medianoche, así que
+    // el timestamp de inicio del día SIEMPRE es medianoche.
+    // Permitimos cierta tolerancia (puede estar a HH:00:00)
+    const hours = date.getUTCHours();
+    const mins = date.getUTCMinutes();
+    const secs = date.getUTCSeconds();
+    const isMidnightAligned = (hours === 0 && mins === 0 && secs === 0);
+    
+    // Si no está alineado a medianoche, alinear manualmente
+    const dayStartDate = isMidnightAligned ? date : new Date(Date.UTC(
+      date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0
+    ));
+    
+    const dayActivities = tryParseActivityRecords(buf, offset + 4, dayStartDate);
     if (dayActivities.length >= 2) {
       const totalMinutes = dayActivities.reduce((sum, a) => sum + a.durationMinutes, 0);
       if (totalMinutes >= 10) {
@@ -411,8 +425,8 @@ function extractActivities(buf: Buffer): ParsedActivity[] {
         const endPos = offset + 4 + (dayActivities.length * 2);
         usedRanges.push({ start: offset, end: endPos });
         
-        // Agrupar por día (YYYY-MM-DD)
-        const dayKey = date.toISOString().substring(0, 10);
+        // Agrupar por día (YYYY-MM-DD) usando la fecha alineada
+        const dayKey = dayStartDate.toISOString().substring(0, 10);
         if (!dayBlocks.has(dayKey)) dayBlocks.set(dayKey, []);
         dayBlocks.get(dayKey)!.push({ activities: dayActivities, totalMinutes });
       }
@@ -522,15 +536,23 @@ function consolidateActivities(activities: ParsedActivity[]): ParsedActivity[] {
   // Ordenar por inicio
   activities.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
   
-  // Combinar actividades consecutivas del mismo tipo
-  const consolidated: ParsedActivity[] = [activities[0]];
+  // Sanity check: descartar actividades que duren más de 24h (error de parsing)
+  const sane = activities.filter(a => a.durationMinutes <= 1440);
+  if (sane.length === 0) return [];
   
-  for (let i = 1; i < activities.length; i++) {
-    const current = activities[i];
+  // Combinar actividades consecutivas del mismo tipo SOLO dentro del mismo día
+  const consolidated: ParsedActivity[] = [sane[0]];
+  
+  for (let i = 1; i < sane.length; i++) {
+    const current = sane[i];
     const prev = consolidated[consolidated.length - 1];
     
-    if (prev.activityType === current.activityType &&
-        Math.abs(prev.endTime.getTime() - current.startTime.getTime()) < 120000) { // < 2 min gap
+    // Solo fusionar si: mismo tipo, mismo día calendario, y gap < 2 min
+    const sameDay = prev.startTime.toISOString().substring(0, 10) === current.startTime.toISOString().substring(0, 10);
+    const sameType = prev.activityType === current.activityType;
+    const smallGap = Math.abs(prev.endTime.getTime() - current.startTime.getTime()) < 120000;
+    
+    if (sameType && sameDay && smallGap) {
       prev.endTime = current.endTime;
       prev.durationMinutes = Math.round((prev.endTime.getTime() - prev.startTime.getTime()) / 60000);
     } else {

@@ -429,8 +429,8 @@ export default function ImportacionesPage() {
                                     {ACTIVITY_LABELS[act.activityType] || act.activityType}
                                   </span>
                                 </td>
-                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.startTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</td>
-                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.endTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</td>
+                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.startTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                <td className="py-1.5 pr-3 text-gray-600">{new Date(act.endTime).toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short', year: 'numeric' })}</td>
                                 <td className="py-1.5 pr-3 font-medium">
                                   {act.durationMinutes >= 60
                                     ? `${Math.floor(act.durationMinutes / 60)}h ${act.durationMinutes % 60}min`
