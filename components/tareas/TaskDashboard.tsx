@@ -169,35 +169,59 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
 
                     {/* Type Filter Pills */}
                     <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
-                        {[
-                            { id: 'TODAS', label: 'Todas', icon: ClipboardList, color: 'blue' },
-                            { id: 'AVERIAS', label: 'Averías / Taller', icon: Wrench, color: 'orange' },
-                            { id: 'TAREAS_INTERNAS', label: 'Tareas Internas', icon: ClipboardList, color: 'green' },
-                            { id: 'RECLAMACIONES', label: 'Reclamaciones', icon: AlertTriangle, color: 'purple' },
-                        ].map(f => (
-                            <button
-                                key={f.id}
-                                onClick={() => setTipoFilter(f.id)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
-                                    tipoFilter === f.id
-                                        ? `bg-${f.color}-100 text-${f.color}-800 border-${f.color}-300 shadow-sm`
-                                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
-                                }`}
-                            >
-                                <f.icon className="w-3.5 h-3.5" />
-                                {f.label}
-                                {f.id !== 'TODAS' && (
-                                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/70 text-[10px]">
-                                        {tasks.filter(t => {
-                                            if (f.id === 'AVERIAS') return t.tipo === 'TALLER';
-                                            if (f.id === 'TAREAS_INTERNAS') return ['OPERATIVA', 'ADMINISTRATIVA'].includes(t.tipo);
-                                            if (f.id === 'RECLAMACIONES') return t.tipo === 'RECLAMACION';
-                                            return true;
-                                        }).length}
-                                    </span>
-                                )}
-                            </button>
-                        ))}
+                        {/* Todas */}
+                        <button
+                            onClick={() => setTipoFilter('TODAS')}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                tipoFilter === 'TODAS'
+                                    ? 'bg-gradient-to-r from-blue-500 to-indigo-500 text-white border-blue-400 shadow-md shadow-blue-200'
+                                    : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                            }`}
+                        >
+                            <ClipboardList className="w-3.5 h-3.5" /> Todas
+                        </button>
+                        {/* Averías */}
+                        <button
+                            onClick={() => setTipoFilter('AVERIAS')}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                tipoFilter === 'AVERIAS'
+                                    ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white border-orange-400 shadow-md shadow-orange-200'
+                                    : 'bg-white text-gray-500 border-gray-200 hover:bg-orange-50 hover:border-orange-200'
+                            }`}
+                        >
+                            <Wrench className="w-3.5 h-3.5" /> Averías / Taller
+                            <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-black ${tipoFilter === 'AVERIAS' ? 'bg-white/30 text-white' : 'bg-orange-100 text-orange-600'}`}>
+                                {tasks.filter(t => t.tipo === 'TALLER').length}
+                            </span>
+                        </button>
+                        {/* Tareas Internas */}
+                        <button
+                            onClick={() => setTipoFilter('TAREAS_INTERNAS')}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                tipoFilter === 'TAREAS_INTERNAS'
+                                    ? 'bg-gradient-to-r from-emerald-500 to-green-500 text-white border-green-400 shadow-md shadow-green-200'
+                                    : 'bg-white text-gray-500 border-gray-200 hover:bg-green-50 hover:border-green-200'
+                            }`}
+                        >
+                            <ClipboardList className="w-3.5 h-3.5" /> Tareas Internas
+                            <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-black ${tipoFilter === 'TAREAS_INTERNAS' ? 'bg-white/30 text-white' : 'bg-green-100 text-green-600'}`}>
+                                {tasks.filter(t => ['OPERATIVA', 'ADMINISTRATIVA'].includes(t.tipo)).length}
+                            </span>
+                        </button>
+                        {/* Reclamaciones */}
+                        <button
+                            onClick={() => setTipoFilter('RECLAMACIONES')}
+                            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                tipoFilter === 'RECLAMACIONES'
+                                    ? 'bg-gradient-to-r from-purple-500 to-fuchsia-500 text-white border-purple-400 shadow-md shadow-purple-200'
+                                    : 'bg-white text-gray-500 border-gray-200 hover:bg-purple-50 hover:border-purple-200'
+                            }`}
+                        >
+                            <AlertTriangle className="w-3.5 h-3.5" /> Reclamaciones
+                            <span className={`ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-black ${tipoFilter === 'RECLAMACIONES' ? 'bg-white/30 text-white' : 'bg-purple-100 text-purple-600'}`}>
+                                {tasks.filter(t => t.tipo === 'RECLAMACION').length}
+                            </span>
+                        </button>
                     </div>
 
                     {/* Toolbar */}

@@ -1,29 +1,55 @@
 import { Badge } from "@/components/ui/Badge";
-import { AlertCircle, Wrench, FileText, CheckCircle, XCircle, Clock, Repeat, Zap, PauseCircle, Search } from "lucide-react";
+import { AlertCircle, Wrench, FileText, CheckCircle, XCircle, Clock, Repeat, Zap, PauseCircle, Search, Shield, Cog } from "lucide-react";
 
 export function TaskTypeBadge({ type }: { type: string }) {
-    switch (type) {
-        case 'OPERATIVA':
-            return <Badge variant="secondary" className="flex items-center gap-1 bg-orange-100 text-orange-700 hover:bg-orange-200 border-orange-200"><Wrench className="w-3 h-3" /> Operativa</Badge>;
-        case 'ADMINISTRATIVA':
-            return <Badge variant="secondary" className="flex items-center gap-1 bg-blue-50 text-blue-700 hover:bg-blue-100 border-blue-200"><FileText className="w-3 h-3" /> Admin</Badge>;
-        case 'RECURRENTE':
-            return <Badge variant="secondary" className="flex items-center gap-1 bg-purple-50 text-purple-700 hover:bg-purple-100 border-purple-200"><Repeat className="w-3 h-3" /> Recurrente</Badge>;
-        case 'AUTOMATICA':
-            return <Badge variant="secondary" className="flex items-center gap-1 bg-gray-100 text-gray-700 hover:bg-gray-200 border-gray-200"><Zap className="w-3 h-3" /> Auto</Badge>;
-        case 'TALLER':
-            return <Badge variant="secondary" className="flex items-center gap-1 bg-orange-100 text-orange-800 hover:bg-orange-200 border-orange-200"><Wrench className="w-3 h-3" /> Taller</Badge>;
-        case 'RECLAMACION':
-            return <Badge variant="secondary" className="flex items-center gap-1 bg-purple-100 text-purple-800 hover:bg-purple-200 border-purple-200"><AlertCircle className="w-3 h-3" /> Reclamación</Badge>;
-        default:
-            return <Badge variant="secondary">{type}</Badge>;
-    }
+    const config: Record<string, { icon: any; label: string; gradient: string; className: string }> = {
+        TALLER: {
+            icon: Wrench, label: 'Taller',
+            gradient: 'from-orange-500 to-amber-500',
+            className: 'text-white shadow-sm shadow-orange-200',
+        },
+        RECLAMACION: {
+            icon: Shield, label: 'Reclamación',
+            gradient: 'from-purple-500 to-fuchsia-500',
+            className: 'text-white shadow-sm shadow-purple-200',
+        },
+        OPERATIVA: {
+            icon: Cog, label: 'Operativa',
+            gradient: 'from-blue-500 to-indigo-500',
+            className: 'text-white shadow-sm shadow-blue-200',
+        },
+        ADMINISTRATIVA: {
+            icon: FileText, label: 'Admin',
+            gradient: 'from-cyan-500 to-teal-500',
+            className: 'text-white shadow-sm shadow-cyan-200',
+        },
+        RECURRENTE: {
+            icon: Repeat, label: 'Recurrente',
+            gradient: 'from-violet-500 to-purple-500',
+            className: 'text-white shadow-sm shadow-violet-200',
+        },
+        AUTOMATICA: {
+            icon: Zap, label: 'Auto',
+            gradient: 'from-gray-500 to-slate-500',
+            className: 'text-white shadow-sm shadow-gray-200',
+        },
+    };
+
+    const c = config[type];
+    if (!c) return <Badge variant="secondary" className="text-[10px]">{type}</Badge>;
+
+    const Icon = c.icon;
+    return (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r ${c.gradient} ${c.className}`}>
+            <Icon className="w-3 h-3" /> {c.label}
+        </span>
+    );
 }
 
 export function TaskStateBadge({ state }: { state: string }) {
     switch (state) {
         case 'BACKLOG':
-            return <Badge variant="outline" className="text-gray-500 border-gray-300">Backlog</Badge>;
+            return <Badge variant="outline" className="text-gray-500 border-gray-300 bg-gray-50/50">Backlog</Badge>;
         case 'PENDIENTE':
             return <Badge className="bg-slate-100 text-slate-700 border-slate-200">Pendiente</Badge>;
         case 'EN_CURSO':
