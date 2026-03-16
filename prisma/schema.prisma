@@ -1496,6 +1496,7 @@ model TachographDriver {
   legacyActivities   TachographActivityLegacy[]
   dailySummaries     TachographDailySummary[]
   incidents          TachographIncident[]
+  regulationFindings TachographRegulationFinding[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1783,4 +1784,49 @@ model TachographConfig {
 
   updatedAt DateTime @updatedAt
   updatedBy Int?
+}
+
+// ====================================
+// Regulation Finding — hallazgos normativos CE 561/2006
+// ====================================
+
+model TachographRegulationFinding {
+  id              Int      @id @default(autoincrement())
+
+  driverId        Int
+  driver          TachographDriver @relation(fields: [driverId], references: [id])
+  vehicleId       Int?
+
+  dateFrom        DateTime
+  dateTo          DateTime
+
+  ruleCode        String   // BREAK_AFTER_4H30, DAILY_DRIVING_LIMIT, etc.
+  ruleCategory    String   // DRIVING_TIME, REST_TIME, BREAK_TIME
+
+  severity        String   // INFO, WARNING, VIOLATION
+
+  evaluability    String   // EVALUABLE, PARTIALLY_EVALUABLE, NOT_EVALUABLE
+  result          String   // COMPLIANT, NON_COMPLIANT, POTENTIAL_NON_COMPLIANCE, NOT_EVALUABLE
+  confidence      String   // HIGH, MEDIUM, LOW
+
+  minutesObserved   Int?
+  minutesRequired   Int?
+  minutesExceeded   Int?
+
+  sourceEventIds    Json     // int[] de IDs de TachographNormalizedEvent
+  explanation       String
+
+  isBlockingDataGap Boolean  @default(false)
+
+  evaluationRunId   String
+  evaluationVersion String   @default("reg-v1")
+
+  createdAt         DateTime @default(now())
+
+  @@unique([driverId, ruleCode, dateFrom, dateTo, evaluationRunId])
+  @@index([driverId])
+  @@index([ruleCode])
+  @@index([result])
+  @@index([dateFrom])
+  @@index([evaluationRunId])
 }
