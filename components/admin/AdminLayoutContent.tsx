@@ -140,6 +140,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
                 { href: '/admin/tacografo/vehiculos', label: 'Vehículos', icon: Truck },
                 { href: '/admin/tacografo/actividad', label: 'Jornadas / Actividad', icon: Activity },
                 { href: '/admin/tacografo/incidencias', label: 'Incidencias', icon: AlertCircle },
+                { href: '/admin/tacografo/regulacion', label: 'Regulación', icon: ShieldCheck },
                 { href: '/admin/tacografo/configuracion', label: 'Configuración', icon: Settings },
             ]
         },
