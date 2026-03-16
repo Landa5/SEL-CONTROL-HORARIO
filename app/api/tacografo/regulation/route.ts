@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
 import { cookies } from 'next/headers';
-import { PrismaClient } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
 import { evaluateRegulations } from '@/lib/tacografo/regulation/regulation-engine';
-
-const prisma = new PrismaClient();
 
 // Extend timeout
 export const maxDuration = 60;
@@ -70,7 +68,7 @@ export async function GET(request: NextRequest) {
       total,
       totalPages: Math.ceil(total / pageSize),
     },
-    stats: stats.reduce((acc, s) => {
+    stats: stats.reduce((acc: Record<string, number>, s: any) => {
       acc[s.result] = s._count;
       return acc;
     }, {} as Record<string, number>),

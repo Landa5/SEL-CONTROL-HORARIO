@@ -14,7 +14,7 @@
  * 8. Retorna resumen
  */
 
-import { PrismaClient } from '@prisma/client';
+import { prisma, withWriteClient } from '@/lib/prisma';
 import { randomUUID } from 'crypto';
 import { assessEvaluability } from './regulation-confidence';
 import {
@@ -62,8 +62,6 @@ export interface RegulationResult {
 // Motor principal
 // ====================================
 
-const prisma = new PrismaClient();
-
 export async function evaluateRegulations(
   driverId: number,
   dateFrom: Date,
@@ -83,7 +81,7 @@ export async function evaluateRegulations(
     orderBy: { startAtUtc: 'asc' },
   });
 
-  const eventsForEval: NormalizedEventForEval[] = events.map(e => ({
+  const eventsForEval: NormalizedEventForEval[] = events.map((e: any) => ({
     id: e.id,
     startAtUtc: e.startAtUtc,
     endAtUtc: e.endAtUtc,
@@ -103,7 +101,7 @@ export async function evaluateRegulations(
     orderBy: { date: 'asc' },
   });
 
-  const summariesForEval: DaySummaryForEval[] = summaries.map(s => ({
+  const summariesForEval: DaySummaryForEval[] = summaries.map((s: any) => ({
     date: s.date.toISOString().substring(0, 10),
     totalDrivingMinutes: s.totalDrivingMinutes,
     dayConsolidationStatus: s.dayConsolidationStatus,
@@ -151,8 +149,6 @@ export async function evaluateRegulations(
   allRawFindings.push(...fortnightFindings);
 
   // 5. Aplicar evaluabilidad a cada finding
-  // Para reglas de un día, usamos evaluabilidad local del día
-  // Para reglas de semana/bisemana, usamos evaluabilidad del rango de la regla
   const allPersistedFindings: PersistedFinding[] = [];
 
   for (const raw of allRawFindings) {
@@ -169,41 +165,41 @@ export async function evaluateRegulations(
     allPersistedFindings.push(...persisted);
   }
 
-  // 6. Borrar findings anteriores del mismo conductor/reglas/rango
-  // (no del mismo runId — borramos runs anteriores para el mismo ámbito)
-  await prisma.tachographRegulationFinding.deleteMany({
-    where: {
-      driverId,
-      dateFrom: { gte: dateFrom },
-      dateTo: { lte: new Date(dateTo.getTime() + 86400000) },
-    },
-  });
-
-  // 7. Persistir nuevos findings
-  if (allPersistedFindings.length > 0) {
-    await prisma.tachographRegulationFinding.createMany({
-      data: allPersistedFindings.map(f => ({
-        driverId: f.driverId,
-        vehicleId: f.vehicleId,
-        dateFrom: f.dateFrom,
-        dateTo: f.dateTo,
-        ruleCode: f.ruleCode,
-        ruleCategory: f.ruleCategory,
-        severity: f.severity,
-        evaluability: f.evaluability,
-        result: f.result,
-        confidence: f.confidence,
-        minutesObserved: f.minutesObserved,
-        minutesRequired: f.minutesRequired,
-        minutesExceeded: f.minutesExceeded,
-        sourceEventIds: f.sourceEventIds,
-        explanation: f.explanation,
-        isBlockingDataGap: f.isBlockingDataGap,
-        evaluationRunId: f.evaluationRunId,
-        evaluationVersion: f.evaluationVersion,
-      })),
+  // 6. Borrar findings anteriores y persistir nuevos (operaciones de escritura)
+  await withWriteClient(async (writeClient) => {
+    await writeClient.tachographRegulationFinding.deleteMany({
+      where: {
+        driverId,
+        dateFrom: { gte: dateFrom },
+        dateTo: { lte: new Date(dateTo.getTime() + 86400000) },
+      },
     });
-  }
+
+    if (allPersistedFindings.length > 0) {
+      await writeClient.tachographRegulationFinding.createMany({
+        data: allPersistedFindings.map(f => ({
+          driverId: f.driverId,
+          vehicleId: f.vehicleId,
+          dateFrom: f.dateFrom,
+          dateTo: f.dateTo,
+          ruleCode: f.ruleCode,
+          ruleCategory: f.ruleCategory,
+          severity: f.severity,
+          evaluability: f.evaluability,
+          result: f.result,
+          confidence: f.confidence,
+          minutesObserved: f.minutesObserved,
+          minutesRequired: f.minutesRequired,
+          minutesExceeded: f.minutesExceeded,
+          sourceEventIds: f.sourceEventIds,
+          explanation: f.explanation,
+          isBlockingDataGap: f.isBlockingDataGap,
+          evaluationRunId: f.evaluationRunId,
+          evaluationVersion: f.evaluationVersion,
+        })),
+      });
+    }
+  });
 
   // 8. Resumen
   const summary = {
