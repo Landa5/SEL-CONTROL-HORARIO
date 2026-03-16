@@ -402,6 +402,14 @@ export async function processImport(
             const summaryDate = new Date(summary.date + 'T00:00:00Z');
             const existing = existingMap.get(summaryDate.toISOString());
 
+            const coverageFields = {
+              ownSourceMinutes: summary.ownSourceMinutes,
+              inheritedSplitMinutes: summary.inheritedSplitMinutes,
+              rawEventsCount: summary.rawEventsCount,
+              calendarCoverageRatio: summary.calendarCoverageRatio,
+              dayConsolidationStatus: summary.dayConsolidationStatus,
+            };
+
             if (existing) {
               await prisma.tachographDailySummary.update({
                 where: { id: existing.id },
@@ -416,6 +424,7 @@ export async function processImport(
                   consistencyStatus: summary.consistencyStatus,
                   sourceDataOrigin: summary.sourceDataOrigin,
                   averageConfidence: summary.averageConfidence,
+                  ...coverageFields,
                 }
               });
             } else {
@@ -433,11 +442,49 @@ export async function processImport(
                 consistencyStatus: summary.consistencyStatus,
                 sourceDataOrigin: summary.sourceDataOrigin,
                 averageConfidence: summary.averageConfidence,
+                ...coverageFields,
               });
             }
           }
           if (toCreate.length > 0) {
             await prisma.tachographDailySummary.createMany({ data: toCreate });
+          }
+
+          // 13b. External contrast layer (post-consolidation, does NOT alter dayConsolidationStatus)
+          for (const summary of normResult.dailySummaries) {
+            if (summary.dayConsolidationStatus !== 'BLOCKED_NO_SOURCE') continue;
+            const summaryDate = new Date(summary.date + 'T00:00:00Z');
+            try {
+              // Check for internal work evidence (fichajes/schedules)
+              const fichajes: any[] = await (prisma.$queryRawUnsafe(
+                `SELECT id FROM "Fichaje" WHERE "empleadoId" = $1 AND DATE("fecha") = $2 LIMIT 5`,
+                updateData.driverId,
+                summary.date,
+              ) as Promise<any[]>).catch(() => []);
+
+              if (fichajes.length > 0) {
+                // External evidence found — update notes + consistencyStatus but NOT dayConsolidationStatus
+                await prisma.tachographDailySummary.updateMany({
+                  where: {
+                    driverId: updateData.driverId,
+                    date: summaryDate,
+                  },
+                  data: {
+                    consistencyStatus: 'conflict',
+                    notes: JSON.stringify({
+                      externalContrast: {
+                        source: 'fichaje',
+                        hasWorkEvidence: true,
+                        fichajesCount: fichajes.length,
+                        details: 'Información tacográfica incompleta — evidencia de jornada laboral en sistema interno',
+                      }
+                    }),
+                  },
+                });
+              }
+            } catch {
+              // Fichaje table may not exist, silently ignore
+            }
           }
         }
 

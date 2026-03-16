@@ -1496,6 +1496,12 @@ model TachographDailySummary {
   totalBreakMinutes        Int @default(0)
   gapMinutes               Int @default(0)
 
+  ownSourceMinutes         Int @default(0)
+  inheritedSplitMinutes    Int @default(0)
+  rawEventsCount           Int @default(0)
+  calendarCoverageRatio    Float @default(0)
+  dayConsolidationStatus   String @default("VALID") // VALID, PARTIAL, BLOCKED_NO_SOURCE, BLOCKED_CONFLICT, BLOCKED_LOW_CONFIDENCE
+
   importedFromCount       Int @default(0)
   consistencyStatus       String @default("pending") // pending, ok, warning, error, conflict
   sourceDataOrigin        String? // DRIVER_CARD | VEHICLE_UNIT | MIXED
