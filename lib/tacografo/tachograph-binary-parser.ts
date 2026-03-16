@@ -1,18 +1,21 @@
 /**
- * TachographBinaryParser v2 — Parser binario para archivos DDD/ESM/DTCO
+ * TachographBinaryParser v3 — Parser binario para archivos DDD/ESM/DTCO
  * 
  * Lee el contenido binario de archivos de tacógrafo digital
  * según la especificación EU Regulation 2016/799 (Annex 1C).
  * 
- * CAMBIO v2: Retorna RawEvent[] (eventos brutos sin consolidar)
- * en lugar de actividades consolidadas. La consolidación se hace
- * en la capa de normalización.
- * 
- * Cada RawEvent incluye:
- *   - extractionMethod: 'spec' | 'heuristic' | 'derived'
- *   - extractionNotes: justificación de cómo se obtuvo
- *   - extractionStatus: 'OK' | 'SUSPECT' | 'ERROR'
+ * v3: Añade modo trace completo con candidatos aceptados/rechazados
+ * y separación de VRN file-level vs event-level.
  */
+
+import type {
+  CandidateTimestamp,
+  CandidateBlock,
+  DetectedVRN,
+  ParserTraceResult,
+  TraceOptions,
+} from './tachograph-trace';
+import { buildDaySummaries } from './tachograph-trace';
 
 // ====================================
 // Constantes de actividad (2 bits)
@@ -61,11 +64,19 @@ export interface BinaryParseResult {
     dateFrom?: Date;
     dateTo?: Date;
     driverDni?: string;
+    fileLevelVRNs?: DetectedVRN[];
+    vehicleUsedRecords?: VehicleUsedRecord[];
     [key: string]: any;
   };
   rawEvents: BinaryRawEvent[];
   warnings: string[];
   errors: string[];
+}
+
+/** Resultado del parser con trace */
+export interface BinaryParseWithTraceResult {
+  result: BinaryParseResult;
+  trace: ParserTraceResult;
 }
 
 // ====================================
@@ -136,210 +147,294 @@ interface TimestampPosition {
 // Parser principal v2
 // ====================================
 
-export function parseBinaryTachograph(buffer: Buffer, fileName: string): BinaryParseResult {
+// ====================================
+// Core parse logic (shared by normal + trace)
+// ====================================
+
+function coreParseLogic(buffer: Buffer, fileName: string, enableTrace: boolean): {
+  result: BinaryParseResult;
+  traceData: {
+    candidateTimestamps: CandidateTimestamp[];
+    candidateBlocks: CandidateBlock[];
+    detectedVRNs: DetectedVRN[];
+    rejectedCandidates: CandidateBlock[];
+  } | null;
+} {
   const warnings: string[] = [];
   const errors: string[] = [];
   const rawEvents: BinaryRawEvent[] = [];
   const metadata: BinaryParseResult['metadata'] = {};
   let fileType: 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' = 'UNKNOWN';
-  
-  // Determinar tipo por extensión y convención de nombre
+
+  // Trace collectors
+  const traceCandidateTs: CandidateTimestamp[] = [];
+  const traceCandidateBlocks: CandidateBlock[] = [];
+  const traceDetectedVRNs: DetectedVRN[] = [];
+  const traceRejected: CandidateBlock[] = [];
+
+  // Determinar tipo
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const baseName = fileName.split(/[\\/]/).pop()?.toUpperCase() || '';
-  
-  if (['esm', 'v1b'].includes(ext)) {
-    fileType = 'VEHICLE_UNIT';
-  } else if (['c1b', 'tgd'].includes(ext)) {
-    fileType = 'DRIVER_CARD';
-  } else if (ext === 'ddd' || ext === 'dtco') {
-    if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) {
-      fileType = 'DRIVER_CARD';
-    } else if (baseName.startsWith('S_') || baseName.startsWith('M_')) {
-      fileType = 'VEHICLE_UNIT';
-    }
+  if (['esm', 'v1b'].includes(ext)) fileType = 'VEHICLE_UNIT';
+  else if (['c1b', 'tgd'].includes(ext)) fileType = 'DRIVER_CARD';
+  else if (ext === 'ddd' || ext === 'dtco') {
+    if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) fileType = 'DRIVER_CARD';
+    else if (baseName.startsWith('S_') || baseName.startsWith('M_')) fileType = 'VEHICLE_UNIT';
   }
 
   if (buffer.length < 10) {
-    errors.push('Archivo demasiado pequeño para ser un archivo de tacógrafo válido');
-    return { success: true, fileType, parserVersion: 'binary-v2', metadata, rawEvents, warnings, errors };
+    errors.push('Archivo demasiado pequeño');
+    return {
+      result: { success: true, fileType, parserVersion: 'binary-v3', metadata, rawEvents, warnings, errors },
+      traceData: enableTrace ? { candidateTimestamps: [], candidateBlocks: [], detectedVRNs: [], rejectedCandidates: [] } : null,
+    };
   }
 
-  // Extraer identificadores del nombre de archivo para inyectarlos en raw events
   const cardInfo = extractCardInfoFromFileName(fileName);
   const rawDriverId = cardInfo.cardNumber || null;
   const rawVehicleId = extractPlateFromFileName(fileName);
-  
-  if (cardInfo.cardNumber) {
-    metadata.cardNumber = cardInfo.cardNumber;
-  }
-  if (cardInfo.dni) {
-    metadata.driverDni = cardInfo.dni;
-  }
+  if (cardInfo.cardNumber) metadata.cardNumber = cardInfo.cardNumber;
+  if (cardInfo.dni) metadata.driverDni = cardInfo.dni;
 
   try {
-    // 1. Buscar VRN (matrícula) — ahora en TODOS los tipos de archivo
-    // DRIVER_CARD contiene "vehicle_used_records" con matrículas de vehículos usados
-    const vrn = findVRN(buffer);
-    if (vrn) {
-      metadata.plateNumber = vrn;
+    // 1. VRN scan (file-level, todos los tipos)
+    const vrnScan = findVRN(buffer);
+    if (vrnScan) {
+      metadata.plateNumber = vrnScan;
+      traceDetectedVRNs.push({ plate: vrnScan, offset: -1, context: 'file_scan', associatedDates: null });
+    }
+
+    // 1b. Vehicle used records (DRIVER_CARD)
+    const vehicleRecords = findVehicleUsedRecords(buffer);
+    metadata.vehicleUsedRecords = vehicleRecords;
+    for (const vr of vehicleRecords) {
+      const dates: string[] = [];
+      if (vr.startDate) dates.push(vr.startDate.toISOString().substring(0, 10));
+      if (vr.endDate) dates.push(vr.endDate.toISOString().substring(0, 10));
+      traceDetectedVRNs.push({
+        plate: vr.vrn,
+        offset: -1,
+        context: 'vehicle_used_record',
+        associatedDates: dates.length > 0 ? dates : null,
+      });
     }
     
-    // 1b. Para DRIVER_CARD, buscar vehicle used records con matrículas por día
-    if (fileType === 'DRIVER_CARD') {
-      const vehicleRecords = findVehicleUsedRecords(buffer);
-      if (vehicleRecords.length > 0) {
-        metadata.vehicleUsedRecords = vehicleRecords;
-        // Usar la primera matrícula encontrada si no tenemos una del nombre de archivo
-        if (!metadata.plateNumber && vehicleRecords[0].vrn) {
-          metadata.plateNumber = vehicleRecords[0].vrn;
-          warnings.push('La matrícula se extrajo de vehicle_used_records del binario.');
-        }
-      }
+    // fileLevelVRNs in metadata
+    metadata.fileLevelVRNs = traceDetectedVRNs;
+
+    if (!metadata.plateNumber && vehicleRecords.length > 0 && vehicleRecords[0].vrn) {
+      metadata.plateNumber = vehicleRecords[0].vrn;
+      warnings.push('La matrícula se extrajo de vehicle_used_records del binario.');
     }
 
-    // 2. Buscar VIN — en TODOS los tipos
+    // 2. VIN
     const vin = findVIN(buffer);
-    if (vin) {
-      metadata.vin = vin;
-    }
+    if (vin) metadata.vin = vin;
 
-    // 3. Buscar datos del conductor
+    // 3. Driver data
     const driver = findDriverData(buffer);
     if (driver.surname || driver.firstName) {
       metadata.driverName = [driver.surname, driver.firstName].filter(Boolean).join(' ').trim();
       if (fileType === 'UNKNOWN') fileType = 'DRIVER_CARD';
     }
-    if (driver.cardExpiry) {
-      metadata.cardExpiry = driver.cardExpiry;
-    }
+    if (driver.cardExpiry) metadata.cardExpiry = driver.cardExpiry;
 
-    // 4. Extraer raw events (sin consolidar)
+    // 4. Extract raw events with optional trace
     const fileDate = extractDateFromFileName(fileName);
-    const events = extractRawEvents(
-      buffer,
-      fileType,
-      fileDate,
-      rawDriverId,
-      metadata.plateNumber || rawVehicleId || null
+    
+    // v3: rawVehicleIdentifier se asigna por vehicle_used_record, NO globalmente
+    const events = extractRawEventsWithTrace(
+      buffer, fileType, fileDate, rawDriverId, vehicleRecords,
+      metadata.plateNumber || rawVehicleId || null,
+      enableTrace ? traceCandidateTs : null,
+      enableTrace ? traceCandidateBlocks : null,
+      enableTrace ? traceRejected : null,
     );
     rawEvents.push(...events);
-    
+
     if (rawEvents.length > 0) {
       const sorted = [...rawEvents].sort((a, b) => a.rawStartAt.getTime() - b.rawStartAt.getTime());
       metadata.dateFrom = sorted[0].rawStartAt;
       metadata.dateTo = sorted[sorted.length - 1].rawEndAt;
     }
 
-    // 5. Si no encontramos eventos, buscar timestamps para inferir rango
     if (rawEvents.length === 0) {
       const dates = findAllTimestamps(buffer, fileDate);
       if (dates.length >= 2) {
         metadata.dateFrom = dates[0];
         metadata.dateTo = dates[dates.length - 1];
-        warnings.push(`No se pudieron extraer actividades individuales. Se detectaron ${dates.length} timestamps en el archivo.`);
+        warnings.push(`No se extrajeron actividades. ${dates.length} timestamps detectados.`);
       }
     }
 
-    // 6. Si no encontramos matrícula por contenido binario, intentar del nombre
     if (!metadata.plateNumber && rawVehicleId) {
       metadata.plateNumber = rawVehicleId;
-      warnings.push('La matrícula se extrajo del nombre del archivo, no del contenido binario.');
+      warnings.push('Matrícula extraída del nombre del archivo.');
     }
-
-    // 7. Si no encontramos fechas, intentar del nombre
     if (!metadata.dateFrom && fileDate) {
       metadata.dateFrom = fileDate;
       metadata.dateTo = fileDate;
     }
 
-    // Determinar tipo si aún desconocido
+    // Determine file type if unknown
     if (fileType === 'UNKNOWN') {
-      if (metadata.cardNumber) {
-        fileType = 'DRIVER_CARD';
-      } else if (metadata.vin || metadata.plateNumber) {
-        fileType = 'VEHICLE_UNIT';
-      }
+      if (metadata.cardNumber) fileType = 'DRIVER_CARD';
+      else if (metadata.vin || metadata.plateNumber) fileType = 'VEHICLE_UNIT';
     }
     if (fileType === 'VEHICLE_UNIT' && metadata.cardNumber && !metadata.vin) {
       fileType = 'DRIVER_CARD';
-      warnings.push('Reclasificado como tarjeta de conductor: se encontró número de tarjeta.');
+      warnings.push('Reclasificado como tarjeta de conductor.');
     }
-
-    if (rawEvents.length === 0) {
-      warnings.push('No se pudieron extraer actividades detalladas del archivo binario.');
-    }
+    if (rawEvents.length === 0) warnings.push('No se extrajeron actividades detalladas del binario.');
 
   } catch (err: any) {
-    errors.push(`Error durante el parseo binario: ${err.message}`);
+    errors.push(`Error: ${err.message}`);
   }
 
   return {
-    success: true,
-    fileType,
-    parserVersion: 'binary-v2',
-    metadata,
-    rawEvents,
-    warnings,
-    errors,
+    result: { success: true, fileType, parserVersion: 'binary-v3', metadata, rawEvents, warnings, errors },
+    traceData: enableTrace ? {
+      candidateTimestamps: traceCandidateTs,
+      candidateBlocks: traceCandidateBlocks,
+      detectedVRNs: traceDetectedVRNs,
+      rejectedCandidates: traceRejected,
+    } : null,
   };
 }
 
+/**
+ * Parser principal (sin trace, para uso normal).
+ */
+export function parseBinaryTachograph(buffer: Buffer, fileName: string): BinaryParseResult {
+  return coreParseLogic(buffer, fileName, false).result;
+}
+
+/**
+ * Parser con trace completo (para diagnóstico).
+ */
+export function parseBinaryTachographWithTrace(
+  buffer: Buffer,
+  fileName: string,
+  options?: TraceOptions,
+): BinaryParseWithTraceResult {
+  const { result, traceData } = coreParseLogic(buffer, fileName, true);
+  const td = traceData!;
+
+  // Resumen
+  const accepted = td.candidateBlocks.filter(b => b.status === 'ACCEPTED');
+  const rejected = td.candidateBlocks.filter(b => b.status === 'REJECTED');
+  const blockedConf = td.candidateBlocks.filter(b => b.status === 'BLOCKED_CONFIDENCE');
+  const blockedConfl = td.candidateBlocks.filter(b => b.status === 'BLOCKED_CONFLICT');
+
+  const uniqueDaysAccepted = [...new Set(accepted.map(b => b.dayDate))].sort();
+  const uniqueDaysRejected = [...new Set(rejected.map(b => b.dayDate))].sort();
+
+  const daySummaries = buildDaySummaries(td.candidateBlocks, result.rawEvents, td.detectedVRNs);
+
+  let trace: ParserTraceResult = {
+    fileName,
+    fileSize: buffer.length,
+    fileType: result.fileType,
+    candidateTimestamps: td.candidateTimestamps,
+    candidateBlocks: td.candidateBlocks,
+    detectedVRNs: td.detectedVRNs,
+    acceptedEvents: result.rawEvents,
+    rejectedCandidates: td.rejectedCandidates,
+    daySummaries,
+    summary: {
+      totalCandidatesFound: td.candidateBlocks.length,
+      totalAccepted: accepted.length,
+      totalRejected: rejected.length,
+      totalBlockedConfidence: blockedConf.length,
+      totalBlockedConflict: blockedConfl.length,
+      uniqueDaysAccepted,
+      uniqueDaysRejected,
+    },
+  };
+
+  // Apply trace options filtering
+  if (options?.targetDate) {
+    const window = options.windowDays ?? 1;
+    const target = new Date(options.targetDate + 'T00:00:00Z');
+    const startD = new Date(target.getTime() - window * 86400000);
+    const endD = new Date(target.getTime() + window * 86400000);
+    const startStr = startD.toISOString().substring(0, 10);
+    const endStr = endD.toISOString().substring(0, 10);
+
+    const { filterTraceByDateRange } = require('./tachograph-trace');
+    trace = filterTraceByDateRange(trace, startStr, endStr);
+  }
+
+  if (options?.maxResults && trace.candidateBlocks.length > options.maxResults) {
+    trace.candidateBlocks = trace.candidateBlocks.slice(0, options.maxResults);
+  }
+
+  return { result, trace };
+}
+
 // ====================================
-// Extracción de raw events (SIN consolidar)
+// Extracción de raw events con trace opcional
 // ====================================
 
-function extractRawEvents(
+function extractRawEventsWithTrace(
   buf: Buffer,
   fileType: string,
   fileDate: Date | null,
   rawDriverId: string | null,
-  rawVehicleId: string | null
+  vehicleUsedRecords: VehicleUsedRecord[],
+  fallbackVehicleId: string | null,
+  traceCandidateTs: CandidateTimestamp[] | null,
+  traceCandidateBlocks: CandidateBlock[] | null,
+  traceRejected: CandidateBlock[] | null,
 ): BinaryRawEvent[] {
-  // Calcular rango de timestamps válidos
-  // v2: rango ampliado a 3 años (no descartar agresivamente)
   const referenceDate = fileDate || new Date();
-  const maxYearsBack = 3; // Ampliado en v2 (antes: 2 para DC, 1 para VU)
+  const maxYearsBack = 3;
   const minDate = new Date(referenceDate.getTime() - maxYearsBack * 365.25 * 24 * 60 * 60 * 1000);
-  const maxDate = new Date(referenceDate.getTime() + 30 * 24 * 60 * 60 * 1000); // +30 días margen
-  
+  const maxDate = new Date(referenceDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+
   const tsPositions = findTimestampPositions(buf, minDate, maxDate);
-  
+
   const allEvents: BinaryRawEvent[] = [];
-  // Track which timestamp offsets have been successfully parsed as day headers
   const usedTimestampOffsets = new Set<number>();
-  
-  // Rango "plausible" (cercano a fileDate) para scoring, NO para descarte
-  const plausibleMin = fileDate 
+
+  const plausibleMin = fileDate
     ? new Date(fileDate.getTime() - 2 * 365.25 * 24 * 60 * 60 * 1000)
     : minDate;
   const plausibleMax = fileDate
     ? new Date(fileDate.getTime() + 7 * 24 * 60 * 60 * 1000)
     : maxDate;
-  
+
   for (const { offset, date } of tsPositions) {
     if (usedTimestampOffsets.has(offset)) continue;
-    
-    // Los timestamps de día deben estar alineados a medianoche UTC
+
+    const isMidnightAligned = (Math.floor(date.getTime() / 1000) % 86400) === 0;
     const dayStartDate = new Date(Date.UTC(
       date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0
     ));
+    const dayStr = dayStartDate.toISOString().substring(0, 10);
     const dayTimestamp = Math.floor(dayStartDate.getTime() / 1000);
-    
-    // Determinar si este timestamp es plausible (no descarta, solo marca)
     const isPlausible = date >= plausibleMin && date <= plausibleMax;
-    
-    // Probar múltiples offsets para activity change records
+
+    // Record candidate timestamp in trace
+    if (traceCandidateTs) {
+      traceCandidateTs.push({
+        offset, date, dateStr: dayStr,
+        isMidnightAligned, isPlausible,
+        status: 'FOUND', reason: 'Timestamp in valid range',
+      });
+    }
+
+    // Try multiple header offsets for activity records
     const headerOffsets = [4, 10, 8, 6, 12];
-    
     let bestRecords: ParsedRecord[] = [];
     let bestTotalMinutes = 0;
     let bestHeaderOffset = 4;
-    
+
     for (const hOffset of headerOffsets) {
       const candidate = tryParseRecords(buf, offset + hOffset);
       if (candidate.length >= 2) {
         const candMinutes = estimateTotalMinutes(candidate);
-        if (candidate.length > bestRecords.length || 
+        if (candidate.length > bestRecords.length ||
             (candidate.length === bestRecords.length && candMinutes > bestTotalMinutes)) {
           bestRecords = candidate;
           bestTotalMinutes = candMinutes;
@@ -347,65 +442,120 @@ function extractRawEvents(
         }
       }
     }
-    
-    // v2 fix: lowered thresholds (>=2 records, >=1 min) to not lose short activity days
-    if (bestRecords.length >= 2 && bestTotalMinutes >= 1) {
-      usedTimestampOffsets.add(offset);
-      
-      // Convertir records a raw events (SIN consolidar)
-      for (let i = 0; i < bestRecords.length; i++) {
-        const rec = bestRecords[i];
-        const startTime = new Date(dayStartDate.getTime() + rec.startMinutes * 60000);
-        
-        // endTime = siguiente record o fin del día
-        let endMinutes: number;
-        if (i + 1 < bestRecords.length) {
-          endMinutes = bestRecords[i + 1].startMinutes;
-        } else {
-          endMinutes = 1440; // Fin del día
+
+    // Candidate block for trace
+    const candidateBlock: CandidateBlock = {
+      timestampOffset: offset,
+      headerOffset: bestHeaderOffset,
+      dayDate: dayStr,
+      recordsCount: bestRecords.length,
+      totalMinutes: bestTotalMinutes,
+      status: 'FOUND',
+      reason: '',
+      parsedRecords: bestRecords.map(r => ({ activity: r.activityType, startMin: r.startMinutes })),
+    };
+
+    // Decision: accept or reject
+    if (bestRecords.length < 2) {
+      candidateBlock.status = 'REJECTED';
+      candidateBlock.reason = `Insufficient records (${bestRecords.length} < 2)`;
+      if (traceCandidateBlocks) traceCandidateBlocks.push(candidateBlock);
+      if (traceRejected) traceRejected.push(candidateBlock);
+      // Update timestamp status
+      if (traceCandidateTs && traceCandidateTs.length > 0) {
+        const last = traceCandidateTs[traceCandidateTs.length - 1];
+        if (last.offset === offset) { last.status = 'REJECTED'; last.reason = candidateBlock.reason; }
+      }
+      continue;
+    }
+    if (bestTotalMinutes < 1) {
+      candidateBlock.status = 'REJECTED';
+      candidateBlock.reason = `Total minutes too low (${bestTotalMinutes} < 1)`;
+      if (traceCandidateBlocks) traceCandidateBlocks.push(candidateBlock);
+      if (traceRejected) traceRejected.push(candidateBlock);
+      if (traceCandidateTs && traceCandidateTs.length > 0) {
+        const last = traceCandidateTs[traceCandidateTs.length - 1];
+        if (last.offset === offset) { last.status = 'REJECTED'; last.reason = candidateBlock.reason; }
+      }
+      continue;
+    }
+
+    // ACCEPTED
+    candidateBlock.status = 'ACCEPTED';
+    candidateBlock.reason = `${bestRecords.length} records, ${bestTotalMinutes} minutes, header+${bestHeaderOffset}`;
+    if (!isPlausible) {
+      candidateBlock.status = 'BLOCKED_CONFIDENCE';
+      candidateBlock.reason += ` | Out of plausible range`;
+    }
+    if (traceCandidateBlocks) traceCandidateBlocks.push(candidateBlock);
+
+    usedTimestampOffsets.add(offset);
+
+    // v3: resolve rawVehicleIdentifier per-day from vehicle_used_records
+    let eventVehicleId: string | null = null;
+    if (vehicleUsedRecords.length > 0) {
+      for (const vr of vehicleUsedRecords) {
+        const vrStart = vr.startDate ? vr.startDate.toISOString().substring(0, 10) : null;
+        const vrEnd = vr.endDate ? vr.endDate.toISOString().substring(0, 10) : null;
+        if (vrStart && vrEnd && dayStr >= vrStart && dayStr <= vrEnd) {
+          eventVehicleId = vr.vrn;
+          break;
         }
-        const endTime = new Date(dayStartDate.getTime() + endMinutes * 60000);
-        
-        const durationMinutes = endMinutes - rec.startMinutes;
-        if (durationMinutes < 1) continue; // Filtrar ruido
-        
-        // Determinar si este último registro es "hasta fin de día" → posible corte artificial
-        const isLastRecord = i === bestRecords.length - 1;
-        
-        const event: BinaryRawEvent = {
-          rawStartAt: startTime,
-          rawEndAt: endTime,
-          rawActivityType: rec.activityType,
-          rawDriverIdentifier: rawDriverId,
-          rawVehicleIdentifier: rawVehicleId,
-          rawPayload: {
-            slot: rec.slot,
-            cardInserted: rec.cardInserted,
-            byteOffset: offset + bestHeaderOffset + (i * 2),
-            headerOffset: bestHeaderOffset,
-            dayTimestamp,
-          },
-          extractionMethod: 'heuristic',
-          extractionNotes: `Midnight-aligned ts scan at offset ${offset}, header+${bestHeaderOffset}, record ${i}/${bestRecords.length}`,
-          extractionStatus: 'OK',
-        };
-        
-        // Marcar como SUSPECT si fuera de rango plausible
-        if (!isPlausible) {
-          event.extractionStatus = 'SUSPECT';
-          event.extractionNotes += ` | Timestamp ${date.toISOString().substring(0,10)} fuera de rango plausible (archivo ${fileDate?.toISOString().substring(0,10) || 'sin fecha'})`;
+        if (vrStart && !vrEnd && dayStr === vrStart) {
+          eventVehicleId = vr.vrn;
+          break;
         }
-        
-        // Marcar último registro como derivado (fin de día artificial)
-        if (isLastRecord && endMinutes === 1440) {
-          event.extractionNotes += ' | End time derived (last record, day boundary)';
-        }
-        
-        allEvents.push(event);
       }
     }
+    // Fallback: only if no vehicle_used_record data at all
+    if (!eventVehicleId && vehicleUsedRecords.length === 0) {
+      eventVehicleId = fallbackVehicleId;
+    }
+
+    // Update timestamp status
+    if (traceCandidateTs && traceCandidateTs.length > 0) {
+      const last = traceCandidateTs[traceCandidateTs.length - 1];
+      if (last.offset === offset) { last.status = candidateBlock.status; last.reason = candidateBlock.reason; }
+    }
+
+    // Convert records to raw events
+    for (let i = 0; i < bestRecords.length; i++) {
+      const rec = bestRecords[i];
+      const startTime = new Date(dayStartDate.getTime() + rec.startMinutes * 60000);
+      let endMinutes = (i + 1 < bestRecords.length) ? bestRecords[i + 1].startMinutes : 1440;
+      const endTime = new Date(dayStartDate.getTime() + endMinutes * 60000);
+      if (endMinutes - rec.startMinutes < 1) continue;
+
+      const isLastRecord = i === bestRecords.length - 1;
+      const event: BinaryRawEvent = {
+        rawStartAt: startTime,
+        rawEndAt: endTime,
+        rawActivityType: rec.activityType,
+        rawDriverIdentifier: rawDriverId,
+        rawVehicleIdentifier: eventVehicleId,
+        rawPayload: {
+          slot: rec.slot,
+          cardInserted: rec.cardInserted,
+          byteOffset: offset + bestHeaderOffset + (i * 2),
+          headerOffset: bestHeaderOffset,
+          dayTimestamp,
+        },
+        extractionMethod: 'heuristic',
+        extractionNotes: `ts@${offset}, hdr+${bestHeaderOffset}, rec ${i}/${bestRecords.length}`,
+        extractionStatus: 'OK',
+      };
+
+      if (!isPlausible) {
+        event.extractionStatus = 'SUSPECT';
+        event.extractionNotes += ` | Out of plausible range`;
+      }
+      if (isLastRecord && endMinutes === 1440) {
+        event.extractionNotes += ' | End derived (day boundary)';
+      }
+      allEvents.push(event);
+    }
   }
-  
+
   return allEvents;
 }
 

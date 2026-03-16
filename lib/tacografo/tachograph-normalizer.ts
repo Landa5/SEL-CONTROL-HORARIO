@@ -58,6 +58,23 @@ export interface DailySummary {
   sourceDataOrigin: string | null;
   averageConfidence: 'low' | 'medium' | 'high';
   importedFromCount: number;
+
+  // Desglose de cobertura
+  ownSourceMinutes: number;
+  inheritedSplitMinutes: number;
+  rawEventsCount: number;
+
+  // Ratios (SOLO DESCRIPTIVOS — no determinan consolidación)
+  calendarCoverageRatio: number;  // (ownSource + inherited) / 1440
+  totalCoverageRatio: number;     // = calendarCoverageRatio (sin gapFill)
+
+  // Consolidación a nivel de día
+  dayConsolidationStatus:
+    | 'VALID'
+    | 'PARTIAL'
+    | 'BLOCKED_NO_SOURCE'
+    | 'BLOCKED_CONFLICT'
+    | 'BLOCKED_LOW_CONFIDENCE';
 }
 
 export interface RegulationIncident {
@@ -515,20 +532,39 @@ function calculateDailySummaries(events: NormalizedEventData[]): DailySummary[] 
   const summaries: DailySummary[] = [];
 
   for (const [date, dayEvents] of byDay) {
-    // Solo incluir eventos que no estén excluidos
     const includedEvents = dayEvents.filter(e => e.consolidationStatus !== 'excluded');
-    
+
     const driving = sumByType(includedEvents, 'DRIVING');
     const otherWork = sumByType(includedEvents, 'OTHER_WORK');
     const availability = sumByType(includedEvents, 'AVAILABILITY');
     const rest = sumByType(includedEvents, 'REST');
     const breakMins = sumByType(includedEvents, 'BREAK');
-    
+
+    // Desglose de cobertura
+    const ownSourceEvents = includedEvents.filter(e => !e.isSplitCrossMidnight || e.extractionMethod !== 'derived');
+    const inheritedSplits = includedEvents.filter(e => e.isSplitCrossMidnight && e.extractionMethod === 'derived');
+    const gapFills = includedEvents.filter(e => e.consolidationReason?.includes('Gap fill'));
+
+    const ownSourceMinutes = ownSourceEvents
+      .filter(e => !gapFills.includes(e))
+      .reduce((s, e) => s + e.durationMinutes, 0);
+    const inheritedSplitMinutes = inheritedSplits.reduce((s, e) => s + e.durationMinutes, 0);
+
+    // rawEventsCount: count non-split, non-gap-fill events with parentRawEventIndex >= 0
+    const rawEventsCount = ownSourceEvents
+      .filter(e => e.parentRawEventIndex >= 0 && !gapFills.includes(e))
+      .length;
+
+    // Coverage ratios (DESCRIPTIVOS, sin gapFill)
+    const observedMinutes = ownSourceMinutes + inheritedSplitMinutes;
+    const calendarCoverageRatio = Math.min(1, observedMinutes / 1440);
+    const totalCoverageRatio = calendarCoverageRatio; // Sin gapFill
+
     const totalCovered = driving + otherWork + availability + rest + breakMins;
     const coveragePercent = Math.min(100, Math.round((totalCovered / 1440) * 100));
     const gapMinutes = Math.max(0, 1440 - totalCovered);
-    
-    // Determine consistency
+
+    // Consistency (visual)
     let consistency: DailySummary['consistencyStatus'] = 'ok';
     if (dayEvents.some(e => e.consolidationStatus === 'excluded')) {
       consistency = 'conflict';
@@ -537,14 +573,31 @@ function calculateDailySummaries(events: NormalizedEventData[]): DailySummary[] 
     } else if (coveragePercent < 50) {
       consistency = 'warning';
     }
-    
+
     // Source origin
     const sources = new Set(dayEvents.map(e => e.sourceType));
     const sourceDataOrigin = sources.size > 1 ? 'MIXED' : sources.values().next().value || null;
-    
+
     // Average confidence
     const confidences = includedEvents.map(e => e.confidenceLevel);
     const avgConf = confidences.includes('low') ? 'low' : confidences.includes('medium') ? 'medium' : 'high';
+
+    // confidenceWeightedScore: Σ(min × weight) / Σ(min)
+    const confWeights: Record<string, number> = { high: 1.0, medium: 0.6, low: 0.2 };
+    const totalMinutesForScore = includedEvents.reduce((s, e) => s + e.durationMinutes, 0);
+    const weightedSum = includedEvents.reduce((s, e) => {
+      return s + e.durationMinutes * (confWeights[e.confidenceLevel] || 0.2);
+    }, 0);
+    const confidenceWeightedScore = totalMinutesForScore > 0 ? weightedSum / totalMinutesForScore : 0;
+
+    // dayConsolidationStatus
+    let dayConsolidationStatus: DailySummary['dayConsolidationStatus'] = 'VALID';
+    if (rawEventsCount === 0) {
+      dayConsolidationStatus = 'BLOCKED_NO_SOURCE';
+    } else if (confidenceWeightedScore < 0.3) {
+      dayConsolidationStatus = 'BLOCKED_LOW_CONFIDENCE';
+    }
+    // BLOCKED_CONFLICT: detected later in service layer (SOURCE_OVERLAP, DUPLICATE_IMPORT_CONFLICT, VEHICLE_MISMATCH, TIMESTAMP_ANOMALY)
 
     summaries.push({
       date,
@@ -559,6 +612,12 @@ function calculateDailySummaries(events: NormalizedEventData[]): DailySummary[] 
       sourceDataOrigin,
       averageConfidence: avgConf,
       importedFromCount: 1,
+      ownSourceMinutes,
+      inheritedSplitMinutes,
+      rawEventsCount,
+      calendarCoverageRatio,
+      totalCoverageRatio,
+      dayConsolidationStatus,
     });
   }
 
