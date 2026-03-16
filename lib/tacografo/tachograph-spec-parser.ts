@@ -126,22 +126,25 @@ function readTimestamp(buf: Buffer, offset: number): Date | null {
   return null;
 }
 
-// ====================================
-// TLV Scanner
-// ====================================
-
 /**
- * Scans the buffer for known TLV tags (2-byte tags).
- * Length encoding per EU spec:
- *   - If first byte <= 0x7F: length = 1 byte
- *   - If first byte == 0x81: length = next 1 byte
- *   - If first byte == 0x82: length = next 2 bytes (BE)
+ * Scans the buffer for known TLV tags.
+ * 
+ * Supports TWO formats:
+ * 
+ * 1. EU Standard (2-byte tags): Tag(2) + Length encoding (1-3 bytes)
+ *    Tags: 0x0501–0x050C
+ *    Length: short form (<=0x7F), 0x81+1byte, 0x82+2bytes
+ * 
+ * 2. TREP Format (1-byte tags): Tag(1) + Length(2 bytes BE)
+ *    Used by Spanish TREP download software for TGD files
+ *    Tags: 0x01–0x11 (mapped to EU equivalents)
+ *    The TREP format wraps the raw data in a simpler container
  */
 function findTLVBlocks(buf: Buffer): TLVBlock[] {
   const blocks: TLVBlock[] = [];
   
-  // Known tags to look for
-  const knownTags = new Set([
+  // --- Strategy 1: Try 2-byte EU tags ---
+  const knownTags2B = new Set([
     TAG_EF_IDENTIFICATION, TAG_EF_CARD_DOWNLOAD, TAG_EF_DRIVING_LICENCE,
     TAG_EF_EVENTS_DATA, TAG_EF_FAULTS_DATA, TAG_EF_DRIVER_ACTIVITY,
     TAG_EF_VEHICLES_USED, TAG_EF_PLACES, TAG_EF_CONTROL_ACTIVITY,
@@ -150,11 +153,10 @@ function findTLVBlocks(buf: Buffer): TLVBlock[] {
   
   for (let i = 0; i < buf.length - 4; i++) {
     const tag = readUint16BE(buf, i);
-    if (!knownTags.has(tag)) continue;
+    if (!knownTags2B.has(tag)) continue;
     
-    // Read length
     let dataLength = 0;
-    let headerSize = 2; // tag = 2 bytes
+    let headerSize = 2;
     
     const lenByte = buf[i + 2];
     if (lenByte <= 0x7f) {
@@ -169,24 +171,143 @@ function findTLVBlocks(buf: Buffer): TLVBlock[] {
       dataLength = readUint16BE(buf, i + 3);
       headerSize += 3;
     } else {
-      continue; // Unknown length encoding
+      continue;
     }
     
-    // Sanity checks
-    if (dataLength <= 0) continue;
-    if (dataLength > 100000) continue; // driver card data shouldn't be > 100KB per block
+    if (dataLength <= 0 || dataLength > 100000) continue;
     if (i + headerSize + dataLength > buf.length) continue;
     
-    blocks.push({
-      tag,
-      offset: i + headerSize,
-      length: dataLength,
-      headerSize,
-    });
+    blocks.push({ tag, offset: i + headerSize, length: dataLength, headerSize });
+  }
+  
+  if (blocks.length > 0) return blocks;
+  
+  // --- Strategy 2: Try TREP format (1-byte tag + 2-byte length BE) ---
+  // TREP file structure: sequential blocks of [tag(1)][length(2BE)][data(length)]
+  
+  const TREP_TAG_MAP: Record<number, number> = {
+    0x01: 0x0002,  // MF / ICC
+    0x02: 0x0002,  // Card ICC
+    0x05: 0x0002,  // Card Certificate
+    0x07: TAG_EF_IDENTIFICATION,
+    0x08: TAG_EF_CARD_DOWNLOAD,
+    0x09: TAG_EF_DRIVING_LICENCE,
+    0x0A: TAG_EF_EVENTS_DATA,
+    0x0B: TAG_EF_FAULTS_DATA,
+    0x0C: TAG_EF_DRIVER_ACTIVITY,   // <-- KEY
+    0x0D: TAG_EF_VEHICLES_USED,
+    0x0E: TAG_EF_PLACES,
+    0x10: TAG_EF_CONTROL_ACTIVITY,
+    0x11: TAG_EF_SPECIFIC_CONDITIONS,
+  };
+  
+  let pos = 0;
+  let maxIter = 200;
+  let trepFound = 0;
+  
+  while (pos < buf.length - 3 && maxIter-- > 0) {
+    const trepTag = buf[pos];
     
-    // Skip past this block to avoid nested false matches
-    // Don't skip — we want to find all occurrences since there may be
-    // both a data block and a signature block for each EF
+    // Check if this is a known TREP tag
+    if (TREP_TAG_MAP[trepTag] !== undefined) {
+      const trepLen = readUint16BE(buf, pos + 1);
+      
+      if (trepLen > 0 && trepLen < buf.length && pos + 3 + trepLen <= buf.length) {
+        const euTag = TREP_TAG_MAP[trepTag];
+        blocks.push({
+          tag: euTag,
+          offset: pos + 3,
+          length: trepLen,
+          headerSize: 3, // 1 byte tag + 2 bytes length
+        });
+        trepFound++;
+        pos += 3 + trepLen;
+        continue;
+      }
+    }
+    
+    // Not a valid TREP tag at this position, advance by 1
+    pos++;
+  }
+  
+  if (blocks.length > 0) return blocks;
+  
+  // --- Strategy 3: Try TREP with FID (File ID) prefix ---
+  // Some TGD files have: FID(2 bytes) + Tag(1) + Length(2BE) + Data
+  // Or: 0x00 + Tag + Length + Data (padded)
+  
+  pos = 0;
+  maxIter = 200;
+  
+  // Try to find the driver activity data by scanning for the pattern:
+  // A valid record starts with Length(2BE) then timestamp(4bytes midnight-aligned)
+  // We look for this pattern throughout the file
+  const SECONDS_PER_DAY = 86400;
+  
+  for (let i = 0; i < buf.length - 10; i++) {
+    const possibleRecLen = readUint16BE(buf, i);
+    if (possibleRecLen < 12 || possibleRecLen > 1000) continue;
+    
+    const possibleTs = readUint32BE(buf, i + 2);
+    if (possibleTs < 1577836800 || possibleTs > 1900000000) continue; // 2020-2030
+    if (possibleTs % SECONDS_PER_DAY !== 0) continue; // must be midnight
+    
+    // Check if the timestamps are followed by valid activity records
+    const presenceCounter = readUint16BE(buf, i + 6);
+    const dayDistance = readUint16BE(buf, i + 8);
+    
+    // Validate: check first activity record at offset +10
+    if (i + 11 < buf.length) {
+      const firstActivity = readUint16BE(buf, i + 10);
+      const actMinutes = firstActivity & 0x07FF;
+      if (actMinutes <= 1439 && firstActivity !== 0 && firstActivity !== 0xFFFF) {
+        // This looks like a valid CardActivityDailyRecord!
+        // Try to find the start of the activity data area
+        // Walk backwards to find the 4-byte header (oldestPtr + newestPtr)
+        
+        // The data area starts 4 bytes before the first record (if it starts at oldestPtr=0)
+        // But we need to find the actual beginning. Let's try i-4
+        let areaStart = i;
+        
+        // Check if i-4 has valid pointers
+        if (i >= 4) {
+          const ptr1 = readUint16BE(buf, i - 4);
+          const ptr2 = readUint16BE(buf, i - 2);
+          // Pointers should be reasonable offsets
+          if (ptr1 < 50000 && ptr2 < 50000) {
+            areaStart = i - 4;
+          }
+        }
+        
+        // Estimate the total activity data area size
+        // Scan forward to find how far the records go
+        let endPos = i;
+        let scanIter = 300;
+        while (endPos < buf.length - 6 && scanIter-- > 0) {
+          const recLen = readUint16BE(buf, endPos);
+          if (recLen < 10 || recLen > 1500) break;
+          const recTs = readUint32BE(buf, endPos + 2);
+          if (recTs === 0 || recTs === 0xFFFFFFFF) {
+            endPos += recLen;
+            continue;
+          }
+          const recDate = new Date(recTs * 1000);
+          if (recDate.getFullYear() < 2000 || recDate.getFullYear() > 2040) break;
+          endPos += recLen;
+        }
+        
+        const totalLen = endPos - areaStart;
+        if (totalLen > 100) {
+          blocks.push({
+            tag: TAG_EF_DRIVER_ACTIVITY,
+            offset: areaStart,
+            length: totalLen,
+            headerSize: 0,
+          });
+          return blocks; // Found it — return immediately
+        }
+      }
+    }
   }
   
   return blocks;
@@ -493,7 +614,11 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
   const tlvBlocks = findTLVBlocks(buffer);
   
   if (tlvBlocks.length === 0) {
-    warnings.push('No TLV blocks found — file may not be a standard EU driver card format.');
+    // Add hex dump for remote diagnostics
+    const hexPreview = Array.from(buffer.subarray(0, Math.min(100, buffer.length)))
+      .map(b => b.toString(16).padStart(2, '0')).join(' ');
+    warnings.push(`No TLV blocks found. First 100 bytes: ${hexPreview}`);
+    warnings.push(`File size: ${buffer.length} bytes. First byte: 0x${buffer[0].toString(16)}`);
     return {
       success: false,
       fileType: 'DRIVER_CARD',
