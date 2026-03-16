@@ -613,12 +613,22 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
   // 1. Find all TLV blocks
   const tlvBlocks = findTLVBlocks(buffer);
   
-  if (tlvBlocks.length === 0) {
-    // Add hex dump for remote diagnostics
-    const hexPreview = Array.from(buffer.subarray(0, Math.min(100, buffer.length)))
+  // ALWAYS add diagnostic info for remote debugging
+  const hexFirst200 = Array.from(buffer.subarray(0, Math.min(200, buffer.length)))
+    .map(b => b.toString(16).padStart(2, '0')).join(' ');
+  warnings.push(`[DIAG] File: ${buffer.length} bytes. First 200: ${hexFirst200}`);
+  
+  for (const blk of tlvBlocks) {
+    const tagHex = blk.tag.toString(16).padStart(4, '0');
+    const ctxStart = Math.max(0, blk.offset - blk.headerSize - 5);
+    const ctxEnd = Math.min(buffer.length, blk.offset + Math.min(blk.length, 40));
+    const ctxHex = Array.from(buffer.subarray(ctxStart, ctxEnd))
       .map(b => b.toString(16).padStart(2, '0')).join(' ');
-    warnings.push(`No TLV blocks found. First 100 bytes: ${hexPreview}`);
-    warnings.push(`File size: ${buffer.length} bytes. First byte: 0x${buffer[0].toString(16)}`);
+    warnings.push(`[DIAG] Block 0x${tagHex} @offset=0x${(blk.offset - blk.headerSize).toString(16)} hdr=${blk.headerSize} len=${blk.length}. Context: ${ctxHex}`);
+  }
+  
+  if (tlvBlocks.length === 0) {
+    warnings.push(`No TLV blocks found in any format.`);
     return {
       success: false,
       fileType: 'DRIVER_CARD',
