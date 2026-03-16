@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/Button";
 import { format } from 'date-fns';
-import { Truck, MapPin, Building2, AlertTriangle, Save, Loader2, UserPlus, AlertCircle, Lock } from 'lucide-react';
+import { Truck, MapPin, Building2, AlertTriangle, Save, Loader2, UserPlus, AlertCircle, Lock, Wrench, Shield } from 'lucide-react';
 
 interface TaskFormProps {
     rol: string; // 'ADMIN', 'CONDUCTOR', etc.
@@ -37,6 +37,18 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
     const [ubicacionTexto, setUbicacionTexto] = useState(initialData?.ubicacionTexto || '');
     const [contactoNombre, setContactoNombre] = useState(initialData?.contactoNombre || '');
     const [contactoTelefono, setContactoTelefono] = useState(initialData?.contactoTelefono || '');
+
+    // Extension Taller fields
+    const [tallerGravedad, setTallerGravedad] = useState(initialData?.extensionTaller?.gravedad || '');
+    const [tallerDiagnostico, setTallerDiagnostico] = useState(initialData?.extensionTaller?.diagnosticoInicial || '');
+    const [vehiculoInmovilizado, setVehiculoInmovilizado] = useState(initialData?.extensionTaller?.vehiculoInmovilizado || false);
+
+    // Extension Reclamacion fields
+    const [reclamacionCanal, setReclamacionCanal] = useState(initialData?.extensionReclamacion?.canalEntrada || '');
+    const [reclamacionGravedad, setReclamacionGravedad] = useState(initialData?.extensionReclamacion?.gravedad || '');
+    const [reclamacionCliente, setReclamacionCliente] = useState(initialData?.extensionReclamacion?.clienteNombre || '');
+    const [reclamacionTelefono, setReclamacionTelefono] = useState(initialData?.extensionReclamacion?.clienteTelefono || '');
+    const [empleadoImplicadoId, setEmpleadoImplicadoId] = useState(initialData?.extensionReclamacion?.empleadoImplicadoId || '');
 
     const [camiones, setCamiones] = useState<any[]>([]);
 
@@ -90,8 +102,29 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                 contactoNombre: contactoNombre || null,
                 contactoTelefono: contactoTelefono || null,
                 asignadoAId: asignadoAId ? Number(asignadoAId) : null,
-                proyectoId: proyectoId ? Number(proyectoId) : null
+                proyectoId: proyectoId ? Number(proyectoId) : null,
             };
+
+            // Extension taller
+            if (tipo === 'TALLER') {
+                payload.extensionTaller = {
+                    diagnosticoInicial: tallerDiagnostico || undefined,
+                    vehiculoInmovilizado,
+                    kmReporte: kilometros ? Number(kilometros) : undefined,
+                };
+                if (tallerGravedad) payload.extensionTaller.gravedad = tallerGravedad;
+            }
+
+            // Extension reclamacion
+            if (tipo === 'RECLAMACION') {
+                payload.extensionReclamacion = {
+                    canalEntrada: reclamacionCanal || undefined,
+                    gravedad: reclamacionGravedad || undefined,
+                    clienteNombre: reclamacionCliente || undefined,
+                    clienteTelefono: reclamacionTelefono || undefined,
+                    empleadoImplicadoId: empleadoImplicadoId ? Number(empleadoImplicadoId) : undefined,
+                };
+            }
 
             let res;
             if (initialData?.id) {
@@ -139,11 +172,10 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                                 value={tipo}
                                 onChange={(e) => setTipo(e.target.value)}
                             >
-                                <option value="TAREA_INTERNA">Tarea Interna / Gestión</option>
-                                <option value="AVERIA">Avería / Incidencia</option>
-                                <option value="MANTENIMIENTO">Mantenimiento (Legacy)</option>
-                                <option value="RECLAMACION">Reclamación (Privado)</option>
+                                <option value="OPERATIVA">Tarea Operativa</option>
+                                <option value="ADMINISTRATIVA">Tarea Administrativa</option>
                                 <option value="TALLER">Taller / Mecánica</option>
+                                <option value="RECLAMACION">Reclamación</option>
                             </select>
                         </div>
 
@@ -385,6 +417,93 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                     </div>
                 )}
             </div>
+
+            {/* EXTENSIÓN TALLER */}
+            {tipo === 'TALLER' && (
+                <div className="bg-orange-50 p-4 rounded-xl border border-orange-200 space-y-4 animate-in fade-in">
+                    <h4 className="text-xs font-black text-orange-800 uppercase tracking-wider flex items-center gap-2">
+                        <Wrench className="w-3.5 h-3.5" /> Datos de Taller
+                    </h4>
+                    <div className="space-y-1">
+                        <label className="text-xs font-bold text-gray-600">Diagnóstico inicial</label>
+                        <textarea
+                            rows={2}
+                            placeholder="¿Qué síntomas presenta? Ruidos, testigos, comportamiento..."
+                            className="w-full p-2 rounded-lg border border-orange-200 text-sm focus:ring-2 focus:ring-orange-400"
+                            value={tallerDiagnostico}
+                            onChange={(e) => setTallerDiagnostico(e.target.value)}
+                        />
+                    </div>
+                    <label className="flex items-center gap-3 cursor-pointer bg-white p-3 rounded-lg border">
+                        <input
+                            type="checkbox"
+                            className="w-5 h-5 text-red-600 rounded focus:ring-red-500"
+                            checked={vehiculoInmovilizado}
+                            onChange={(e) => setVehiculoInmovilizado(e.target.checked)}
+                        />
+                        <div>
+                            <span className="block text-sm font-bold text-red-900">Vehículo Inmovilizado</span>
+                            <span className="text-xs text-gray-500">Marcar si el vehículo no puede circular</span>
+                        </div>
+                    </label>
+                </div>
+            )}
+
+            {/* EXTENSIÓN RECLAMACIÓN */}
+            {tipo === 'RECLAMACION' && (
+                <div className="bg-purple-50 p-4 rounded-xl border border-purple-200 space-y-4 animate-in fade-in">
+                    <h4 className="text-xs font-black text-purple-800 uppercase tracking-wider flex items-center gap-2">
+                        <Shield className="w-3.5 h-3.5" /> Datos de Reclamación
+                    </h4>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-600">Canal de entrada</label>
+                            <select className="w-full p-2 border rounded-lg text-sm" value={reclamacionCanal}
+                                onChange={e => setReclamacionCanal(e.target.value)}>
+                                <option value="">-- Seleccionar --</option>
+                                <option value="TELEFONO">Teléfono</option>
+                                <option value="EMAIL">Email</option>
+                                <option value="PRESENCIAL">Presencial</option>
+                                <option value="FORMULARIO_WEB">Formulario Web</option>
+                                <option value="OTRO">Otro</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-600">Gravedad</label>
+                            <select className="w-full p-2 border rounded-lg text-sm" value={reclamacionGravedad}
+                                onChange={e => setReclamacionGravedad(e.target.value)}>
+                                <option value="">-- Seleccionar --</option>
+                                <option value="LEVE">Leve</option>
+                                <option value="MODERADA">Moderada</option>
+                                <option value="GRAVE">Grave</option>
+                                <option value="CRITICA">Crítica</option>
+                            </select>
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-600">Nombre del cliente</label>
+                            <input type="text" placeholder="Nombre..." className="w-full p-2 border rounded-lg text-sm"
+                                value={reclamacionCliente} onChange={e => setReclamacionCliente(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-600">Teléfono cliente</label>
+                            <input type="tel" placeholder="600 000 000" className="w-full p-2 border rounded-lg text-sm"
+                                value={reclamacionTelefono} onChange={e => setReclamacionTelefono(e.target.value)} />
+                        </div>
+                    </div>
+                    {(rol === 'ADMIN' || rol === 'OFICINA') && (
+                        <div className="space-y-1">
+                            <label className="text-xs font-bold text-gray-600">Empleado implicado (opcional)</label>
+                            <select className="w-full p-2 border rounded-lg text-sm" value={empleadoImplicadoId}
+                                onChange={e => setEmpleadoImplicadoId(e.target.value)}>
+                                <option value="">-- Ninguno --</option>
+                                {empleados.map(emp => (
+                                    <option key={emp.id} value={emp.id}>{emp.nombre} ({emp.rol})</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* DETALLES DE LA INCIDENCIA */}
             <div className="space-y-4">

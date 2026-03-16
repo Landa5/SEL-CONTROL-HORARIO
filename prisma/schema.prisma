@@ -56,6 +56,13 @@ model Empleado {
   historialTareas     TareaHistorial[]
   adjuntos            TareaAdjunto[]
   notificaciones      Notificacion[]
+
+  // Rediseño v3.1 - Centro Operativo
+  participacionesTareas    TareaParticipante[]
+  reclamacionesImplicado   TareaReclamacion[]  @relation("ImplicadoReclamacion")
+  proyectosResponsable     Proyecto[]          @relation("ResponsableProyecto")
+  miembrosProyecto         ProyectoMiembro[]
+  notificacionesGeneradas  Notificacion[]      @relation("NotificacionActor")
   auditorias          Auditoria[]
   compensaciones      CompensacionFestivo[]
   modulosCreados      ModuloFormacion[]     @relation("CreadorModulo")
@@ -258,6 +265,86 @@ enum TareaEstado {
   CANCELADA
 }
 
+// ═══ Rediseño v3.1 - Nuevos Enums ═══
+
+enum TareaVisibilidad {
+  GENERAL
+  EQUIPO
+  DIRIGIDA
+  PERSONAL
+  CONFIDENCIAL
+}
+
+enum AreaResponsable {
+  TALLER
+  OFICINA
+  OPERACIONES
+  ADMIN
+  COMERCIAL
+}
+
+enum RolParticipacion {
+  RESPONSABLE
+  SEGUIDOR
+  AFECTADO
+  OBSERVADOR
+  IMPLICADO
+}
+
+enum TipoAveria {
+  MOTOR
+  FRENOS
+  ELECTRICO
+  NEUMATICOS
+  CARROCERIA
+  CISTERNA
+  HIDRAULICO
+  TRANSMISION
+  SUSPENSION
+  ESCAPE
+  REFRIGERACION
+  OTRO
+}
+
+enum GravedadReclamacion {
+  LEVE
+  MEDIA
+  GRAVE
+  CRITICA
+}
+
+enum CanalEntrada {
+  TELEFONO
+  EMAIL
+  PRESENCIAL
+  ESCRITO
+  WEB
+  OTRO
+}
+
+enum ProyectoPrioridad {
+  BAJA
+  MEDIA
+  ALTA
+}
+
+enum RolProyecto {
+  RESPONSABLE
+  MIEMBRO
+  OBSERVADOR
+}
+
+enum TipoNotificacion {
+  TAREA_CREADA
+  TAREA_ASIGNADA
+  CAMBIO_ESTADO
+  COMENTARIO_NUEVO
+  AVERIA_REPORTADA
+  RECLAMACION_NUEVA
+  MENCION
+  TAREA_VENCIDA
+}
+
 model Tarea {
   id Int @id @default(autoincrement())
 
@@ -316,12 +403,27 @@ model Tarea {
   proyectoId Int?
   proyecto   Proyecto? @relation(fields: [proyectoId], references: [id])
 
+  // ═══ Rediseño v3.1 - Nuevos campos ═══
+  visibilidad             TareaVisibilidad @default(GENERAL)
+  subtipo                 String?
+  areaResponsable         AreaResponsable?
+  reportadoPorCliente     Boolean          @default(false)
+  requiereValidacionDireccion Boolean      @default(false)
+
+  // Nuevas relaciones v3.1
+  participantes        TareaParticipante[]
+  extensionTaller      TareaTaller?
+  extensionReclamacion TareaReclamacion?
+  notificacionesTarea  Notificacion[]     @relation("NotificacionTarea")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([asignadoAId])
   @@index([creadoPorId])
   @@index([estado, prioridad])
+  @@index([visibilidad])
+  @@index([tipo, areaResponsable])
 }
 
 enum ProyectoEstado {
@@ -338,6 +440,15 @@ model Proyecto {
   estado      ProyectoEstado @default(PENDIENTE)
 
   tareas Tarea[]
+
+  // ═══ Rediseño v3.1 ═══
+  responsableId Int?
+  responsable   Empleado?         @relation("ResponsableProyecto", fields: [responsableId], references: [id])
+  fechaInicio   DateTime?
+  fechaFin      DateTime?
+  prioridad     ProyectoPrioridad?
+
+  miembros ProyectoMiembro[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -436,9 +547,113 @@ model Notificacion {
 
   mensaje String
   link    String?
-  leida   Boolean @default(false)
+  leida   Boolean @default(false) // @deprecated - usar readAt
+
+  // ═══ Rediseño v3.1 ═══
+  tipo     TipoNotificacion?
+  canal    String?            @default("INTERNA")
+  tareaId  Int?
+  tarea    Tarea?             @relation("NotificacionTarea", fields: [tareaId], references: [id])
+  actorId  Int?
+  actor    Empleado?          @relation("NotificacionActor", fields: [actorId], references: [id])
+  hash     String?
+  readAt   DateTime?
+  enviada  Boolean            @default(false)
 
   createdAt DateTime @default(now())
+
+  @@index([hash])
+  @@index([usuarioId, readAt])
+}
+
+// ═══════════════════════════════════════════════════
+// ═══ Rediseño v3.1 - Nuevas tablas ═══
+// ═══════════════════════════════════════════════════
+
+model TareaParticipante {
+  id               Int              @id @default(autoincrement())
+  tareaId          Int
+  tarea            Tarea            @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+  empleadoId       Int
+  empleado         Empleado         @relation(fields: [empleadoId], references: [id])
+  rolParticipacion RolParticipacion
+  notificar        Boolean          @default(true)
+  createdAt        DateTime         @default(now())
+
+  @@unique([tareaId, empleadoId])
+}
+
+model TareaTaller {
+  id      Int   @id @default(autoincrement())
+  tareaId Int   @unique
+  tarea   Tarea @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+
+  // Analítico (enum)
+  tipoAveria TipoAveria?
+
+  // Numérico
+  kmReporte                 Int?
+  costeEstimado             Float?
+  costeFinal                Float?
+  tiempoInmovilizacionHoras Float?
+
+  // Flags
+  vehiculoInmovilizado Boolean @default(false)
+  puedeCircular        Boolean @default(true)
+  requiereGrua         Boolean @default(false)
+
+  // Operativo (texto libre)
+  detalleAveria      String?
+  diagnosticoInicial String?
+  diagnosticoFinal   String?
+  proveedorTaller    String?
+  piezaPendiente     String?
+
+  // Fechas de proceso
+  fechaEntradaTaller DateTime?
+  fechaSalidaTaller  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TareaReclamacion {
+  id      Int   @id @default(autoincrement())
+  tareaId Int   @unique
+  tarea   Tarea @relation(fields: [tareaId], references: [id], onDelete: Cascade)
+
+  // Analítico (enum)
+  canalEntrada CanalEntrada?
+  gravedad     GravedadReclamacion?
+
+  // Operativo
+  clienteNombre        String?
+  clienteTelefono      String?
+  empleadoImplicadoId  Int?
+  empleadoImplicado    Empleado?  @relation("ImplicadoReclamacion", fields: [empleadoImplicadoId], references: [id])
+  visibleParaImplicado Boolean    @default(false)
+  detalleGravedad      String?
+
+  // Proceso respuesta
+  requiereRespuestaFormal Boolean  @default(false)
+  respuestaEmitida        Boolean  @default(false)
+  fechaRespuesta          DateTime?
+  accionCorrectiva        String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ProyectoMiembro {
+  id         Int         @id @default(autoincrement())
+  proyectoId Int
+  proyecto   Proyecto    @relation(fields: [proyectoId], references: [id], onDelete: Cascade)
+  empleadoId Int
+  empleado   Empleado    @relation(fields: [empleadoId], references: [id])
+  rol        RolProyecto @default(MIEMBRO)
+  createdAt  DateTime    @default(now())
+
+  @@unique([proyectoId, empleadoId])
 }
 
 enum RolEmpleado {

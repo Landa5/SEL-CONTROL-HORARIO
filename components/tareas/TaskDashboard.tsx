@@ -10,11 +10,16 @@ import {
     RefreshCw,
     LayoutGrid,
     List,
-    Filter
+    Filter,
+    Wrench,
+    ClipboardList,
+    AlertTriangle
 } from 'lucide-react';
 import { TaskBoard } from './kanban/TaskBoard';
 import TaskList from './list/TaskList';
 import TaskDetailPanel from './TaskDetailPanel';
+import NotificationBell from './NotificationBell';
+import TallerDashboard from './TallerDashboard';
 
 interface TaskDashboardProps {
     rol: string;
@@ -28,7 +33,8 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
     const [tasks, setTasks] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [view, setView] = useState<'BOARD' | 'LIST'>('BOARD');
-    const [activeTab, setActiveTab] = useState<'TAREAS' | 'PROYECTOS'>('TAREAS');
+    const [activeTab, setActiveTab] = useState<'TAREAS' | 'PROYECTOS' | 'TALLER'>('TAREAS');
+    const [tipoFilter, setTipoFilter] = useState<string>('TODAS');
     const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
     const [filterText, setFilterText] = useState('');
     const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -96,6 +102,11 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
     const filteredTasks = tasks.filter(t => {
         if (selectedProject && t.proyectoId !== selectedProject.id) return false;
 
+        // Filtro por tipo
+        if (tipoFilter === 'AVERIAS' && t.tipo !== 'TALLER') return false;
+        if (tipoFilter === 'TAREAS_INTERNAS' && !['OPERATIVA', 'ADMINISTRATIVA'].includes(t.tipo)) return false;
+        if (tipoFilter === 'RECLAMACIONES' && t.tipo !== 'RECLAMACION') return false;
+
         return (
             t.titulo.toLowerCase().includes(filterText.toLowerCase()) ||
             t.matricula?.toLowerCase().includes(filterText.toLowerCase()) ||
@@ -117,7 +128,7 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
                     onClick={() => setActiveTab('TAREAS')}
                     className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${activeTab === 'TAREAS' ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
                 >
-                    Tareas
+                    Centro Operativo
                 </button>
                 <button
                     onClick={() => setActiveTab('PROYECTOS')}
@@ -125,9 +136,21 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
                 >
                     Proyectos
                 </button>
+                {['ADMIN', 'OFICINA', 'MECANICO'].includes(rol) && (
+                    <button
+                        onClick={() => setActiveTab('TALLER')}
+                        className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors flex items-center gap-1.5 ${activeTab === 'TALLER' ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Wrench className="w-3.5 h-3.5" /> Taller
+                    </button>
+                )}
             </div>
 
-            {activeTab === 'PROYECTOS' ? (
+            {activeTab === 'TALLER' ? (
+                <div className="flex-1 overflow-auto">
+                    <TallerDashboard />
+                </div>
+            ) : activeTab === 'PROYECTOS' ? (
                 <ProjectManager onSelectProject={handleProjectSelect} />
             ) : (
                 <>
@@ -143,6 +166,39 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
                             </Button>
                         </div>
                     )}
+
+                    {/* Type Filter Pills */}
+                    <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+                        {[
+                            { id: 'TODAS', label: 'Todas', icon: ClipboardList, color: 'blue' },
+                            { id: 'AVERIAS', label: 'Averías / Taller', icon: Wrench, color: 'orange' },
+                            { id: 'TAREAS_INTERNAS', label: 'Tareas Internas', icon: ClipboardList, color: 'green' },
+                            { id: 'RECLAMACIONES', label: 'Reclamaciones', icon: AlertTriangle, color: 'purple' },
+                        ].map(f => (
+                            <button
+                                key={f.id}
+                                onClick={() => setTipoFilter(f.id)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all border ${
+                                    tipoFilter === f.id
+                                        ? `bg-${f.color}-100 text-${f.color}-800 border-${f.color}-300 shadow-sm`
+                                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                                <f.icon className="w-3.5 h-3.5" />
+                                {f.label}
+                                {f.id !== 'TODAS' && (
+                                    <span className="ml-1 px-1.5 py-0.5 rounded-full bg-white/70 text-[10px]">
+                                        {tasks.filter(t => {
+                                            if (f.id === 'AVERIAS') return t.tipo === 'TALLER';
+                                            if (f.id === 'TAREAS_INTERNAS') return ['OPERATIVA', 'ADMINISTRATIVA'].includes(t.tipo);
+                                            if (f.id === 'RECLAMACIONES') return t.tipo === 'RECLAMACION';
+                                            return true;
+                                        }).length}
+                                    </span>
+                                )}
+                            </button>
+                        ))}
+                    </div>
 
                     {/* Toolbar */}
                     <div className="mb-6 flex flex-col md:flex-row gap-4 justify-between items-start md:items-center">
@@ -177,6 +233,8 @@ export default function TaskDashboard({ rol, userId }: TaskDashboardProps) {
                             <Button variant="outline" size="icon" onClick={() => setRefreshTrigger(p => p + 1)} title="Recargar">
                                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                             </Button>
+
+                            <NotificationBell />
                         </div>
 
                         <div className="flex gap-2 w-full md:w-auto">
