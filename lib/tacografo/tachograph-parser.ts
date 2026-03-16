@@ -9,6 +9,7 @@
  */
 
 import type { BinaryRawEvent, BinaryParseResult } from './tachograph-binary-parser';
+import { isMinistryCSV, parseMinistryCSV } from './tachograph-csv-parser';
 
 export { BinaryRawEvent, BinaryParseResult };
 
@@ -48,7 +49,7 @@ export interface TachographParseResult {
 }
 
 // Supported file extensions
-const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm'];
+const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm', '.csv'];
 
 function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' {
   const lower = fileName.toLowerCase();
@@ -186,6 +187,43 @@ export async function parseTachographFile(
   _extension: string
 ): Promise<TachographParseResult> {
   try {
+    // Check if this is a Ministry CSV file first
+    if (isMinistryCSV(fileBuffer, fileName)) {
+      console.log('[TachographParser] Detected Ministry CSV format, using CSV parser.');
+      const csvResult = parseMinistryCSV(fileBuffer, fileName);
+      
+      // Supplement metadata from filename
+      if (!csvResult.metadata.plateNumber) {
+        const plate = extractPlateFromFileName(fileName);
+        if (plate) {
+          csvResult.metadata.plateNumber = plate;
+          csvResult.warnings.push('La matrícula se extrajo del nombre del archivo.');
+        }
+      }
+      
+      const cardInfo = extractCardInfoFromFileName(fileName);
+      if (!csvResult.metadata.cardNumber && cardInfo.cardNumber) {
+        csvResult.metadata.cardNumber = cardInfo.cardNumber;
+      }
+      if (cardInfo.dni) {
+        csvResult.metadata.driverDni = cardInfo.dni;
+      }
+      
+      // Generate legacy activities from raw events
+      const legacyActivities = rawEventsToLegacyActivities(csvResult.rawEvents);
+      
+      return {
+        success: csvResult.success,
+        parserVersion: csvResult.parserVersion,
+        fileType: csvResult.fileType,
+        metadata: csvResult.metadata,
+        rawEvents: csvResult.rawEvents,
+        activities: legacyActivities,
+        warnings: csvResult.warnings,
+        errors: csvResult.errors,
+      };
+    }
+    
     const { parseBinaryTachograph } = await import('./tachograph-binary-parser');
     const result = parseBinaryTachograph(fileBuffer, fileName);
     
