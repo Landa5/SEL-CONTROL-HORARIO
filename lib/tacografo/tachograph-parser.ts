@@ -226,6 +226,7 @@ export async function parseTachographFile(
     
     // Detect file type from name
     const detectedType = detectFileType(fileName);
+    let specDiagnosticWarnings: string[] = [];
     
     // For DRIVER_CARD files, try spec parser first (TLV-based, EU 2016/799)
     if (detectedType === 'DRIVER_CARD' || detectedType === 'UNKNOWN') {
@@ -267,13 +268,20 @@ export async function parseTachographFile(
       }
       
       // Spec parser found no events — fall back to heuristic
+      // BUT preserve spec parser warnings for diagnostics (including hex dump)
       console.log('[TachographParser] Spec parser found 0 events, falling back to heuristic parser.');
       specResult.warnings.forEach(w => console.log(`  [spec-warning] ${w}`));
+      specDiagnosticWarnings = specResult.warnings.map(w => `[SPEC] ${w}`);
     }
     
     // Fallback: heuristic binary parser
     const { parseBinaryTachograph } = await import('./tachograph-binary-parser');
     const result = parseBinaryTachograph(fileBuffer, fileName);
+    
+    // Add spec diagnostic warnings to result
+    if (specDiagnosticWarnings.length > 0) {
+      result.warnings.push(...specDiagnosticWarnings);
+    }
     
     // Suplementar metadatos del nombre de archivo
     if (!result.metadata.plateNumber) {
