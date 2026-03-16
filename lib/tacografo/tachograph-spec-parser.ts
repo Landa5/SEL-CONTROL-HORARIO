@@ -1,37 +1,31 @@
 /**
- * TachographSpecParser — Parser según especificación EU 2016/799 Annex IC
+ * TachographSpecParser v2 — Parser directo de archivos TGD de tarjeta de conductor
  * 
- * Parsea archivos TGD/DDD de tarjeta de conductor (DRIVER_CARD) usando
- * la estructura TLV real del estándar EU.
+ * Estrategia: en vez de buscar tags TLV (que varían según el software de descarga),
+ * busca DIRECTAMENTE los patrones de CardActivityDailyRecord en el buffer binario.
  * 
- * Bloque principal: EF_Driver_Activity_Data (tag 0x0506)
- * Estructura: CardDriverActivity = {
- *   activityPointerOldestDayRecord  (2 bytes),
- *   activityPointerNewestRecord     (2 bytes),
- *   activityDailyRecords — buffer cíclico de CardActivityDailyRecord
- * }
+ * Un CardActivityDailyRecord tiene esta estructura fija (EU 2016/799):
+ *   [recordLength:2][recordDate:4][presenceCounter:2][dayDistance:2][activities:2*N]
  * 
- * Cada CardActivityDailyRecord = {
- *   activityRecordLength       (2 bytes),
- *   activityRecordDate          (4 bytes — TimeReal, Unix timestamp midnight UTC),
- *   activityDailyPresenceCounter (2 bytes),
- *   activityDayDistance          (2 bytes),
- *   activityChangeInfo[]         (2 bytes each)
- * }
+ * Donde:
+ *   - recordLength = total bytes del record (incluyendo este campo)
+ *   - recordDate = Unix timestamp UTC aligned to midnight (divisible por 86400)
+ *   - presenceCounter = incrementa por cada día de uso
+ *   - dayDistance = km recorridos en el día
+ *   - activities = N registros de ActivityChangeInfo de 2 bytes
  * 
- * ActivityChangeInfo (16 bits) = {
- *   slot         (bit 15)    — 0=driver, 1=co-driver
- *   driverStatus (bit 14)    — 0=single, 1=crew
- *   cardStatus   (bit 13)    — 0=not inserted, 1=inserted
- *   activity     (bits 12-11) — 00=REST, 01=AVAILABILITY, 10=OTHER_WORK, 11=DRIVING
- *   time         (bits 10-0)  — minutes from midnight (0-1439)
- * }
+ * ActivityChangeInfo (16 bits):
+ *   bit 15:    slot (0=driver, 1=co-driver)
+ *   bit 14:    driving status (0=single, 1=crew)
+ *   bit 13:    card status (0=not inserted, 1=inserted)  
+ *   bits 12-11: activity (00=REST, 01=AVAILABILITY, 10=OTHER_WORK, 11=DRIVING)
+ *   bits 10-0:  time (minutes from 00:00, 0-1439)
  */
 
 import type { BinaryRawEvent, BinaryParseResult } from './tachograph-binary-parser';
 
 // ====================================
-// Constantes
+// Constantes  
 // ====================================
 
 const ACTIVITY_CODES: Record<number, string> = {
@@ -41,63 +35,37 @@ const ACTIVITY_CODES: Record<number, string> = {
   3: 'DRIVING',
 };
 
-// TLV tags for driver card (EU 2016/799)
-const TAG_EF_IDENTIFICATION     = 0x0501;
-const TAG_EF_CARD_DOWNLOAD      = 0x0502;
-const TAG_EF_DRIVING_LICENCE    = 0x0503;
-const TAG_EF_EVENTS_DATA        = 0x0504;
-const TAG_EF_FAULTS_DATA        = 0x0505;
-const TAG_EF_DRIVER_ACTIVITY    = 0x0506;
-const TAG_EF_VEHICLES_USED      = 0x0507;
-const TAG_EF_PLACES             = 0x0508;
-const TAG_EF_CONTROL_ACTIVITY   = 0x050B;
-const TAG_EF_SPECIFIC_CONDITIONS = 0x050C;
+const SECONDS_PER_DAY = 86400;
+// Rango de timestamps válidos: 2010-01-01 a 2040-01-01
+const TS_MIN = 1262304000; // 2010-01-01
+const TS_MAX = 2208988800; // 2040-01-01
 
 // ====================================
-// Interfaces internas
+// Tipos internos
 // ====================================
-
-interface TLVBlock {
-  tag: number;
-  offset: number;       // offset of data (after tag + length bytes)
-  length: number;       // data length
-  headerSize: number;   // tag + length encoding size
-}
 
 interface DailyRecord {
   date: Date;
-  dateStr: string;       // YYYY-MM-DD
+  dateStr: string;
   recordLength: number;
   presenceCounter: number;
-  dayDistance: number;    // km
+  dayDistance: number;
   activities: ActivityChange[];
   byteOffset: number;
 }
 
 interface ActivityChange {
-  slot: number;          // 0=driver, 1=co-driver
-  driverStatus: number;  // 0=single, 1=crew
+  slot: number;
+  driverStatus: number;
   cardInserted: boolean;
-  activityCode: number;  // 0-3
-  activityType: string;  // REST, AVAILABILITY, OTHER_WORK, DRIVING
-  minutes: number;       // minutes from midnight
-}
-
-interface VehicleUsedRecord {
-  vrn: string;           // vehicle registration number
-  startDate: Date | null;
-  endDate: Date | null;
-  nation: string | null;
+  activityCode: number;
+  activityType: string;
+  minutes: number;
 }
 
 // ====================================
-// Binary reading utilities
+// Binary helpers
 // ====================================
-
-function readUint8(buf: Buffer, offset: number): number {
-  if (offset >= buf.length) return 0;
-  return buf[offset];
-}
 
 function readUint16BE(buf: Buffer, offset: number): number {
   if (offset + 1 >= buf.length) return 0;
@@ -118,309 +86,92 @@ function readAsciiClean(buf: Buffer, offset: number, length: number): string {
     .trim();
 }
 
-function readTimestamp(buf: Buffer, offset: number): Date | null {
-  const ts = readUint32BE(buf, offset);
-  if (ts === 0 || ts === 0xffffffff) return null;
-  const date = new Date(ts * 1000);
-  if (date.getFullYear() >= 2000 && date.getFullYear() <= 2040) return date;
-  return null;
-}
-
-/**
- * Scans the buffer for known TLV tags.
- * 
- * Supports TWO formats:
- * 
- * 1. EU Standard (2-byte tags): Tag(2) + Length encoding (1-3 bytes)
- *    Tags: 0x0501–0x050C
- *    Length: short form (<=0x7F), 0x81+1byte, 0x82+2bytes
- * 
- * 2. TREP Format (1-byte tags): Tag(1) + Length(2 bytes BE)
- *    Used by Spanish TREP download software for TGD files
- *    Tags: 0x01–0x11 (mapped to EU equivalents)
- *    The TREP format wraps the raw data in a simpler container
- */
-function findTLVBlocks(buf: Buffer): TLVBlock[] {
-  const blocks: TLVBlock[] = [];
-  
-  // --- Strategy 1: Try 2-byte EU tags ---
-  const knownTags2B = new Set([
-    TAG_EF_IDENTIFICATION, TAG_EF_CARD_DOWNLOAD, TAG_EF_DRIVING_LICENCE,
-    TAG_EF_EVENTS_DATA, TAG_EF_FAULTS_DATA, TAG_EF_DRIVER_ACTIVITY,
-    TAG_EF_VEHICLES_USED, TAG_EF_PLACES, TAG_EF_CONTROL_ACTIVITY,
-    TAG_EF_SPECIFIC_CONDITIONS,
-  ]);
-  
-  for (let i = 0; i < buf.length - 4; i++) {
-    const tag = readUint16BE(buf, i);
-    if (!knownTags2B.has(tag)) continue;
-    
-    let dataLength = 0;
-    let headerSize = 2;
-    
-    const lenByte = buf[i + 2];
-    if (lenByte <= 0x7f) {
-      dataLength = lenByte;
-      headerSize += 1;
-    } else if (lenByte === 0x81) {
-      if (i + 3 >= buf.length) continue;
-      dataLength = buf[i + 3];
-      headerSize += 2;
-    } else if (lenByte === 0x82) {
-      if (i + 4 >= buf.length) continue;
-      dataLength = readUint16BE(buf, i + 3);
-      headerSize += 3;
-    } else {
-      continue;
-    }
-    
-    if (dataLength <= 0 || dataLength > 100000) continue;
-    if (i + headerSize + dataLength > buf.length) continue;
-    
-    blocks.push({ tag, offset: i + headerSize, length: dataLength, headerSize });
-  }
-  
-  if (blocks.length > 0) return blocks;
-  
-  // --- Strategy 2: Try TREP format (1-byte tag + 2-byte length BE) ---
-  // TREP file structure: sequential blocks of [tag(1)][length(2BE)][data(length)]
-  
-  const TREP_TAG_MAP: Record<number, number> = {
-    0x01: 0x0002,  // MF / ICC
-    0x02: 0x0002,  // Card ICC
-    0x05: 0x0002,  // Card Certificate
-    0x07: TAG_EF_IDENTIFICATION,
-    0x08: TAG_EF_CARD_DOWNLOAD,
-    0x09: TAG_EF_DRIVING_LICENCE,
-    0x0A: TAG_EF_EVENTS_DATA,
-    0x0B: TAG_EF_FAULTS_DATA,
-    0x0C: TAG_EF_DRIVER_ACTIVITY,   // <-- KEY
-    0x0D: TAG_EF_VEHICLES_USED,
-    0x0E: TAG_EF_PLACES,
-    0x10: TAG_EF_CONTROL_ACTIVITY,
-    0x11: TAG_EF_SPECIFIC_CONDITIONS,
-  };
-  
-  let pos = 0;
-  let maxIter = 200;
-  let trepFound = 0;
-  
-  while (pos < buf.length - 3 && maxIter-- > 0) {
-    const trepTag = buf[pos];
-    
-    // Check if this is a known TREP tag
-    if (TREP_TAG_MAP[trepTag] !== undefined) {
-      const trepLen = readUint16BE(buf, pos + 1);
-      
-      if (trepLen > 0 && trepLen < buf.length && pos + 3 + trepLen <= buf.length) {
-        const euTag = TREP_TAG_MAP[trepTag];
-        blocks.push({
-          tag: euTag,
-          offset: pos + 3,
-          length: trepLen,
-          headerSize: 3, // 1 byte tag + 2 bytes length
-        });
-        trepFound++;
-        pos += 3 + trepLen;
-        continue;
-      }
-    }
-    
-    // Not a valid TREP tag at this position, advance by 1
-    pos++;
-  }
-  
-  if (blocks.length > 0) return blocks;
-  
-  // --- Strategy 3: Try TREP with FID (File ID) prefix ---
-  // Some TGD files have: FID(2 bytes) + Tag(1) + Length(2BE) + Data
-  // Or: 0x00 + Tag + Length + Data (padded)
-  
-  pos = 0;
-  maxIter = 200;
-  
-  // Try to find the driver activity data by scanning for the pattern:
-  // A valid record starts with Length(2BE) then timestamp(4bytes midnight-aligned)
-  // We look for this pattern throughout the file
-  const SECONDS_PER_DAY = 86400;
-  
-  for (let i = 0; i < buf.length - 10; i++) {
-    const possibleRecLen = readUint16BE(buf, i);
-    if (possibleRecLen < 12 || possibleRecLen > 1000) continue;
-    
-    const possibleTs = readUint32BE(buf, i + 2);
-    if (possibleTs < 1577836800 || possibleTs > 1900000000) continue; // 2020-2030
-    if (possibleTs % SECONDS_PER_DAY !== 0) continue; // must be midnight
-    
-    // Check if the timestamps are followed by valid activity records
-    const presenceCounter = readUint16BE(buf, i + 6);
-    const dayDistance = readUint16BE(buf, i + 8);
-    
-    // Validate: check first activity record at offset +10
-    if (i + 11 < buf.length) {
-      const firstActivity = readUint16BE(buf, i + 10);
-      const actMinutes = firstActivity & 0x07FF;
-      if (actMinutes <= 1439 && firstActivity !== 0 && firstActivity !== 0xFFFF) {
-        // This looks like a valid CardActivityDailyRecord!
-        // Try to find the start of the activity data area
-        // Walk backwards to find the 4-byte header (oldestPtr + newestPtr)
-        
-        // The data area starts 4 bytes before the first record (if it starts at oldestPtr=0)
-        // But we need to find the actual beginning. Let's try i-4
-        let areaStart = i;
-        
-        // Check if i-4 has valid pointers
-        if (i >= 4) {
-          const ptr1 = readUint16BE(buf, i - 4);
-          const ptr2 = readUint16BE(buf, i - 2);
-          // Pointers should be reasonable offsets
-          if (ptr1 < 50000 && ptr2 < 50000) {
-            areaStart = i - 4;
-          }
-        }
-        
-        // Estimate the total activity data area size
-        // Scan forward to find how far the records go
-        let endPos = i;
-        let scanIter = 300;
-        while (endPos < buf.length - 6 && scanIter-- > 0) {
-          const recLen = readUint16BE(buf, endPos);
-          if (recLen < 10 || recLen > 1500) break;
-          const recTs = readUint32BE(buf, endPos + 2);
-          if (recTs === 0 || recTs === 0xFFFFFFFF) {
-            endPos += recLen;
-            continue;
-          }
-          const recDate = new Date(recTs * 1000);
-          if (recDate.getFullYear() < 2000 || recDate.getFullYear() > 2040) break;
-          endPos += recLen;
-        }
-        
-        const totalLen = endPos - areaStart;
-        if (totalLen > 100) {
-          blocks.push({
-            tag: TAG_EF_DRIVER_ACTIVITY,
-            offset: areaStart,
-            length: totalLen,
-            headerSize: 0,
-          });
-          return blocks; // Found it — return immediately
-        }
-      }
-    }
-  }
-  
-  return blocks;
-}
-
 // ====================================
-// Driver Activity Data Parser  
+// Core: Direct Record Scan
 // ====================================
 
 /**
- * Parses EF_Driver_Activity_Data (tag 0x0506).
+ * Scans the entire buffer for CardActivityDailyRecord patterns.
  * 
- * Structure:
- *   Bytes 0-1:   activityPointerOldestDayRecord (offset relative to byte 4)
- *   Bytes 2-3:   activityPointerNewestRecord (offset relative to byte 4)
- *   Bytes 4+:    Cyclical buffer of CardActivityDailyRecord entries
+ * Detection: at each position i, check if:
+ *   - bytes[i..i+1] (recordLength) is between 12 and 1000
+ *   - bytes[i+2..i+5] (timestamp) is a midnight UTC value in valid range
+ *   - bytes[i+10..i+11] (first activity) has valid minutes (0-1439) and non-zero
+ *   - recordLength fits within buffer bounds
  * 
- * Each CardActivityDailyRecord:
- *   Bytes 0-1:   activityRecordLength (total record length including this field)
- *   Bytes 2-5:   activityRecordDate (TimeReal — Unix timestamp, midnight UTC)
- *   Bytes 6-7:   activityDailyPresenceCounter
- *   Bytes 8-9:   activityDayDistance (in km)
- *   Bytes 10+:   ActivityChangeInfo records (2 bytes each)
+ * If a valid record is found, parse all its activities and advance by recordLength.
+ * If not, advance by 1 byte.
  */
-function parseDriverActivityData(buf: Buffer, offset: number, length: number): DailyRecord[] {
-  if (length < 4) return [];
-  
-  const oldestDayPtr = readUint16BE(buf, offset);
-  const newestRecPtr = readUint16BE(buf, offset + 2);
-  
-  const dataStart = offset + 4;       // start of cyclical buffer
-  const dataEnd = offset + length;    // end of data
-  const dataSize = dataEnd - dataStart;
-  
-  if (dataSize < 10) return [];
-  
+function scanForDailyRecords(buf: Buffer): DailyRecord[] {
   const records: DailyRecord[] = [];
-  const seen = new Set<string>();
+  const seenDates = new Set<string>();
   
-  // Strategy: scan the buffer linearly for valid daily records.
-  // Start from oldest day pointer and read forward.
-  // Because it's a cyclical buffer, we may need to wrap around.
+  let i = 0;
+  const maxPos = buf.length - 12; // minimum record is 12 bytes
   
-  let pos = dataStart + oldestDayPtr;
-  let maxIterations = 500; // safety limit
-  let totalBytesRead = 0;
-  
-  while (maxIterations-- > 0 && totalBytesRead < dataSize) {
-    // Wrap around if past end
-    if (pos >= dataEnd) {
-      pos = dataStart + ((pos - dataStart) % dataSize);
-    }
+  while (i < maxPos) {
+    const recordLength = readUint16BE(buf, i);
     
-    // Read record header
-    if (pos + 10 > dataEnd) {
-      // Record header would cross boundary — try wrapping
-      if (totalBytesRead > 0) break;
-      pos = dataStart;
+    // Quick reject: invalid record length
+    if (recordLength < 12 || recordLength > 1200 || i + recordLength > buf.length) {
+      i++;
       continue;
     }
     
-    const recordLength = readUint16BE(buf, pos);
-    
-    // Validate record length
-    if (recordLength === 0 || recordLength === 0xFFFF) {
-      // Empty slot — skip 2 bytes and try next position  
-      pos += 2;
-      totalBytesRead += 2;
+    // Check timestamp at offset +2
+    const ts = readUint32BE(buf, i + 2);
+    if (ts < TS_MIN || ts > TS_MAX || ts % SECONDS_PER_DAY !== 0) {
+      i++;
       continue;
     }
     
-    if (recordLength < 10 || recordLength > 2000) {
-      // Invalid — move forward and try to find next valid record
-      pos += 2;
-      totalBytesRead += 2;
+    // Check first activity at offset +10 (must have valid minutes and non-zero)
+    const firstAct = readUint16BE(buf, i + 10);
+    if (firstAct === 0 || firstAct === 0xFFFF) {
+      i++;
+      continue;
+    }
+    const firstActMinutes = firstAct & 0x07FF;
+    if (firstActMinutes > 1439) {
+      i++;
       continue;
     }
     
-    // Read date
-    const recordDateTs = readUint32BE(buf, pos + 2);
-    if (recordDateTs === 0 || recordDateTs === 0xFFFFFFFF) {
-      pos += recordLength;
-      totalBytesRead += recordLength;
+    // Additional validation: number of activities should make sense
+    const activityBytes = recordLength - 10; // after header
+    if (activityBytes < 2 || activityBytes % 2 !== 0) {
+      i++;
+      continue;
+    }
+    const numActivities = activityBytes / 2;
+    if (numActivities > 500) { // too many activities for one day
+      i++;
       continue;
     }
     
-    const recordDate = new Date(recordDateTs * 1000);
-    if (recordDate.getFullYear() < 2000 || recordDate.getFullYear() > 2040) {
-      pos += recordLength;
-      totalBytesRead += recordLength;
+    // Validate at least 2 activity records have valid minutes
+    let validActCount = 0;
+    for (let a = 0; a < Math.min(numActivities, 5); a++) {
+      const act = readUint16BE(buf, i + 10 + a * 2);
+      if (act !== 0 && act !== 0xFFFF) {
+        const mins = act & 0x07FF;
+        if (mins <= 1439) validActCount++;
+      }
+    }
+    
+    if (validActCount < 1) {
+      i++;
       continue;
     }
     
-    const dateStr = recordDate.toISOString().substring(0, 10);
+    // SUCCESS: This is a valid CardActivityDailyRecord!
+    const date = new Date(ts * 1000);
+    const dateStr = date.toISOString().substring(0, 10);
     
-    // Skip duplicates (cyclical buffer can show same record twice)
-    if (seen.has(dateStr)) {
-      pos += recordLength;
-      totalBytesRead += recordLength;
-      continue;
-    }
-    seen.add(dateStr);
-    
-    const presenceCounter = readUint16BE(buf, pos + 6);
-    const dayDistance = readUint16BE(buf, pos + 8);
-    
-    // Parse activity change records
-    const activityStartOffset = pos + 10;
-    const activityEndOffset = pos + recordLength;
+    // Parse all activities
     const activities: ActivityChange[] = [];
-    
-    for (let aPos = activityStartOffset; aPos + 1 < activityEndOffset && aPos + 1 < dataEnd; aPos += 2) {
-      const word = readUint16BE(buf, aPos);
+    for (let a = 0; a < numActivities; a++) {
+      const word = readUint16BE(buf, i + 10 + a * 2);
       if (word === 0 || word === 0xFFFF) continue;
       
       const slot = (word >> 15) & 1;
@@ -429,7 +180,7 @@ function parseDriverActivityData(buf: Buffer, offset: number, length: number): D
       const activityCode = (word >> 11) & 0x03;
       const minutes = word & 0x07FF;
       
-      if (minutes > 1439) continue; // invalid time
+      if (minutes > 1439) continue;
       
       activities.push({
         slot,
@@ -441,164 +192,87 @@ function parseDriverActivityData(buf: Buffer, offset: number, length: number): D
       });
     }
     
-    if (activities.length > 0) {
-      // Sort by time
-      activities.sort((a, b) => a.minutes - b.minutes);
-      
+    // Sort activities by time
+    activities.sort((a, b) => a.minutes - b.minutes);
+    
+    // Avoid duplicates (cyclical buffer can have overlapping data)
+    if (!seenDates.has(dateStr) && activities.length > 0) {
+      seenDates.add(dateStr);
       records.push({
-        date: recordDate,
+        date,
         dateStr,
         recordLength,
-        presenceCounter,
-        dayDistance,
+        presenceCounter: readUint16BE(buf, i + 6),
+        dayDistance: readUint16BE(buf, i + 8),
         activities,
-        byteOffset: pos,
+        byteOffset: i,
       });
     }
     
-    pos += recordLength;
-    totalBytesRead += recordLength;
+    // Advance past this record
+    i += recordLength;
   }
   
-  // Sort records by date
+  // Sort by date
   records.sort((a, b) => a.date.getTime() - b.date.getTime());
   
   return records;
 }
 
 // ====================================
-// Vehicle Used Records Parser
+// Vehicle Registration Scanner
 // ====================================
 
 /**
- * Parses EF_Vehicles_Used (tag 0x0507).
- * 
- * Structure: CardVehiclesUsed = {
- *   vehiclePointerNewestRecord  (2 bytes),
- *   cardVehicleRecords          SET OF CardVehicleRecord
- * }
- * 
- * CardVehicleRecord = {
- *   vehicleOdometerBegin (3 bytes, BCD-encoded km),
- *   vehicleOdometerEnd   (3 bytes, BCD-encoded km),
- *   vehicleFirstUse      (4 bytes, TimeReal),
- *   vehicleLastUse       (4 bytes, TimeReal),
- *   vehicleRegistration  {
- *     codingType         (1 byte),
- *     vehicleRegCountry  (2 bytes, nation numeric),
- *     vehicleRegNumber   (14 bytes, padded ASCII)
- *   },
- *   vuCardIWDataPointer  (2 bytes, optional depending on version)
- * }
- * 
- * Total per record: ~31 bytes (may vary by generation)
+ * Scans for Spanish plate patterns (e.g. "4563LZS", "9946GWZ")
+ * and nearby timestamps.
  */
-function parseVehiclesUsed(buf: Buffer, offset: number, length: number): VehicleUsedRecord[] {
-  if (length < 4) return [];
-  
-  const newestPtr = readUint16BE(buf, offset);
-  const dataStart = offset + 2;
-  const dataEnd = offset + length;
-  
-  const records: VehicleUsedRecord[] = [];
+function scanForVehicles(buf: Buffer): { vrn: string; startDate: Date | null; endDate: Date | null }[] {
+  const results: { vrn: string; startDate: Date | null; endDate: Date | null }[] = [];
   const seen = new Set<string>();
   
-  // Each vehicle record is typically 31 bytes for Gen1
-  // For Gen2 it might be 33 bytes
-  // Try to detect record size
-  
-  let pos = dataStart;
-  let maxIter = 200;
-  
-  while (pos + 28 <= dataEnd && maxIter-- > 0) {
-    // Read odometer values (3 bytes each, BCD or binary)
-    // Skip odometers for now, focus on dates and VRN
+  // Spanish plates: 4 digits + 2-3 uppercase letters
+  for (let i = 0; i < buf.length - 7; i++) {
+    const chunk = readAsciiClean(buf, i, 14);
+    const match = chunk.match(/(\d{4}[A-Z]{2,3})/);
+    if (!match) continue;
     
-    // Dates at offset +6 and +10
-    const vehicleFirstUse = readTimestamp(buf, pos + 6);
-    const vehicleLastUse = readTimestamp(buf, pos + 10);
+    const plate = match[1];
     
-    // VRN: skip codingType(1) + country(2), then 14 bytes ASCII
-    const vrnOffset = pos + 14 + 1 + 2; // after odometer(6) + dates(8) + codingType(1) + country(2)
+    // Look for timestamps before the plate (within 20 bytes)
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
     
-    // Actually, let me try different offsets since the exact layout varies
-    // Common layout: odometer_begin(3) + odometer_end(3) + firstUse(4) + lastUse(4) + codingType(1) + nation(2) + vrn(14)
-    // = 31 bytes total
-    
-    let vrn = '';
-    
-    // Try reading VRN at expected position
-    if (pos + 17 + 14 <= dataEnd) {
-      vrn = readAsciiClean(buf, pos + 17, 14);
-    }
-    
-    // Validate VRN (should contain plate-like pattern)
-    const plateMatch = vrn.match(/(\d{4}[A-Z]{2,3})|([A-Z]{1,2}\d{4}[A-Z]{2,3})/);
-    
-    if (plateMatch && vehicleFirstUse) {
-      const key = `${plateMatch[0]}_${vehicleFirstUse.toISOString()}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        records.push({
-          vrn: plateMatch[0],
-          startDate: vehicleFirstUse,
-          endDate: vehicleLastUse,
-          nation: null,
-        });
-      }
-    }
-    
-    // If we didn't find a valid record, try alternative offsets
-    if (!plateMatch || !vehicleFirstUse) {
-      // Try scanning for plate patterns in nearby bytes
-      for (let scan = pos; scan < Math.min(pos + 40, dataEnd - 7); scan++) {
-        const chunk = readAsciiClean(buf, scan, 14);
-        const pm = chunk.match(/(\d{4}[A-Z]{2,3})|([A-Z]{1,2}\d{4}[A-Z]{2,3})/);
-        if (pm) {
-          // Look for timestamps nearby
-          for (let tOff = pos; tOff < scan; tOff++) {
-            const ts = readTimestamp(buf, tOff);
-            if (ts) {
-              const k = `${pm[0]}_${ts.toISOString()}`;
-              if (!seen.has(k)) {
-                seen.add(k);
-                const ts2 = readTimestamp(buf, tOff + 4);
-                records.push({
-                  vrn: pm[0],
-                  startDate: ts,
-                  endDate: ts2,
-                  nation: null,
-                });
-              }
-              break;
-            }
+    for (let tOff = Math.max(0, i - 20); tOff < i; tOff++) {
+      const ts = readUint32BE(buf, tOff);
+      if (ts >= TS_MIN && ts <= TS_MAX) {
+        const d = new Date(ts * 1000);
+        if (d.getFullYear() >= 2010 && d.getFullYear() <= 2040) {
+          if (!startDate) {
+            startDate = d;
+          } else if (!endDate) {
+            endDate = d;
           }
-          break;
         }
       }
     }
     
-    pos += 31; // standard record size
+    const key = `${plate}_${startDate?.toISOString() || 'x'}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push({ vrn: plate, startDate, endDate });
+    }
+    
+    i += 6; // skip past plate
   }
   
-  // Sort by start date
-  records.sort((a, b) => {
-    if (!a.startDate) return 1;
-    if (!b.startDate) return -1;
-    return a.startDate.getTime() - b.startDate.getTime();
-  });
-  
-  return records;
+  return results;
 }
 
 // ====================================
 // Main Parser Function
 // ====================================
 
-/**
- * Parse a TGD/DDD driver card file using the EU specification TLV structure.
- * This is the spec-based replacement for the heuristic parser.
- */
 export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryParseResult {
   const warnings: string[] = [];
   const errors: string[] = [];
@@ -610,60 +284,30 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
   if (cardInfo.cardNumber) metadata.cardNumber = cardInfo.cardNumber;
   if (cardInfo.dni) metadata.driverDni = cardInfo.dni;
   
-  // 1. Find all TLV blocks
-  const tlvBlocks = findTLVBlocks(buffer);
-  
-  // ALWAYS add diagnostic info for remote debugging
+  // Diagnostic: hex dump first 200 bytes
   const hexFirst200 = Array.from(buffer.subarray(0, Math.min(200, buffer.length)))
     .map(b => b.toString(16).padStart(2, '0')).join(' ');
   warnings.push(`[DIAG] File: ${buffer.length} bytes. First 200: ${hexFirst200}`);
   
-  for (const blk of tlvBlocks) {
-    const tagHex = blk.tag.toString(16).padStart(4, '0');
-    const ctxStart = Math.max(0, blk.offset - blk.headerSize - 5);
-    const ctxEnd = Math.min(buffer.length, blk.offset + Math.min(blk.length, 40));
-    const ctxHex = Array.from(buffer.subarray(ctxStart, ctxEnd))
-      .map(b => b.toString(16).padStart(2, '0')).join(' ');
-    warnings.push(`[DIAG] Block 0x${tagHex} @offset=0x${(blk.offset - blk.headerSize).toString(16)} hdr=${blk.headerSize} len=${blk.length}. Context: ${ctxHex}`);
-  }
+  // 1. DIRECT SCAN for CardActivityDailyRecord patterns
+  const dailyRecords = scanForDailyRecords(buffer);
   
-  if (tlvBlocks.length === 0) {
-    warnings.push(`No TLV blocks found in any format.`);
-    return {
-      success: false,
-      fileType: 'DRIVER_CARD',
-      parserVersion: 'spec-v1',
-      metadata,
-      rawEvents: [],
-      warnings,
-      errors: ['No se encontraron bloques TLV válidos en el archivo.'],
-    };
-  }
+  warnings.push(`[DIAG] Direct scan found ${dailyRecords.length} daily records.`);
   
-  // 2. Parse EF_Driver_Activity_Data (0x0506)
-  const activityBlocks = tlvBlocks.filter(b => b.tag === TAG_EF_DRIVER_ACTIVITY);
-  let dailyRecords: DailyRecord[] = [];
-  
-  if (activityBlocks.length > 0) {
-    // Use the largest block (in case there are signature blocks too)
-    const mainBlock = activityBlocks.reduce((a, b) => a.length > b.length ? a : b);
-    dailyRecords = parseDriverActivityData(buffer, mainBlock.offset, mainBlock.length);
+  if (dailyRecords.length > 0) {
+    const dateRange = `${dailyRecords[0].dateStr} — ${dailyRecords[dailyRecords.length - 1].dateStr}`;
+    warnings.push(`[DIAG] Date range: ${dateRange}`);
     
-    warnings.push(
-      `Spec parser: ${dailyRecords.length} daily records from EF_Driver_Activity_Data ` +
-      `(block @0x${(mainBlock.offset - mainBlock.headerSize).toString(16)}, ${mainBlock.length} bytes).`
-    );
-  } else {
-    warnings.push('EF_Driver_Activity_Data (0x0506) not found in file.');
+    // List first 10 and last 5 dates for verification
+    const firstDates = dailyRecords.slice(0, 10).map(r => r.dateStr).join(', ');
+    const lastDates = dailyRecords.slice(-5).map(r => r.dateStr).join(', ');
+    warnings.push(`[DIAG] First dates: ${firstDates}`);
+    warnings.push(`[DIAG] Last dates: ${lastDates}`);
   }
   
-  // 3. Parse EF_Vehicles_Used (0x0507)
-  const vehicleBlocks = tlvBlocks.filter(b => b.tag === TAG_EF_VEHICLES_USED);
-  let vehicleRecords: VehicleUsedRecord[] = [];
-  
-  if (vehicleBlocks.length > 0) {
-    const mainBlock = vehicleBlocks.reduce((a, b) => a.length > b.length ? a : b);
-    vehicleRecords = parseVehiclesUsed(buffer, mainBlock.offset, mainBlock.length);
+  // 2. Scan for vehicles
+  const vehicleRecords = scanForVehicles(buffer);
+  if (vehicleRecords.length > 0) {
     metadata.vehicleUsedRecords = vehicleRecords.map(vr => ({
       vrn: vr.vrn,
       startDate: vr.startDate,
@@ -672,24 +316,21 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
       odometerEnd: null,
     }));
     
-    // Set primary plate from most-used vehicle
-    if (vehicleRecords.length > 0) {
-      const plateCounts = new Map<string, number>();
-      for (const vr of vehicleRecords) {
-        plateCounts.set(vr.vrn, (plateCounts.get(vr.vrn) || 0) + 1);
-      }
-      const primaryPlate = [...plateCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-      if (primaryPlate) {
-        metadata.plateNumber = primaryPlate;
-      }
+    // Primary plate
+    const plateCounts = new Map<string, number>();
+    for (const vr of vehicleRecords) {
+      plateCounts.set(vr.vrn, (plateCounts.get(vr.vrn) || 0) + 1);
     }
+    const primaryPlate = [...plateCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (primaryPlate) metadata.plateNumber = primaryPlate;
+    
+    warnings.push(`[DIAG] ${vehicleRecords.length} vehicles found. Primary: ${primaryPlate || 'none'}`);
   }
   
-  // 4. Convert daily records to BinaryRawEvent[]
+  // 3. Convert daily records to BinaryRawEvent[]
   const rawDriverId = metadata.cardNumber || null;
   
   for (const day of dailyRecords) {
-    // Find matching vehicle for this day
     let vehicleId: string | null = null;
     for (const vr of vehicleRecords) {
       const vrStart = vr.startDate ? vr.startDate.toISOString().substring(0, 10) : null;
@@ -698,25 +339,19 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
         vehicleId = vr.vrn;
         break;
       }
-      if (vrStart && day.dateStr === vrStart) {
-        vehicleId = vr.vrn;
-        break;
-      }
     }
     if (!vehicleId && metadata.plateNumber) {
       vehicleId = metadata.plateNumber;
     }
     
-    // Convert activities to events (consecutive activity changes become events)
     for (let i = 0; i < day.activities.length; i++) {
       const act = day.activities[i];
       const nextAct = i + 1 < day.activities.length ? day.activities[i + 1] : null;
       
       const startTime = new Date(day.date.getTime() + act.minutes * 60000);
-      const endMinutes = nextAct ? nextAct.minutes : 1440; // until next activity or end of day
+      const endMinutes = nextAct ? nextAct.minutes : 1440;
       const endTime = new Date(day.date.getTime() + endMinutes * 60000);
       
-      // Skip zero-duration events
       if (endMinutes <= act.minutes) continue;
       
       const durationMinutes = endMinutes - act.minutes;
@@ -740,32 +375,31 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
           startMinutes: act.minutes,
         } as any,
         extractionMethod: 'spec',
-        extractionNotes: `Spec: ${day.dateStr} ${act.activityType} ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
+        extractionNotes: `Scan: ${day.dateStr} ${act.activityType} ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
         extractionStatus: 'OK',
       });
     }
   }
   
-  // Sort all events
+  // Sort events
   rawEvents.sort((a, b) => a.rawStartAt.getTime() - b.rawStartAt.getTime());
   
-  // Set date range
+  // Date range
   if (rawEvents.length > 0) {
     metadata.dateFrom = rawEvents[0].rawStartAt;
     metadata.dateTo = rawEvents[rawEvents.length - 1].rawEndAt;
   }
   
-  // Summary
   const uniqueDays = new Set(dailyRecords.map(r => r.dateStr));
   warnings.push(
-    `Spec parser: ${rawEvents.length} raw events from ${uniqueDays.size} days, ` +
+    `Spec parser v2: ${rawEvents.length} raw events from ${uniqueDays.size} days, ` +
     `${vehicleRecords.length} vehicle records.`
   );
   
   return {
     success: rawEvents.length > 0,
     fileType: 'DRIVER_CARD',
-    parserVersion: 'spec-v1',
+    parserVersion: 'spec-v2',
     metadata,
     rawEvents,
     warnings,
