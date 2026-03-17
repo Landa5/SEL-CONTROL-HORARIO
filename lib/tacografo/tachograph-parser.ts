@@ -51,85 +51,10 @@ export interface TachographParseResult {
 // Supported file extensions
 const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm', '.csv'];
 
-function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' {
-  const lower = fileName.toLowerCase();
-  const baseName = fileName.split(/[\\/]/).pop()?.toUpperCase() || '';
-  
-  if (lower.endsWith('.c1b') || lower.includes('driver') || lower.includes('card') || lower.includes('conductor') || lower.includes('tarjeta')) {
-    return 'DRIVER_CARD';
-  }
-  if (lower.endsWith('.v1b') || lower.includes('vehicle') || lower.includes('vehiculo') || lower.includes('_vu_') || lower.includes('_vu.')) {
-    return 'VEHICLE_UNIT';
-  }
-  if (lower.endsWith('.ddd') || lower.endsWith('.dtco') || lower.endsWith('.tgd') || lower.endsWith('.esm')) {
-    if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) {
-      return 'DRIVER_CARD';
-    }
-    if (baseName.startsWith('V_') || baseName.startsWith('S_') || baseName.startsWith('M_') || baseName.startsWith('E_')) {
-      return 'VEHICLE_UNIT';
-    }
-    if (/\d{4}[a-z]{3}/i.test(fileName) || /[a-z]{2}\d{4}[a-z]{2}/i.test(fileName)) {
-      return 'VEHICLE_UNIT';
-    }
-    return 'UNKNOWN';
-  }
-  return 'UNKNOWN';
-}
+import { detectFileType, extractPlateFromFileName, extractCardInfoFromFileName, extractDatesFromFileName } from './tachograph-file-utils';
 
-function extractPlateFromFileName(fileName: string): string | undefined {
-  const patterns = [
-    /(\d{4}[A-Z]{3})/i,
-    /([A-Z]{1,2}\d{4}[A-Z]{2})/i,
-  ];
-  for (const pattern of patterns) {
-    const match = fileName.match(pattern);
-    if (match) return match[1].toUpperCase();
-  }
-  return undefined;
-}
-
-function extractCardInfoFromFileName(fileName: string): { cardNumber?: string; dni?: string } {
-  const baseName = fileName.split(/[\\/]/).pop() || '';
-  const match = baseName.match(/E(\d{8}[A-Za-z])(\d{4,8})/);
-  if (match) {
-    const dni = match[1].toUpperCase();
-    const version = match[2];
-    return { cardNumber: `E${dni}${version}`, dni };
-  }
-  return {};
-}
-
-function extractDatesFromFileName(fileName: string): { dateFrom?: Date; dateTo?: Date } {
-  const datePatterns = [
-    /(\d{4})[-_]?(\d{2})[-_]?(\d{2})/g,
-    /(\d{2})[-_](\d{2})[-_](\d{4})/g,
-  ];
-  const dates: Date[] = [];
-  for (const pattern of datePatterns) {
-    let match;
-    while ((match = pattern.exec(fileName)) !== null) {
-      let year: number, month: number, day: number;
-      if (match[1].length === 4) {
-        year = parseInt(match[1]);
-        month = parseInt(match[2]) - 1;
-        day = parseInt(match[3]);
-      } else {
-        day = parseInt(match[1]);
-        month = parseInt(match[2]) - 1;
-        year = parseInt(match[3]);
-      }
-      if (year >= 2000 && year <= 2100 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-        dates.push(new Date(year, month, day));
-      }
-    }
-  }
-  if (dates.length === 0) return {};
-  dates.sort((a, b) => a.getTime() - b.getTime());
-  return {
-    dateFrom: dates[0],
-    dateTo: dates.length > 1 ? dates[dates.length - 1] : dates[0],
-  };
-}
+// Re-export detectFileType for backward compatibility
+export { detectFileType };
 
 /**
  * Convierte BinaryRawEvent[] a legacy activities[] (consolidados)
@@ -224,8 +149,8 @@ export async function parseTachographFile(
       };
     }
     
-    // Detect file type from name
-    const detectedType = detectFileType(fileName);
+    // Detect file type from name + binary content
+    const detectedType = detectFileType(fileName, fileBuffer);
     let specDiagnosticWarnings: string[] = [];
     
     // For DRIVER_CARD files, try spec parser first (TLV-based, EU 2016/799)
