@@ -349,35 +349,135 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
       const nextAct = i + 1 < day.activities.length ? day.activities[i + 1] : null;
       
       const startTime = new Date(day.date.getTime() + act.minutes * 60000);
-      const endMinutes = nextAct ? nextAct.minutes : 1440;
-      const endTime = new Date(day.date.getTime() + endMinutes * 60000);
       
-      if (endMinutes <= act.minutes) continue;
-      
-      const durationMinutes = endMinutes - act.minutes;
-      
-      rawEvents.push({
-        rawStartAt: startTime,
-        rawEndAt: endTime,
-        rawActivityType: act.activityType,
-        rawDriverIdentifier: rawDriverId,
-        rawVehicleIdentifier: vehicleId,
-        rawPayload: {
-          slot: act.slot,
-          cardInserted: act.cardInserted,
-          byteOffset: day.byteOffset,
-          headerOffset: 0,
-          dayTimestamp: Math.floor(day.date.getTime() / 1000),
-          driverStatus: act.driverStatus,
-          presenceCounter: day.presenceCounter,
-          dayDistance: day.dayDistance,
-          activityCode: act.activityCode,
-          startMinutes: act.minutes,
-        } as any,
-        extractionMethod: 'spec',
-        extractionNotes: `Scan: ${day.dateStr} ${act.activityType} ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
-        extractionStatus: 'OK',
-      });
+      if (nextAct) {
+        // Normal case: activity runs until next activity starts
+        const endMinutes = nextAct.minutes;
+        if (endMinutes <= act.minutes) continue;
+        
+        const endTime = new Date(day.date.getTime() + endMinutes * 60000);
+        const durationMinutes = endMinutes - act.minutes;
+        
+        rawEvents.push({
+          rawStartAt: startTime,
+          rawEndAt: endTime,
+          rawActivityType: act.activityType,
+          rawDriverIdentifier: rawDriverId,
+          rawVehicleIdentifier: vehicleId,
+          rawPayload: {
+            slot: act.slot,
+            cardInserted: act.cardInserted,
+            byteOffset: day.byteOffset,
+            headerOffset: 0,
+            dayTimestamp: Math.floor(day.date.getTime() / 1000),
+            driverStatus: act.driverStatus,
+            presenceCounter: day.presenceCounter,
+            dayDistance: day.dayDistance,
+            activityCode: act.activityCode,
+            startMinutes: act.minutes,
+          } as any,
+          extractionMethod: 'spec',
+          extractionNotes: `Scan: ${day.dateStr} ${act.activityType} ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
+          extractionStatus: 'OK',
+        });
+      } else {
+        // LAST activity of the day: the driver closed the disc / removed card.
+        // After this point, the driver is implicitly at REST until midnight.
+        // We emit the last activity as a zero-duration marker only if it's REST,
+        // or convert it to REST from its start until midnight.
+        
+        const endMinutes = 1440;
+        const endTime = new Date(day.date.getTime() + endMinutes * 60000);
+        const durationMinutes = endMinutes - act.minutes;
+        
+        if (durationMinutes <= 0) continue;
+        
+        // If the last change is already REST, just emit it normally
+        // If it's anything else (OTHER_WORK, AVAILABILITY, DRIVING), 
+        // the tachograph records the last activity state at card removal.
+        // Per EU regulation, time after card withdrawal = REST.
+        const lastActivityType = act.cardInserted === false ? 'REST' : act.activityType;
+        
+        // If card is still inserted and activity is not REST, emit the original 
+        // activity for a short buffer (max 1 min) then REST for the remainder
+        if (act.cardInserted !== false && act.activityType !== 'REST' && durationMinutes > 1) {
+          // Emit 1-minute of the recorded activity (the actual last moment)
+          rawEvents.push({
+            rawStartAt: startTime,
+            rawEndAt: new Date(startTime.getTime() + 60000),
+            rawActivityType: act.activityType,
+            rawDriverIdentifier: rawDriverId,
+            rawVehicleIdentifier: vehicleId,
+            rawPayload: {
+              slot: act.slot,
+              cardInserted: act.cardInserted,
+              byteOffset: day.byteOffset,
+              headerOffset: 0,
+              dayTimestamp: Math.floor(day.date.getTime() / 1000),
+              driverStatus: act.driverStatus,
+              presenceCounter: day.presenceCounter,
+              dayDistance: day.dayDistance,
+              activityCode: act.activityCode,
+              startMinutes: act.minutes,
+              isLastOfDay: true,
+            } as any,
+            extractionMethod: 'spec',
+            extractionNotes: `Scan: ${day.dateStr} ${act.activityType} ${act.minutes}m-${act.minutes + 1}m (1min, last-of-day)`,
+            extractionStatus: 'OK',
+          });
+          
+          // Then REST until midnight
+          const restStart = new Date(startTime.getTime() + 60000);
+          rawEvents.push({
+            rawStartAt: restStart,
+            rawEndAt: endTime,
+            rawActivityType: 'REST',
+            rawDriverIdentifier: rawDriverId,
+            rawVehicleIdentifier: vehicleId,
+            rawPayload: {
+              slot: act.slot,
+              cardInserted: false,
+              byteOffset: day.byteOffset,
+              headerOffset: 0,
+              dayTimestamp: Math.floor(day.date.getTime() / 1000),
+              driverStatus: act.driverStatus,
+              presenceCounter: day.presenceCounter,
+              dayDistance: day.dayDistance,
+              activityCode: 0, // REST = 00
+              startMinutes: act.minutes + 1,
+              isDerivedRest: true,
+            } as any,
+            extractionMethod: 'derived',
+            extractionNotes: `Scan: ${day.dateStr} REST(end-of-day) ${act.minutes + 1}m-${endMinutes}m (${durationMinutes - 1}min)`,
+            extractionStatus: 'OK',
+          });
+        } else {
+          // Card not inserted or already REST: emit as REST until midnight
+          rawEvents.push({
+            rawStartAt: startTime,
+            rawEndAt: endTime,
+            rawActivityType: lastActivityType,
+            rawDriverIdentifier: rawDriverId,
+            rawVehicleIdentifier: vehicleId,
+            rawPayload: {
+              slot: act.slot,
+              cardInserted: act.cardInserted,
+              byteOffset: day.byteOffset,
+              headerOffset: 0,
+              dayTimestamp: Math.floor(day.date.getTime() / 1000),
+              driverStatus: act.driverStatus,
+              presenceCounter: day.presenceCounter,
+              dayDistance: day.dayDistance,
+              activityCode: act.activityCode,
+              startMinutes: act.minutes,
+              isLastOfDay: true,
+            } as any,
+            extractionMethod: act.activityType === 'REST' ? 'spec' : 'derived',
+            extractionNotes: `Scan: ${day.dateStr} ${lastActivityType}(end-of-day) ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
+            extractionStatus: 'OK',
+          });
+        }
+      }
     }
   }
   
