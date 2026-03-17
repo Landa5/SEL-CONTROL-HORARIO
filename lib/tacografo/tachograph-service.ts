@@ -695,9 +695,13 @@ async function autoLinkDriver(driverId: number, dniFromFile?: string): Promise<b
       if (!emp.dni) continue;
       const empDni = emp.dni.replace(/[\s\-\.]/g, '').toUpperCase();
       if (empDni === normalizedFileDni) {
+        const empFullName = [emp.nombre, emp.apellidos].filter(Boolean).join(' ').trim();
         await prisma.tachographDriver.update({
           where: { id: driverId },
-          data: { linkedEmployeeId: emp.id }
+          data: { 
+            linkedEmployeeId: emp.id,
+            ...(driver.fullName === 'Desconocido' && empFullName ? { fullName: empFullName } : {}),
+          }
         });
         return true;
       }
@@ -713,9 +717,13 @@ async function autoLinkDriver(driverId: number, dniFromFile?: string): Promise<b
     for (const emp of allEmployees) {
       if (!emp.dni) continue;
       if (dniMatchesCard(emp.dni, driver.cardNumber)) {
+        const empFullName = [emp.nombre, emp.apellidos].filter(Boolean).join(' ').trim();
         await prisma.tachographDriver.update({
           where: { id: driverId },
-          data: { linkedEmployeeId: emp.id }
+          data: { 
+            linkedEmployeeId: emp.id,
+            ...(driver.fullName === 'Desconocido' && empFullName ? { fullName: empFullName } : {}),
+          }
         });
         return true;
       }
@@ -734,9 +742,14 @@ async function autoLinkDriver(driverId: number, dniFromFile?: string): Promise<b
     });
     
     if (employees.length === 1) {
+      const emp = employees[0];
+      const empFullName = [emp.nombre, emp.apellidos].filter(Boolean).join(' ').trim();
       await prisma.tachographDriver.update({
         where: { id: driverId },
-        data: { linkedEmployeeId: employees[0].id }
+        data: { 
+          linkedEmployeeId: emp.id,
+          ...(driver.fullName === 'Desconocido' && empFullName ? { fullName: empFullName } : {}),
+        }
       });
       return true;
     }
