@@ -273,6 +273,46 @@ export async function processImport(
              parseResult.metadata.driverName ? 'name_fuzzy' : 'import_level')
           : null;
         
+        // Build vehicle cache: rawVehicleIdentifier → vehicleId
+        // This allows assigning the correct vehicle per event (a driver may use multiple trucks per day)
+        const vehicleCache = new Map<string, number | null>();
+        const uniquePlates = new Set<string>();
+        for (const ne of normResult.normalizedEvents) {
+          if (ne.rawVehicleIdentifier) uniquePlates.add(ne.rawVehicleIdentifier);
+        }
+        for (const plate of uniquePlates) {
+          // Try to find existing TachographVehicle by plate
+          const normalizedPlate = plate.replace(/[\s\-]/g, '').toUpperCase();
+          let vehicle = await prisma.tachographVehicle.findFirst({
+            where: { 
+              OR: [
+                { plateNumber: normalizedPlate },
+                { plateNumber: plate },
+              ]
+            }
+          });
+          if (!vehicle) {
+            // Check fuzzy match
+            const allVehicles = await prisma.tachographVehicle.findMany({
+              where: { plateNumber: { not: null } }
+            });
+            for (const v of allVehicles) {
+              if (v.plateNumber && platesMatch(plate, v.plateNumber)) {
+                vehicle = v;
+                break;
+              }
+            }
+          }
+          if (!vehicle && normalizedPlate.length >= 4) {
+            // Create new vehicle record
+            vehicle = await prisma.tachographVehicle.create({
+              data: { plateNumber: normalizedPlate }
+            });
+            await autoLinkVehicle(vehicle.id);
+          }
+          vehicleCache.set(plate, vehicle?.id || null);
+        }
+        
         // Build all normalized event data for batch insert
         const normalizedBatch = normResult.normalizedEvents.map(ne => {
           let matchingStatus = ne.matchingStatus;
@@ -293,11 +333,16 @@ export async function processImport(
           const parentRawEventId = ne.parentRawEventIndex >= 0 && ne.parentRawEventIndex < rawEventIds.length
             ? rawEventIds[ne.parentRawEventIndex] : null;
           
+          // Use per-event vehicle if available, fallback to import-level vehicle
+          const eventVehicleId = ne.rawVehicleIdentifier 
+            ? (vehicleCache.get(ne.rawVehicleIdentifier) ?? updateData.vehicleId ?? null)
+            : (updateData.vehicleId || null);
+          
           return {
             importId: importRecord.id,
             sourceType: parseResult.fileType,
             driverId: updateData.driverId || null,
-            vehicleId: updateData.vehicleId || null,
+            vehicleId: eventVehicleId,
             startAtUtc: ne.startAtUtc,
             endAtUtc: ne.endAtUtc,
             startAtLocal: ne.startAtLocal,

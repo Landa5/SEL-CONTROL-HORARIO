@@ -545,12 +545,31 @@ export default function ActividadPage() {
                               const sortedActs = [...s.activities].sort((a, b) => new Date(getStart(a)).getTime() - new Date(getStart(b)).getTime());
                               if (sortedActs.length === 0) return null;
 
-                              const firstStart = new Date(getStart(sortedActs[0]));
-                              const lastEnd = new Date(getEnd(sortedActs[sortedActs.length - 1]));
+                              // Calculate bar range based on WORK activities only (not derived REST at end of day)
+                              const workActs = sortedActs.filter(a => 
+                                ['DRIVING', 'OTHER_WORK', 'AVAILABILITY'].includes(a.activityType) ||
+                                (a.activityType === 'REST' && a.extractionMethod !== 'derived')
+                              );
+                              
+                              const rangeActs = workActs.length > 0 ? workActs : sortedActs;
+                              const firstStart = new Date(getStart(rangeActs[0]));
+                              const lastEnd = new Date(getEnd(rangeActs[rangeActs.length - 1]));
 
                               const startHour = Math.max(0, firstStart.getUTCHours());
-                              const endHour = Math.min(24, lastEnd.getUTCHours() + (lastEnd.getUTCMinutes() > 0 ? 1 : 0));
+                              const rawEndHour = lastEnd.getUTCHours() + (lastEnd.getUTCMinutes() > 0 ? 1 : 0);
+                              const endHour = Math.min(24, rawEndHour === 0 ? 24 : rawEndHour);
                               const totalHours = Math.max(endHour - startHour, 1);
+
+                              // Only show activities within the bar range
+                              const barStartMin = startHour * 60;
+                              const barEndMin = endHour * 60;
+                              const visibleActs = sortedActs.filter(a => {
+                                const aStart = new Date(getStart(a));
+                                const aEnd = new Date(getEnd(a));
+                                const startMin = aStart.getUTCHours() * 60 + aStart.getUTCMinutes();
+                                const endMin = aEnd.getUTCHours() * 60 + aEnd.getUTCMinutes();
+                                return endMin > barStartMin && startMin < barEndMin;
+                              });
 
                               const hourMarkers = [];
                               for (let h = startHour; h <= endHour; h++) {
@@ -579,11 +598,14 @@ export default function ActividadPage() {
                                         style={{ left: `${pct}%` }}
                                       />
                                     ))}
-                                    {sortedActs.map((act, idx) => {
+                                    {visibleActs.map((act, idx) => {
                                       const actStart = new Date(getStart(act));
                                       const actEnd = new Date(getEnd(act));
-                                      const startMinutes = actStart.getUTCHours() * 60 + actStart.getUTCMinutes();
-                                      const endMinutes = actEnd.getUTCHours() * 60 + actEnd.getUTCMinutes();
+                                      let startMinutes = actStart.getUTCHours() * 60 + actStart.getUTCMinutes();
+                                      let endMinutes = actEnd.getUTCHours() * 60 + actEnd.getUTCMinutes();
+                                      // Clamp to bar range
+                                      startMinutes = Math.max(startMinutes, barStartMin);
+                                      endMinutes = Math.min(endMinutes, barEndMin);
                                       const startOffset = (startMinutes - startHour * 60) / (totalHours * 60) * 100;
                                       const duration = (endMinutes - startMinutes) / (totalHours * 60) * 100;
                                       if (duration < 0.3) return null;
