@@ -185,21 +185,40 @@ function coreParseLogic(buffer: Buffer, fileName: string, enableTrace: boolean):
   }
 
   const cardInfo = extractCardInfoFromFileName(fileName);
-  const rawDriverId = cardInfo.cardNumber || null;
   const rawVehicleId = extractPlateFromFileName(fileName);
-  if (cardInfo.cardNumber) metadata.cardNumber = cardInfo.cardNumber;
-  if (cardInfo.dni) metadata.driverDni = cardInfo.dni;
+  
+  // FIX: Para VEHICLE_UNIT, el rawDriverId DEBE ser null (hay múltiples conductores)
+  // Para DRIVER_CARD, se extrae del nombre del fichero
+  const rawDriverId = fileType === 'VEHICLE_UNIT' ? null : (cardInfo.cardNumber || null);
+  
+  if (cardInfo.cardNumber && fileType !== 'VEHICLE_UNIT') {
+    metadata.cardNumber = cardInfo.cardNumber;
+  }
+  if (cardInfo.dni && fileType !== 'VEHICLE_UNIT') {
+    metadata.driverDni = cardInfo.dni;
+  }
+  
+  // FIX: Para VEHICLE_UNIT, la matrícula SIEMPRE es la del nombre del fichero
+  // No buscar en el binario — puede encontrar matrículas de otros camiones embebidas
+  if (fileType === 'VEHICLE_UNIT' && rawVehicleId) {
+    metadata.plateNumber = rawVehicleId;
+    warnings.push(`[VU] Matrícula fijada del nombre del fichero: ${rawVehicleId}`);
+  }
 
   try {
-    // 1. VRN scan (file-level, todos los tipos)
-    const vrnScan = findVRN(buffer);
-    if (vrnScan) {
-      metadata.plateNumber = vrnScan;
-      traceDetectedVRNs.push({ plate: vrnScan, offset: -1, context: 'file_scan', associatedDates: null });
+    // 1. VRN scan (file-level) — solo para DRIVER_CARD
+    // Para VEHICLE_UNIT ya tenemos la matrícula del nombre
+    if (fileType !== 'VEHICLE_UNIT') {
+      const vrnScan = findVRN(buffer);
+      if (vrnScan) {
+        metadata.plateNumber = vrnScan;
+        traceDetectedVRNs.push({ plate: vrnScan, offset: -1, context: 'file_scan', associatedDates: null });
+      }
     }
 
-    // 1b. Vehicle used records (DRIVER_CARD)
-    const vehicleRecords = findVehicleUsedRecords(buffer);
+    // 1b. Vehicle used records — solo para DRIVER_CARD
+    // En ficheros de vehículo estos registros no existen o contienen datos irrelevantes
+    const vehicleRecords = fileType === 'VEHICLE_UNIT' ? [] : findVehicleUsedRecords(buffer);
     metadata.vehicleUsedRecords = vehicleRecords;
     for (const vr of vehicleRecords) {
       const dates: string[] = [];
@@ -236,15 +255,24 @@ function coreParseLogic(buffer: Buffer, fileName: string, enableTrace: boolean):
     // 4. Extract raw events with optional trace
     const fileDate = extractDateFromFileName(fileName);
     
-    // v3: rawVehicleIdentifier se asigna por vehicle_used_record, NO globalmente
+    // FIX: Para VEHICLE_UNIT, el fallbackVehicleId SIEMPRE es la matrícula del fichero
+    const effectiveVehicleId = fileType === 'VEHICLE_UNIT'
+      ? (rawVehicleId || metadata.plateNumber || null)
+      : (metadata.plateNumber || rawVehicleId || null);
+    
     const events = extractRawEventsWithTrace(
       buffer, fileType, fileDate, rawDriverId, vehicleRecords,
-      metadata.plateNumber || rawVehicleId || null,
+      effectiveVehicleId,
       enableTrace ? traceCandidateTs : null,
       enableTrace ? traceCandidateBlocks : null,
       enableTrace ? traceRejected : null,
     );
-    rawEvents.push(...events);
+    
+    // FIX: Post-proceso — fusionar actividades consecutivas del mismo tipo
+    // en el límite de día (01:00 UTC). El tacógrafo reinicia el día a las 01:00
+    // pero la actividad real continúa sin interrupción.
+    const mergedEvents = mergeDayBoundaryEvents(events);
+    rawEvents.push(...mergedEvents);
 
     if (rawEvents.length > 0) {
       const sorted = [...rawEvents].sort((a, b) => a.rawStartAt.getTime() - b.rawStartAt.getTime());
@@ -275,10 +303,9 @@ function coreParseLogic(buffer: Buffer, fileName: string, enableTrace: boolean):
       if (metadata.cardNumber) fileType = 'DRIVER_CARD';
       else if (metadata.vin || metadata.plateNumber) fileType = 'VEHICLE_UNIT';
     }
-    if (fileType === 'VEHICLE_UNIT' && metadata.cardNumber && !metadata.vin) {
-      fileType = 'DRIVER_CARD';
-      warnings.push('Reclasificado como tarjeta de conductor.');
-    }
+    // FIX: NO reclasificar VEHICLE_UNIT → DRIVER_CARD.
+    // Ficheros V_ pueden contener cardNumbers de conductores que pasaron,
+    // eso no significa que el fichero sea de conductor.
     if (rawEvents.length === 0) warnings.push('No se extrajeron actividades detalladas del binario.');
 
   } catch (err: any) {
@@ -551,6 +578,72 @@ function extractRawEventsWithTrace(
   }
 
   return allEvents;
+}
+
+// ====================================
+// Fusión de eventos en frontera de día
+// ====================================
+
+/**
+ * Fusiona eventos consecutivos del mismo tipo de actividad que se encuentran
+ * en el límite del día (00:00 UTC / 01:00 UTC).
+ * 
+ * El tacógrafo reinicia internamente el día, creando dos registros separados:
+ *   REST 16:30→00:00 + REST 00:00→07:45 → se funden en REST 16:30→07:45
+ * 
+ * También elimina eventos muy cortos (<2 min) en el límite del día que son
+ * artefactos del reinicio del tacógrafo.
+ */
+function mergeDayBoundaryEvents(events: BinaryRawEvent[]): BinaryRawEvent[] {
+  if (events.length < 2) return events;
+  
+  // Ordenar por inicio
+  const sorted = [...events].sort((a, b) => a.rawStartAt.getTime() - b.rawStartAt.getTime());
+  const merged: BinaryRawEvent[] = [sorted[0]];
+  
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = sorted[i];
+    
+    // Calcular gap entre fin del anterior e inicio del actual
+    const gapMs = curr.rawStartAt.getTime() - prev.rawEndAt.getTime();
+    const gapMinutes = gapMs / 60000;
+    
+    // ¿Están en el límite del día? (gap < 5 min alrededor de medianoche)
+    const prevEndHour = prev.rawEndAt.getUTCHours();
+    const prevEndMin = prev.rawEndAt.getUTCMinutes();
+    const currStartHour = curr.rawStartAt.getUTCHours();
+    const currStartMin = curr.rawStartAt.getUTCMinutes();
+    
+    const prevAtMidnight = (prevEndHour === 0 && prevEndMin === 0) || 
+                           (prevEndHour === 23 && prevEndMin >= 58) ||
+                           (prevEndHour === 1 && prevEndMin === 0);
+    const currFromMidnight = (currStartHour === 0 && currStartMin === 0) ||
+                             (currStartHour === 1 && currStartMin === 0) ||
+                             (currStartHour === 0 && currStartMin <= 2);
+    
+    const isDayBoundary = (prevAtMidnight || currFromMidnight) && Math.abs(gapMinutes) <= 5;
+    
+    // Misma actividad + en el límite del día → fusionar
+    if (prev.rawActivityType === curr.rawActivityType && isDayBoundary) {
+      // Extender el evento anterior hasta el fin del actual
+      prev.rawEndAt = curr.rawEndAt;
+      prev.extractionNotes += ' | Merged across day boundary';
+      continue;
+    }
+    
+    // Eliminar "artefactos" del reinicio del tacógrafo:
+    // Eventos de <2 min en el límite exacto del día (00:00 o 01:00)
+    const currDurationMin = (curr.rawEndAt.getTime() - curr.rawStartAt.getTime()) / 60000;
+    if (currDurationMin < 2 && currFromMidnight && currStartHour <= 1) {
+      // Artefacto del reinicio — saltar
+      continue;
+    }
+    
+    merged.push(curr);
+  }
+  
+  return merged;
 }
 
 // ====================================
