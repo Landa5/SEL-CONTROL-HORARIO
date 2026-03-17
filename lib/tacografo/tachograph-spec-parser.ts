@@ -224,64 +224,98 @@ function scanForDailyRecords(buf: Buffer): DailyRecord[] {
 // ====================================
 
 /**
- * Scans for Spanish plate patterns (e.g. "4563LZS", "9946GWZ")
- * and nearby timestamps. Looks for timestamps both before and after
- * the plate to capture the vehicle usage period.
+ * Parses VehicleUsedRecords from the driver card binary according to EU regulation.
+ * Structure per record (31 bytes):
+ * - vehicleOdometerBegin: 3 bytes (big-endian, km)
+ * - vehicleOdometerEnd: 3 bytes (big-endian, km) 
+ * - vehicleFirstUse: 4 bytes (unix timestamp)
+ * - vehicleLastUse: 4 bytes (unix timestamp)
+ * - vehicleRegistrationNation: 1 byte
+ * - vehicleRegistrationNumber: 14 bytes (ASCII, padded with spaces/nulls)
+ * - padding: 2 bytes
+ * Total: 31 bytes per record
  */
 function scanForVehicles(buf: Buffer): { vrn: string; startDate: Date | null; endDate: Date | null }[] {
-  const results: { vrn: string; startDate: Date | null; endDate: Date | null }[] = [];
+  const RECORD_SIZE = 31;
+  const results: { vrn: string; startDate: Date | null; endDate: Date | null; score: number }[] = [];
   const seen = new Set<string>();
   
-  // Spanish plates: 4 digits + 2-3 uppercase letters
+  // Strategy 1: Look for structured VehicleUsedRecords
+  for (let i = 0; i <= buf.length - RECORD_SIZE; i++) {
+    // Read potential timestamps at offset 6 and 10
+    const ts1 = readUint32BE(buf, i + 6);
+    const ts2 = readUint32BE(buf, i + 10);
+    
+    // Both must be valid timestamps
+    if (ts1 < TS_MIN || ts1 > TS_MAX || ts2 < TS_MIN || ts2 > TS_MAX) continue;
+    
+    const d1 = new Date(ts1 * 1000);
+    const d2 = new Date(ts2 * 1000);
+    if (d1.getFullYear() < 2010 || d1.getFullYear() > 2040) continue;
+    if (d2.getFullYear() < 2010 || d2.getFullYear() > 2040) continue;
+    
+    // ts1 (firstUse) should be <= ts2 (lastUse)
+    if (ts1 > ts2) continue;
+    
+    // Read odometers (3 bytes each, big-endian)
+    const odoStart = (buf[i] << 16) | (buf[i + 1] << 8) | buf[i + 2];
+    const odoEnd = (buf[i + 3] << 16) | (buf[i + 4] << 8) | buf[i + 5];
+    
+    // Odometers should be reasonable (0-9999999 km) and end >= start
+    if (odoStart > 9999999 || odoEnd > 9999999) continue;
+    if (odoEnd < odoStart && odoEnd !== 0) continue;
+    
+    // Nation code at offset 14 (should be 0-255, typically small number for EU countries)
+    const nationCode = buf[i + 14];
+    
+    // VRN at offset 15, 14 bytes
+    const vrnRaw = readAsciiClean(buf, i + 15, 14).trim();
+    
+    // Must contain a Spanish plate pattern (4 digits + 2-3 letters)
+    const plateMatch = vrnRaw.match(/(\d{4}[A-Z]{2,3})/);
+    if (!plateMatch) continue;
+    
+    const plate = plateMatch[1];
+    
+    // Score this record based on quality indicators
+    let score = 0;
+    if (odoStart > 0 && odoEnd > 0) score += 2; // valid odometers
+    if (nationCode > 0 && nationCode < 100) score += 1; // valid nation code
+    if (ts2 - ts1 < 86400 * 365) score += 1; // usage period < 1 year (plausible)
+    if (ts2 - ts1 > 0) score += 1; // actually has a time range
+    
+    const key = `${plate}_${ts1}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      results.push({ vrn: plate, startDate: d1, endDate: d2, score });
+    }
+    
+    // Don't skip ahead too far - records might not be contiguous
+  }
+  
+  // If structured parsing found results, use them (prefer high-score records)
+  if (results.length > 0) {
+    // Sort by score (best first) and deduplicate by plate+daterange
+    results.sort((a, b) => b.score - a.score);
+    return results.map(({ vrn, startDate, endDate }) => ({ vrn, startDate, endDate }));
+  }
+  
+  // Strategy 2: Fallback to simple plate pattern scan if no structured records found
+  const fallbackResults: { vrn: string; startDate: Date | null; endDate: Date | null }[] = [];
   for (let i = 0; i < buf.length - 7; i++) {
     const chunk = readAsciiClean(buf, i, 14);
     const match = chunk.match(/(\d{4}[A-Z]{2,3})/);
     if (!match) continue;
-    
     const plate = match[1];
-    
-    // Collect all plausible timestamps near the plate (before and after)
-    const nearbyTimestamps: Date[] = [];
-    
-    // Look for timestamps BEFORE the plate (within 20 bytes)
-    for (let tOff = Math.max(0, i - 20); tOff < i; tOff++) {
-      if (tOff + 4 > buf.length) break;
-      const ts = readUint32BE(buf, tOff);
-      if (ts >= TS_MIN && ts <= TS_MAX) {
-        const d = new Date(ts * 1000);
-        if (d.getFullYear() >= 2010 && d.getFullYear() <= 2040) {
-          nearbyTimestamps.push(d);
-        }
-      }
+    const key2 = `${plate}_fallback`;
+    if (!seen.has(key2)) {
+      seen.add(key2);
+      fallbackResults.push({ vrn: plate, startDate: null, endDate: null });
     }
-    
-    // Look for timestamps AFTER the plate (within 30 bytes)
-    const plateEndPos = i + match.index! + plate.length;
-    for (let tOff = plateEndPos; tOff < Math.min(buf.length - 4, plateEndPos + 30); tOff++) {
-      const ts = readUint32BE(buf, tOff);
-      if (ts >= TS_MIN && ts <= TS_MAX) {
-        const d = new Date(ts * 1000);
-        if (d.getFullYear() >= 2010 && d.getFullYear() <= 2040) {
-          nearbyTimestamps.push(d);
-        }
-      }
-    }
-    
-    // Sort timestamps and use first as start, last as end
-    nearbyTimestamps.sort((a, b) => a.getTime() - b.getTime());
-    const startDate = nearbyTimestamps.length > 0 ? nearbyTimestamps[0] : null;
-    const endDate = nearbyTimestamps.length > 1 ? nearbyTimestamps[nearbyTimestamps.length - 1] : startDate;
-    
-    const key = `${plate}_${startDate?.toISOString() || 'x'}`;
-    if (!seen.has(key)) {
-      seen.add(key);
-      results.push({ vrn: plate, startDate, endDate });
-    }
-    
-    i += 6; // skip past plate
+    i += 6;
   }
   
-  return results;
+  return fallbackResults;
 }
 
 // ====================================
@@ -340,6 +374,9 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
     if (primaryPlate) metadata.plateNumber = primaryPlate;
     
     warnings.push(`[DIAG] ${vehicleRecords.length} vehicles found. Primary: ${primaryPlate || 'none'}`);
+    for (const vr of vehicleRecords) {
+      warnings.push(`[DIAG-VEH] ${vr.vrn} range: ${vr.startDate?.toISOString().substring(0, 10) || '?'} → ${vr.endDate?.toISOString().substring(0, 10) || '?'}`);
+    }
   }
   
   // 3. Convert daily records to BinaryRawEvent[]
@@ -347,6 +384,8 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
   
   for (const day of dailyRecords) {
     let vehicleId: string | null = null;
+    // Try matching vehicle records by date range
+    // A vehicle record covers dates where the driver used that vehicle
     for (const vr of vehicleRecords) {
       const vrStart = vr.startDate ? vr.startDate.toISOString().substring(0, 10) : null;
       const vrEnd = vr.endDate ? vr.endDate.toISOString().substring(0, 10) : null;
@@ -354,15 +393,19 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
         vehicleId = vr.vrn;
         break;
       }
+      // Also check if only startDate matches the day (single-day usage)
+      if (vrStart && vrStart === day.dateStr) {
+        vehicleId = vr.vrn;
+        break;
+      }
     }
     if (!vehicleId && metadata.plateNumber) {
       // Only use primary plate as fallback if no vehicle records exist at all
-      // If there ARE vehicle records but none match this day, leave vehicleId null
-      // to avoid assigning the wrong truck
       if (vehicleRecords.length === 0) {
         vehicleId = metadata.plateNumber;
       }
     }
+    warnings.push(`[DIAG-DAY] ${day.dateStr}: assigned vehicle=${vehicleId || 'NONE'}, activities=${day.activities.length}`);
     
     for (let i = 0; i < day.activities.length; i++) {
       const act = day.activities[i];
@@ -504,6 +547,36 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
             extractionNotes: `Scan: ${day.dateStr} ${lastActivityType}(end-of-day) ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
             extractionStatus: 'OK',
           });
+        }
+      }
+    }
+    
+    // POST-PROCESSING: Fix tachograph artifact where card left in slot overnight
+    // If a day starts with OTHER_WORK or AVAILABILITY (before 06:00 UTC),
+    // followed by REST, and there is no DRIVING before it, convert to REST.
+    // This handles the case where the driver sleeps with the card inserted.
+    const dayEvents = rawEvents.filter(e => {
+      const eDate = e.rawStartAt.toISOString().substring(0, 10);
+      return eDate === day.dateStr;
+    });
+    if (dayEvents.length >= 2) {
+      const sorted = dayEvents.sort((a, b) => a.rawStartAt.getTime() - b.rawStartAt.getTime());
+      // Find events that could be overnight artifacts
+      for (let ei = 0; ei < sorted.length; ei++) {
+        const ev = sorted[ei];
+        const evHour = ev.rawStartAt.getUTCHours();
+        if (evHour >= 6) break; // Only check events before 06:00 UTC
+        if (ev.rawActivityType === 'DRIVING') break; // Stop if we hit real driving
+        if (ev.rawActivityType === 'REST') continue; // REST is fine, skip
+        // It's OTHER_WORK or AVAILABILITY before 06:00 and before any DRIVING
+        const nextEv = ei + 1 < sorted.length ? sorted[ei + 1] : null;
+        if (nextEv && nextEv.rawActivityType === 'REST') {
+          // This is likely a tachograph artifact - convert to REST
+          const originalType = ev.rawActivityType;
+          ev.rawActivityType = 'REST';
+          ev.extractionMethod = 'derived';
+          ev.extractionNotes = (ev.extractionNotes || '') + ` [auto-fixed: overnight card-in artifact ${originalType} → REST]`;
+          warnings.push(`[FIX] ${day.dateStr}: converted ${originalType} at ${evHour}:00 UTC to REST (card-in overnight artifact)`);
         }
       }
     }
