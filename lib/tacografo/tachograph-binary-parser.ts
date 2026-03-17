@@ -176,10 +176,10 @@ function coreParseLogic(buffer: Buffer, fileName: string, enableTrace: boolean):
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   const baseName = fileName.split(/[\\/]/).pop()?.toUpperCase() || '';
   if (['esm', 'v1b'].includes(ext)) fileType = 'VEHICLE_UNIT';
-  else if (['c1b', 'tgd'].includes(ext)) fileType = 'DRIVER_CARD';
-  else if (ext === 'ddd' || ext === 'dtco') {
+  else if (['c1b'].includes(ext)) fileType = 'DRIVER_CARD';
+  else if (ext === 'ddd' || ext === 'dtco' || ext === 'tgd') {
     if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) fileType = 'DRIVER_CARD';
-    else if (baseName.startsWith('S_') || baseName.startsWith('M_')) fileType = 'VEHICLE_UNIT';
+    else if (baseName.startsWith('V_') || baseName.startsWith('S_') || baseName.startsWith('M_')) fileType = 'VEHICLE_UNIT';
   }
 
   if (buffer.length < 10) {

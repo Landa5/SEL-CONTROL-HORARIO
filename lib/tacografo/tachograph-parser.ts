@@ -65,7 +65,7 @@ function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNK
     if (baseName.startsWith('C_') || baseName.startsWith('C1_') || baseName.startsWith('C2_')) {
       return 'DRIVER_CARD';
     }
-    if (baseName.startsWith('S_') || baseName.startsWith('M_') || baseName.startsWith('E_')) {
+    if (baseName.startsWith('V_') || baseName.startsWith('S_') || baseName.startsWith('M_') || baseName.startsWith('E_')) {
       return 'VEHICLE_UNIT';
     }
     if (/\d{4}[a-z]{3}/i.test(fileName) || /[a-z]{2}\d{4}[a-z]{2}/i.test(fileName)) {
