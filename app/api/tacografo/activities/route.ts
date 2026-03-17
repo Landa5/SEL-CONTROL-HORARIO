@@ -52,30 +52,78 @@ export async function GET(request: Request) {
     ]);
 
     // Transformar respuesta para mantener compatibilidad y añadir campos v2
-    const data = activities.map(a => ({
-      id: a.id,
-      importId: a.importId,
-      sourceType: a.sourceType,
-      driverId: a.driverId,
-      vehicleId: a.vehicleId,
-      activityType: a.normalizedActivityType,
-      startTime: a.startAtUtc,
-      endTime: a.endAtUtc,
-      startAtLocal: a.startAtLocal,
-      endAtLocal: a.endAtLocal,
-      operationalDayLocal: a.operationalDayLocal,
-      durationMinutes: a.durationMinutes,
-      confidenceLevel: a.confidenceLevel,
-      matchingStatus: a.matchingStatus,
-      consolidationStatus: a.consolidationStatus,
-      extractionMethod: a.extractionMethod,
-      isSplitCrossMidnight: a.isSplitCrossMidnight,
-      driver: a.driver,
-      vehicle: a.vehicle,
-      createdAt: a.createdAt,
+    // dateKey estable YYYY-MM-DD para evitar errores de zona horaria en frontend
+    const data = activities.map(a => {
+      const dateKey = a.operationalDayLocal
+        ? a.operationalDayLocal.toISOString().substring(0, 10)
+        : a.startAtUtc.toISOString().substring(0, 10);
+      return {
+        id: a.id,
+        importId: a.importId,
+        sourceType: a.sourceType,
+        driverId: a.driverId,
+        vehicleId: a.vehicleId,
+        activityType: a.normalizedActivityType,
+        startTime: a.startAtUtc,
+        endTime: a.endAtUtc,
+        startAtLocal: a.startAtLocal,
+        endAtLocal: a.endAtLocal,
+        operationalDayLocal: a.operationalDayLocal,
+        dateKey,
+        durationMinutes: a.durationMinutes,
+        confidenceLevel: a.confidenceLevel,
+        matchingStatus: a.matchingStatus,
+        consolidationStatus: a.consolidationStatus,
+        extractionMethod: a.extractionMethod,
+        isSplitCrossMidnight: a.isSplitCrossMidnight,
+        driver: a.driver,
+        vehicle: a.vehicle,
+        createdAt: a.createdAt,
+      };
+    });
+
+    // DailySummary = fuente de verdad del estado del día (dayConsolidationStatus)
+    // Se devuelve aparte para que el frontend NO tenga que deducirlo de los eventos
+    const summaryWhere: any = {};
+    if (driverId) summaryWhere.driverId = parseInt(driverId);
+    if (dateFrom || dateTo) {
+      summaryWhere.date = {};
+      if (dateFrom) summaryWhere.date.gte = new Date(dateFrom);
+      if (dateTo) summaryWhere.date.lte = new Date(dateTo);
+    }
+    const dailySummaries = await prisma.tachographDailySummary.findMany({
+      where: summaryWhere,
+      select: {
+        date: true,
+        driverId: true,
+        dayConsolidationStatus: true,
+        rawEventsCount: true,
+        ownSourceMinutes: true,
+        inheritedSplitMinutes: true,
+        calendarCoverageRatio: true,
+        gapMinutes: true,
+        consistencyStatus: true,
+        averageConfidence: true,
+        notes: true,
+        totalDrivingMinutes: true,
+        totalOtherWorkMinutes: true,
+        totalRestMinutes: true,
+        totalBreakMinutes: true,
+        totalAvailabilityMinutes: true,
+      },
+      orderBy: { date: 'desc' },
+    });
+    // Devolver dateKey estable en cada summary
+    const summariesWithKey = dailySummaries.map(s => ({
+      ...s,
+      dateKey: s.date.toISOString().substring(0, 10),
     }));
 
-    return NextResponse.json({ data, pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } });
+    return NextResponse.json({
+      data,
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      dailySummaries: summariesWithKey,
+    });
   } catch (error: any) {
     console.error('GET /api/tacografo/activities error:', error);
     return NextResponse.json({ error: 'Error al obtener actividades' }, { status: 500 });

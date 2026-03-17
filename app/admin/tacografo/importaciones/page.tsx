@@ -179,6 +179,7 @@ export default function ImportacionesPage() {
           }
           e.target.value = '';
         }}
+        accept=".ddd,.dtco,.tgd,.v1b,.c1b,.esm,.csv"
       />
 
       {/* Upload Dropzone */}
@@ -208,7 +209,7 @@ export default function ImportacionesPage() {
             <p className="text-lg font-semibold text-gray-700">
               {dragActive ? '¡Suelta aquí!' : 'Arrastra archivos de tacógrafo aquí'}
             </p>
-            <p className="text-sm text-gray-400 mt-1">o haz clic para seleccionar • Formatos: .ddd, .dtco, .tgd, .v1b, .c1b, .esm</p>
+            <p className="text-sm text-gray-400 mt-1">o haz clic para seleccionar • Formatos: .ddd, .dtco, .tgd, .v1b, .c1b, .esm, .csv (Ministerio)</p>
           </>
         )}
       </div>

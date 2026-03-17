@@ -12,10 +12,21 @@ const ACTIVITY_COLORS: Record<string, { bg: string; text: string; label: string 
   UNKNOWN: { bg: 'bg-gray-400', text: 'text-gray-600', label: 'Desconocido' },
 };
 
-const CONSOLIDATION_LABELS: Record<string, { label: string; color: string }> = {
+// Estado a nivel de EVENTO (consolidationStatus de NormalizedEvent)
+const EVENT_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   operative: { label: 'Operativo', color: 'text-green-700 bg-green-50' },
   provisional: { label: 'Provisional', color: 'text-amber-700 bg-amber-50' },
   excluded: { label: 'Excluido', color: 'text-red-700 bg-red-50' },
+};
+
+// Estado a nivel de DÍA (dayConsolidationStatus de DailySummary — FUENTE DE VERDAD)
+const DAY_STATUS_LABELS: Record<string, { label: string; color: string; icon: string }> = {
+  VALID: { label: 'Válido', color: 'text-green-700 bg-green-50 border-green-200', icon: '✅' },
+  BLOCKED_NO_SOURCE: { label: 'Sin datos origen', color: 'text-red-700 bg-red-50 border-red-200', icon: '🚫' },
+  BLOCKED_LOW_CONFIDENCE: { label: 'Baja confianza', color: 'text-amber-700 bg-amber-50 border-amber-200', icon: '⚠️' },
+  BLOCKED_CONFLICT: { label: 'Conflicto', color: 'text-red-700 bg-red-50 border-red-200', icon: '❌' },
+  // Fallback para datos legacy que aún no tengan DailySummary
+  UNKNOWN: { label: 'Sin resumen', color: 'text-gray-500 bg-gray-50 border-gray-200', icon: '❓' },
 };
 
 const CONFIDENCE_LABELS: Record<string, { label: string; color: string }> = {
@@ -28,7 +39,7 @@ const WORK_TYPES = ['DRIVING', 'OTHER_WORK', 'AVAILABILITY'];
 const REST_TYPES = ['REST', 'BREAK'];
 
 interface JornadaSummary {
-  date: string;
+  date: string;              // YYYY-MM-DD estable del backend
   driverName: string;
   driverId: number | null;
   vehiclePlates: string[];
@@ -43,7 +54,15 @@ interface JornadaSummary {
   totalBreak: number;
   totalWork: number;
   averageConfidence: string;
-  consolidationStatus: string;
+  // Estado del DÍA — viene de TachographDailySummary (FUENTE DE VERDAD)
+  dayStatus: string;           // dayConsolidationStatus
+  rawEventsCount: number;
+  ownSourceMinutes: number;
+  inheritedSplitMinutes: number;
+  gapMinutes: number;
+  consistencyStatus: string;
+  // Estado de los EVENTOS — deducido de NormalizedEvent (solo informativo)
+  eventsConsolidationStatus: string;
   activities: any[];
 }
 
@@ -171,26 +190,26 @@ export default function ActividadPage() {
       ]);
 
       let actData: any[] = [];
+      let summariesData: any[] = [];
       if (actRes.ok) {
         const json = await actRes.json();
         actData = json.data || [];
+        summariesData = json.dailySummaries || [];
       }
       if (drvRes.ok) setDrivers(await drvRes.json());
 
-      // Agrupar por día operativo + conductor
-      // v2: usar operationalDayLocal del servidor (ya es fecha local España)
+      // Indexar DailySummary por dateKey_driverId (FUENTE DE VERDAD del estado del día)
+      const summaryMap = new Map<string, any>();
+      for (const s of summariesData) {
+        const key = `${s.dateKey}_${s.driverId}`;
+        summaryMap.set(key, s);
+      }
+
+      // Agrupar actividades por día operativo + conductor
+      // Usar dateKey estable del backend (YYYY-MM-DD, sin reconstrucción con toISOString)
       const byDay = new Map<string, JornadaSummary>();
       for (const act of actData) {
-        // v2: operationalDayLocal viene del servidor como fecha local España
-        let dayKey: string;
-        if (act.operationalDayLocal) {
-          dayKey = new Date(act.operationalDayLocal).toISOString().substring(0, 10);
-        } else {
-          // Fallback para datos legacy
-          const utcDate = new Date(act.startTime);
-          const spainDate = new Date(utcDate.toLocaleString('en-US', { timeZone: 'Europe/Madrid' }));
-          dayKey = `${spainDate.getFullYear()}-${String(spainDate.getMonth() + 1).padStart(2, '0')}-${String(spainDate.getDate()).padStart(2, '0')}`;
-        }
+        const dayKey = act.dateKey; // clave estable del backend
 
         const driverId = act.driverId;
         const driverName = act.driver?.linkedEmployee
@@ -208,7 +227,13 @@ export default function ActividadPage() {
             totalDriving: 0, totalOtherWork: 0, totalAvailability: 0,
             totalRest: 0, totalBreak: 0, totalWork: 0,
             averageConfidence: 'medium',
-            consolidationStatus: 'provisional',
+            dayStatus: 'UNKNOWN',
+            rawEventsCount: 0,
+            ownSourceMinutes: 0,
+            inheritedSplitMinutes: 0,
+            gapMinutes: 0,
+            consistencyStatus: 'ok',
+            eventsConsolidationStatus: 'provisional',
             activities: [],
           });
         }
@@ -231,8 +256,9 @@ export default function ActividadPage() {
         ds.activities.push(act);
       }
 
-      // Calcular jornada para cada día
-      for (const ds of byDay.values()) {
+      // Enriquecer cada día con datos de DailySummary (fuente de verdad)
+      for (const [key, ds] of byDay) {
+        // Calcular jornada desde actividades
         const jornada = calcJornada(ds.activities);
         ds.inicioJornada = jornada.inicioJornada;
         ds.inicioComida = jornada.inicioComida;
@@ -240,20 +266,38 @@ export default function ActividadPage() {
         ds.finJornada = jornada.finJornada;
         ds.totalWork = ds.totalDriving + ds.totalOtherWork + ds.totalAvailability;
 
-        // Determinar confianza promedio
+        // Determinar confianza promedio de los EVENTOS
         const confidences = ds.activities.map((a: any) => a.confidenceLevel).filter(Boolean);
         if (confidences.includes('low')) ds.averageConfidence = 'low';
         else if (confidences.includes('medium')) ds.averageConfidence = 'medium';
         else if (confidences.includes('high')) ds.averageConfidence = 'high';
 
-        // Determinar estado de consolidación
+        // Estado de consolidación de los EVENTOS (informativo, NO es el estado del día)
         const statuses = ds.activities.map((a: any) => a.consolidationStatus).filter(Boolean);
-        if (statuses.includes('excluded')) ds.consolidationStatus = 'excluded';
-        else if (statuses.every((s: string) => s === 'operative')) ds.consolidationStatus = 'operative';
-        else ds.consolidationStatus = 'provisional';
+        if (statuses.includes('excluded')) ds.eventsConsolidationStatus = 'excluded';
+        else if (statuses.every((s: string) => s === 'operative')) ds.eventsConsolidationStatus = 'operative';
+        else ds.eventsConsolidationStatus = 'provisional';
+
+        // FUENTE DE VERDAD: estado del DÍA desde DailySummary
+        const summary = summaryMap.get(key);
+        if (summary) {
+          ds.dayStatus = summary.dayConsolidationStatus || 'UNKNOWN';
+          ds.rawEventsCount = summary.rawEventsCount ?? 0;
+          ds.ownSourceMinutes = summary.ownSourceMinutes ?? 0;
+          ds.inheritedSplitMinutes = summary.inheritedSplitMinutes ?? 0;
+          ds.gapMinutes = summary.gapMinutes ?? 0;
+          ds.consistencyStatus = summary.consistencyStatus || 'ok';
+          if (summary.averageConfidence) ds.averageConfidence = summary.averageConfidence;
+        }
       }
 
-      const sorted = Array.from(byDay.values()).sort((a, b) => b.date.localeCompare(a.date));
+      // Filtrar por dayStatus si se selecciona en dropdown
+      let result = Array.from(byDay.values());
+      if (selectedConsolidation) {
+        result = result.filter(ds => ds.dayStatus === selectedConsolidation);
+      }
+
+      const sorted = result.sort((a, b) => b.date.localeCompare(a.date));
       setDaySummaries(sorted);
     } catch (e) { console.error(e); }
     setLoading(false);
@@ -322,10 +366,11 @@ export default function ActividadPage() {
         {/* v2: filtro por estado de consolidación */}
         <select value={selectedConsolidation} onChange={(e) => setSelectedConsolidation(e.target.value)}
           className="px-3 py-2 border rounded-lg text-sm bg-white">
-          <option value="">Todos los estados</option>
-          <option value="operative">✅ Operativo</option>
-          <option value="provisional">⚠️ Provisional</option>
-          <option value="excluded">❌ Excluido</option>
+          <option value="">Todos los estados del día</option>
+          <option value="VALID">✅ Válido</option>
+          <option value="BLOCKED_NO_SOURCE">🚫 Sin datos origen</option>
+          <option value="BLOCKED_LOW_CONFIDENCE">⚠️ Baja confianza</option>
+          <option value="BLOCKED_CONFLICT">❌ Conflicto</option>
         </select>
 
         <div className="flex items-center gap-1">
@@ -369,12 +414,13 @@ export default function ActividadPage() {
                 {daySummaries.map((s) => {
                   const rowKey = `${s.date}_${s.driverId}`;
                   const isExpanded = expandedDay === rowKey;
-                  const consInfo = CONSOLIDATION_LABELS[s.consolidationStatus] || CONSOLIDATION_LABELS.provisional;
+                  const dayInfo = DAY_STATUS_LABELS[s.dayStatus] || DAY_STATUS_LABELS.UNKNOWN;
                   const confInfo = CONFIDENCE_LABELS[s.averageConfidence] || CONFIDENCE_LABELS.medium;
+                  const isBlocked = s.dayStatus.startsWith('BLOCKED_');
                   return (
                   <React.Fragment key={rowKey}>
                     <tr
-                      className="hover:bg-gray-50/50 transition-colors cursor-pointer group"
+                      className={`hover:bg-gray-50/50 transition-colors cursor-pointer group ${isBlocked ? 'opacity-60 bg-red-50/30' : ''}`}
                       onClick={() => setExpandedDay(isExpanded ? null : rowKey)}
                     >
                       <td className="px-2 py-3 text-center text-gray-400 group-hover:text-gray-600">
@@ -388,26 +434,26 @@ export default function ActividadPage() {
                         {s.vehiclePlates.length > 0 ? s.vehiclePlates.join(', ') : '—'}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-emerald-700 text-base">{formatLocalTime(s.inicioJornada)}</span>
+                        <span className={`font-bold text-base ${isBlocked ? 'text-gray-400' : 'text-emerald-700'}`}>{formatLocalTime(s.inicioJornada)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-orange-600">{formatLocalTime(s.inicioComida)}</span>
+                        <span className={isBlocked ? 'text-gray-400' : 'text-orange-600'}>{formatLocalTime(s.inicioComida)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-orange-600">{formatLocalTime(s.finComida)}</span>
+                        <span className={isBlocked ? 'text-gray-400' : 'text-orange-600'}>{formatLocalTime(s.finComida)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-red-700 text-base">{formatLocalTime(s.finJornada)}</span>
+                        <span className={`font-bold text-base ${isBlocked ? 'text-gray-400' : 'text-red-700'}`}>{formatLocalTime(s.finJornada)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="font-bold text-gray-900">{calcWorkHours(s)}</span>
+                        <span className={`font-bold ${isBlocked ? 'text-gray-400' : 'text-gray-900'}`}>{calcWorkHours(s)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className="text-blue-700 font-bold">{formatMinutes(s.totalDriving)}</span>
+                        <span className={`font-bold ${isBlocked ? 'text-gray-400' : 'text-blue-700'}`}>{formatMinutes(s.totalDriving)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${consInfo.color}`}>
-                          {consInfo.label}
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${dayInfo.color}`}>
+                          {dayInfo.icon} {dayInfo.label}
                         </span>
                       </td>
                     </tr>
@@ -417,6 +463,46 @@ export default function ActividadPage() {
                       <tr>
                         <td colSpan={11} className="p-0">
                           <div className="bg-gray-50 px-6 py-4 border-t">
+                            {/* Aviso BLOCKED_NO_SOURCE */}
+                            {s.dayStatus === 'BLOCKED_NO_SOURCE' && (
+                              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-sm font-bold text-red-800">Sin datos de origen para este día</p>
+                                  <p className="text-xs text-red-600 mt-0.5">
+                                    No existen raw events propios del {new Date(s.date + 'T12:00:00').toLocaleDateString('es-ES', { day: '2-digit', month: 'long' })}.
+                                    {s.inheritedSplitMinutes > 0 && (
+                                      <> Los {s.inheritedSplitMinutes} min visibles son un <strong>split heredado</strong> del día anterior que cruza medianoche.</>
+                                    )}
+                                    {s.gapMinutes > 0 && <> Gap sin cubrir: {formatMinutes(s.gapMinutes)}.</>}
+                                  </p>
+                                  <p className="text-[10px] text-red-500 mt-1 font-mono">
+                                    rawEventsCount={s.rawEventsCount} · ownSourceMinutes={s.ownSourceMinutes} · inheritedSplitMinutes={s.inheritedSplitMinutes}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Aviso BLOCKED_LOW_CONFIDENCE / BLOCKED_CONFLICT */}
+                            {s.dayStatus === 'BLOCKED_LOW_CONFIDENCE' && (
+                              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-sm font-bold text-amber-800">Baja confianza en los datos</p>
+                                  <p className="text-xs text-amber-600 mt-0.5">La mayoría del tiempo observado tiene baja confianza.</p>
+                                </div>
+                              </div>
+                            )}
+                            {s.dayStatus === 'BLOCKED_CONFLICT' && (
+                              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 flex items-start gap-2">
+                                <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="text-sm font-bold text-red-800">Conflicto detectado</p>
+                                  <p className="text-xs text-red-600 mt-0.5">Existen datos contradictorios entre fuentes.</p>
+                                </div>
+                              </div>
+                            )}
+
                             {/* Summary chips */}
                             <div className="flex flex-wrap gap-3 mb-4">
                               <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-1.5">
@@ -439,10 +525,16 @@ export default function ActividadPage() {
                                 <span className="text-[10px] uppercase font-bold text-yellow-600 block">Pausas</span>
                                 <span className="text-sm font-bold text-yellow-800">{formatMinutes(s.totalBreak)}</span>
                               </div>
-                              {/* v2: Confidence + consolidation detail */}
-                              <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 ml-auto">
-                                <span className="text-[10px] uppercase font-bold text-gray-500 block">Fiabilidad</span>
-                                <span className={`text-sm font-bold ${confInfo.color}`}>{confInfo.label}</span>
+                              {/* Estado del día (DailySummary) + Fiabilidad */}
+                              <div className="ml-auto flex gap-2">
+                                <div className={`rounded-lg px-3 py-1.5 border ${dayInfo.color}`}>
+                                  <span className="text-[10px] uppercase font-bold block">Estado día</span>
+                                  <span className="text-sm font-bold">{dayInfo.icon} {dayInfo.label}</span>
+                                </div>
+                                <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5">
+                                  <span className="text-[10px] uppercase font-bold text-gray-500 block">Fiabilidad</span>
+                                  <span className={`text-sm font-bold ${confInfo.color}`}>{confInfo.label}</span>
+                                </div>
                               </div>
                             </div>
 
@@ -519,7 +611,7 @@ export default function ActividadPage() {
                                 .map((act, idx) => {
                                   const startStr = formatLocalTime(act.startAtLocal || act.startTime);
                                   const endStr = formatLocalTime(act.endAtLocal || act.endTime);
-                                  const actCons = CONSOLIDATION_LABELS[act.consolidationStatus];
+                                  const actCons = EVENT_STATUS_LABELS[act.consolidationStatus];
                                   return (
                                     <div key={idx} className="flex items-center gap-3 text-xs py-1 px-2 rounded hover:bg-white/70 transition-colors">
                                       <div className={`w-2.5 h-2.5 rounded-full ${ACTIVITY_COLORS[act.activityType]?.bg || 'bg-gray-400'} shadow-sm`} />
@@ -529,13 +621,13 @@ export default function ActividadPage() {
                                       </span>
                                       <span className="font-bold text-gray-700">{formatMinutes(act.durationMinutes)}</span>
                                       {act.isSplitCrossMidnight && (
-                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 font-bold">SPLIT</span>
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-50 text-violet-700 font-bold" title="Evento heredado de otro día (split cross-midnight)">SPLIT heredado</span>
                                       )}
                                       {act.extractionMethod === 'derived' && (
                                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-bold">derivado</span>
                                       )}
                                       {actCons && (
-                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ml-auto ${actCons.color}`}>{actCons.label}</span>
+                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ml-auto ${actCons.color}`} title="Estado del evento (no del día)">{actCons.label}</span>
                                       )}
                                     </div>
                                   );

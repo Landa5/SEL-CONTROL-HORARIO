@@ -148,9 +148,10 @@ export async function processImport(
     warnings.push(...parseResult.warnings);
     errors.push(...parseResult.errors);
     
-    // 7. Update import with parsed metadata
+    // 7. Update import with parsed metadata (including real parserVersion)
     const updateData: any = {
       fileType: parseResult.fileType,
+      parserVersion: parseResult.parserVersion, // Use REAL parser version, not constant
       processedAt: new Date(),
       rawMetadataJson: parseResult.metadata,
       detectedDriverName: parseResult.metadata.driverName || null,

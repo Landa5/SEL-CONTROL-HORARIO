@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { X, Calendar, User, Truck, MapPin, AlertCircle, Phone, ArrowRight, Pencil, ArrowLeft } from 'lucide-react';
+import { X, Calendar, User, Truck, MapPin, AlertCircle, Phone, Pencil, ArrowLeft, Shield, Eye, Users } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { Badge } from '@/components/ui/Badge';
 import TaskCRM from './TaskCRM';
 import TaskForm from './TaskForm';
+import ResolutionModal from './ResolutionModal';
+import TallerDetailSection from './TallerDetailSection';
+import ParticipantManager from './ParticipantManager';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -15,89 +17,13 @@ interface TaskDetailPanelProps {
     onUpdate: () => void;
 }
 
-// Simple Resolution Modal Component
-function ResolutionModal({ isOpen, onClose, onConfirm, loading, taskType }: any) {
-    const [resultado, setResultado] = useState('SOLUCIONADO');
-    const [conclusion, setConclusion] = useState('');
-
-    // TALLER specific fields
-    const [coste, setCoste] = useState('');
-    const [kmActual, setKmActual] = useState('');
-
-    if (!isOpen) return null;
-
-    const isTaller = taskType === 'TALLER';
-
-    return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4 animate-in zoom-in-95">
-                <h3 className="text-lg font-bold text-gray-900">
-                    {isTaller ? 'Finalizar Reparación / Taller' : 'Finalizar Tarea'}
-                </h3>
-
-                <div className="space-y-2">
-                    <label className="text-sm font-bold text-gray-700">Resultado</label>
-                    <select
-                        className="w-full p-2 border rounded-lg"
-                        value={resultado}
-                        onChange={(e) => setResultado(e.target.value)}
-                    >
-                        <option value="SOLUCIONADO">Solucionado / Reparado</option>
-                        <option value="NO_PROCEDE">No Procede / Falsa Alarma</option>
-                        <option value="PARCIAL">Solución Parcial (Pendiente Piezas)</option>
-                    </select>
-                </div>
-
-                {isTaller && (
-                    <div className="grid grid-cols-2 gap-4 bg-orange-50 p-3 rounded-lg border border-orange-100">
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-orange-800 uppercase">Coste Final (€)</label>
-                            <input
-                                type="number"
-                                placeholder="0.00"
-                                className="w-full p-2 border border-orange-200 rounded-lg text-sm"
-                                value={coste}
-                                onChange={(e) => setCoste(e.target.value)}
-                            />
-                        </div>
-                        <div className="space-y-1">
-                            <label className="text-xs font-bold text-orange-800 uppercase">Kms Actuales</label>
-                            <input
-                                type="number"
-                                placeholder="Ej: 150000"
-                                className="w-full p-2 border border-orange-200 rounded-lg text-sm"
-                                value={kmActual}
-                                onChange={(e) => setKmActual(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                )}
-
-                <div className="space-y-2">
-                    <label className="text-sm font-bold text-gray-700">Conclusión / Detalles</label>
-                    <textarea
-                        className="w-full p-2 border rounded-lg"
-                        rows={3}
-                        placeholder={isTaller ? "Detalla las piezas cambiadas y el trabajo realizado..." : "Explica brevemente la solución aplicada..."}
-                        value={conclusion}
-                        onChange={(e) => setConclusion(e.target.value)}
-                    />
-                </div>
-
-                <div className="flex gap-2 justify-end pt-2">
-                    <Button variant="ghost" onClick={onClose} disabled={loading}>Cancelar</Button>
-                    <Button
-                        onClick={() => onConfirm(resultado, conclusion, { coste, kmActual })}
-                        disabled={loading || !conclusion.trim()}
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                    >
-                        {loading ? 'Guardando...' : 'Confirmar Cierre'}
-                    </Button>
-                </div>
-            </div>
-        </div>
-    );
-}
+const VISIBILIDAD_LABELS: Record<string, { label: string; color: string; icon: any }> = {
+    GENERAL: { label: 'General', color: 'bg-green-100 text-green-800', icon: Eye },
+    EQUIPO: { label: 'Equipo', color: 'bg-blue-100 text-blue-800', icon: Users },
+    DIRIGIDA: { label: 'Dirigida', color: 'bg-yellow-100 text-yellow-800', icon: User },
+    PERSONAL: { label: 'Personal', color: 'bg-gray-100 text-gray-700', icon: User },
+    CONFIDENCIAL: { label: 'Confidencial', color: 'bg-red-100 text-red-800', icon: Shield },
+};
 
 export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetailPanelProps) {
     const [task, setTask] = useState<any>(null);
@@ -107,12 +33,13 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
     const [userRole, setUserRole] = useState<string>('');
     const [isEditing, setIsEditing] = useState(false);
     const [showResolutionModal, setShowResolutionModal] = useState(false);
+    const [closingLoading, setClosingLoading] = useState(false);
 
     // Fetch employees for assignment
     useEffect(() => {
         const fetchEmployees = async () => {
             try {
-                const res = await fetch('/api/empleados'); // Assuming this endpoint returns all active employees
+                const res = await fetch('/api/empleados');
                 if (res.ok) {
                     const data = await res.json();
                     setEmployees(data);
@@ -140,7 +67,7 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
     useEffect(() => {
         if (taskId) {
             fetchTaskDetails(taskId);
-            setIsEditing(false); // Reset edit mode when opening new task
+            setIsEditing(false);
         } else {
             setTask(null);
             setIsEditing(false);
@@ -164,6 +91,13 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
 
     const handleStatusChange = async (newStatus: string) => {
         if (!task) return;
+
+        // Si intenta cerrar un TALLER, abrir ResolutionModal
+        if (newStatus === 'COMPLETADA' && task.tipo === 'TALLER') {
+            setShowResolutionModal(true);
+            return;
+        }
+
         try {
             const res = await fetch(`/api/tareas/${task.id}`, {
                 method: 'PATCH',
@@ -173,6 +107,9 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
             if (res.ok) {
                 fetchTaskDetails(task.id);
                 onUpdate();
+            } else {
+                const errData = await res.json();
+                alert(errData.error || 'Error al cambiar estado');
             }
         } catch (error) {
             console.error("Error updating status:", error);
@@ -198,46 +135,39 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
         }
     };
 
-    const handleCloseTask = async (resultado: string, conclusion: string, extraData?: { coste?: string, kmActual?: string }) => {
+    const handleCloseTask = async (closeData: any) => {
         if (!task) return;
-        setLoading(true);
+        setClosingLoading(true);
         try {
-            // 1. Add History/Comment
-            await fetch(`/api/tareas/${task.id}/historial`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    tipoAccion: 'CIERRE',
-                    mensaje: `TAREA FINALIZADA. Resultado: ${resultado}. Detalles: ${conclusion}`
-                })
-            });
-
-            // 2. Update Status to COMPLETADA
+            // Para TALLER, los datos de extensionTaller van incluidos
             const res = await fetch(`/api/tareas/${task.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    estado: 'COMPLETADA',
-                    resumenCierre: conclusion,
-                    mantenimientoData: extraData // Send extra data to backend to create MantenimientoRealizado if needed
-                })
+                body: JSON.stringify(closeData)
             });
 
             if (res.ok) {
                 setShowResolutionModal(false);
                 fetchTaskDetails(task.id);
                 onUpdate();
+            } else {
+                const errData = await res.json();
+                alert(errData.detalles?.join('\n') || errData.error || 'Error al cerrar');
             }
         } catch (error) {
             console.error("Error closing task:", error);
         } finally {
-            setLoading(false);
+            setClosingLoading(false);
         }
     };
 
     if (!taskId) return null;
 
     const isOpen = !!taskId;
+    const visInfo = VISIBILIDAD_LABELS[task?.visibilidad] || VISIBILIDAD_LABELS.GENERAL;
+    const VisIcon = visInfo.icon;
+    const canEditTaller = ['ADMIN', 'MECANICO', 'OFICINA'].includes(userRole);
+    const isCompletedOrCancelled = task?.estado === 'COMPLETADA' || task?.estado === 'CANCELADA';
 
     return (
         <div className={`fixed inset-0 z-50 flex justify-end transition-opacity duration-300 ${isOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
@@ -254,8 +184,9 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                     isOpen={showResolutionModal}
                     onClose={() => setShowResolutionModal(false)}
                     onConfirm={handleCloseTask}
-                    loading={loading}
+                    loading={closingLoading}
                     taskType={task?.tipo}
+                    existingExtension={task?.extensionTaller}
                 />
 
                 {/* Header */}
@@ -276,9 +207,17 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                                 </div>
                             ) : (
                                 <>
-                                    <p className="text-xs font-bold text-gray-400 uppercase">
-                                        #{task?.id} • {task?.tipo}
-                                    </p>
+                                    <div className="flex items-center gap-2">
+                                        <p className="text-xs font-bold text-gray-400 uppercase">
+                                            #{task?.id} • {task?.tipo}
+                                        </p>
+                                        {task?.visibilidad && (
+                                            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold ${visInfo.color}`}>
+                                                <VisIcon className="w-2.5 h-2.5" />
+                                                {visInfo.label}
+                                            </span>
+                                        )}
+                                    </div>
                                     <h2 className="text-lg font-bold text-gray-900 leading-tight">
                                         {task?.titulo || '...'}
                                     </h2>
@@ -318,26 +257,39 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                                     value={task.estado}
                                     onChange={(e) => handleStatusChange(e.target.value)}
                                 >
+                                    <option value="BACKLOG">Backlog</option>
                                     <option value="PENDIENTE">Pendiente</option>
                                     <option value="ABIERTA">Abierta</option>
                                     <option value="EN_CURSO">En Curso</option>
                                     <option value="BLOQUEADA">Bloqueada</option>
                                     <option value="REVISION">Revisión</option>
                                     <option value="COMPLETADA">Completada</option>
-                                    <option value="CERRADA">Cerrada</option>
+                                    <option value="CANCELADA">Cancelada</option>
                                 </select>
                             )}
                         </div>
                     )}
 
                     {/* CLOSE BUTTON - Only if Active */}
-                    {!loading && task && task.estado !== 'COMPLETADA' && task.estado !== 'CERRADA' && !isEditing && (
+                    {!loading && task && !isCompletedOrCancelled && !isEditing && (
                         <Button
                             size="sm"
                             className="bg-green-600 hover:bg-green-700 text-white shadow-sm animate-in fade-in"
                             onClick={() => setShowResolutionModal(true)}
                         >
                             Finalizar Tarea
+                        </Button>
+                    )}
+
+                    {/* REOPEN BUTTON - Only ADMIN on completed/cancelled */}
+                    {!loading && task && isCompletedOrCancelled && userRole === 'ADMIN' && !isEditing && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            className="border-amber-300 text-amber-700 hover:bg-amber-50 animate-in fade-in"
+                            onClick={() => handleStatusChange('EN_CURSO')}
+                        >
+                            Reabrir
                         </Button>
                     )}
                 </div>
@@ -361,7 +313,7 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                     </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto bg-gray-50/50">
-                        <div className="p-6 space-y-6">
+                        <div className="p-6 space-y-4">
 
                             {/* Main Info */}
                             <div className="bg-white p-4 rounded-xl shadow-sm border space-y-4">
@@ -386,9 +338,69 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Resumen de cierre (si cerrada) */}
+                                {task.resumenCierre && (
+                                    <div className="pt-3 border-t bg-green-50/50 -mx-4 -mb-4 p-4 rounded-b-xl">
+                                        <p className="text-[10px] font-bold text-green-600 uppercase mb-1">Resumen de cierre</p>
+                                        <p className="text-sm text-green-900 whitespace-pre-wrap">{task.resumenCierre}</p>
+                                        {task.fechaCierre && (
+                                            <p className="text-xs text-green-500 mt-1">
+                                                Cerrada: {format(new Date(task.fechaCierre), 'dd MMM yyyy HH:mm', { locale: es })}
+                                            </p>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
-                            {/* Assignment Section - Only visible for Admin/Office or if assigned */}
+                            {/* v3.1: Extensión Taller */}
+                            {task.tipo === 'TALLER' && task.extensionTaller && (
+                                <TallerDetailSection
+                                    extension={task.extensionTaller}
+                                    taskId={task.id}
+                                    canEdit={canEditTaller && !isCompletedOrCancelled}
+                                    onUpdate={() => fetchTaskDetails(task.id)}
+                                />
+                            )}
+
+                            {/* v3.1: Extensión Reclamación (readonly) */}
+                            {task.tipo === 'RECLAMACION' && task.extensionReclamacion && (
+                                <div className="bg-purple-50/80 p-4 rounded-xl border border-purple-200 space-y-3">
+                                    <h4 className="text-xs font-black text-purple-800 uppercase tracking-wider flex items-center gap-2">
+                                        <Shield className="w-3.5 h-3.5" /> Datos de Reclamación
+                                    </h4>
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                        {task.extensionReclamacion.canalEntrada && (
+                                            <div>
+                                                <p className="text-[10px] font-bold text-purple-400 uppercase">Canal</p>
+                                                <p className="font-bold text-purple-900">{task.extensionReclamacion.canalEntrada}</p>
+                                            </div>
+                                        )}
+                                        {task.extensionReclamacion.gravedad && (
+                                            <div>
+                                                <p className="text-[10px] font-bold text-purple-400 uppercase">Gravedad</p>
+                                                <p className="font-bold text-purple-900">{task.extensionReclamacion.gravedad}</p>
+                                            </div>
+                                        )}
+                                        {task.extensionReclamacion.clienteNombre && (
+                                            <div className="col-span-2">
+                                                <p className="text-[10px] font-bold text-purple-400 uppercase">Cliente</p>
+                                                <p className="font-bold text-purple-900">
+                                                    {task.extensionReclamacion.clienteNombre}
+                                                    {task.extensionReclamacion.clienteTelefono && ` — ${task.extensionReclamacion.clienteTelefono}`}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {task.extensionReclamacion.requiereRespuestaFormal && (
+                                        <span className={`px-2 py-1 text-xs font-bold rounded-full ${task.extensionReclamacion.respuestaEmitida ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                            {task.extensionReclamacion.respuestaEmitida ? '✓ Respuesta emitida' : '⚠ Pendiente respuesta formal'}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Assignment Section */}
                             <div className="bg-white p-4 rounded-xl shadow-sm border space-y-3">
                                 <h4 className="text-xs font-bold text-gray-400 uppercase">Asignación</h4>
                                 <div className="flex items-center gap-3">
@@ -418,6 +430,12 @@ export default function TaskDetailPanel({ taskId, onClose, onUpdate }: TaskDetai
                                     </div>
                                 </div>
                             </div>
+
+                            {/* v3.1: Participantes */}
+                            <ParticipantManager
+                                taskId={task.id}
+                                canEdit={isAdminOrOffice}
+                            />
 
                             {/* Context Info */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

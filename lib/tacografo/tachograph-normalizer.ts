@@ -249,7 +249,9 @@ export function normalizeRawEvents(
     
     let confidence: 'high' | 'medium' | 'low' = 'medium';
     if (raw.extractionStatus === 'SUSPECT') confidence = 'low';
-    if (raw.extractionMethod === 'spec') confidence = 'high';
+    // 'spec' solo garantiza parseo correcto, no completitud del día
+    // La promoción a 'high' ocurre en consolidación con cobertura ≥80%
+    // if (raw.extractionMethod === 'spec') confidence = 'high';
     
     return {
       sourceType,

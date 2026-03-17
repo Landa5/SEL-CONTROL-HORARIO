@@ -11,7 +11,11 @@ import {
     AlertCircle,
     Building2,
     MapPin,
-    MoreHorizontal
+    MoreHorizontal,
+    Wrench,
+    Shield,
+    AlertTriangle,
+    Users
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -31,39 +35,51 @@ interface TaskCardProps {
     onClick: (taskId: number) => void;
 }
 
+const TYPE_GRADIENT: Record<string, string> = {
+    TALLER: 'from-orange-500 via-amber-500 to-orange-600',
+    RECLAMACION: 'from-purple-500 via-fuchsia-500 to-purple-600',
+    OPERATIVA: 'from-blue-500 via-indigo-500 to-blue-600',
+    ADMINISTRATIVA: 'from-cyan-500 via-teal-500 to-cyan-600',
+};
+
+const TYPE_BG: Record<string, string> = {
+    TALLER: 'bg-gradient-to-br from-orange-50 to-amber-50/50',
+    RECLAMACION: 'bg-gradient-to-br from-purple-50 to-fuchsia-50/50',
+    OPERATIVA: 'bg-gradient-to-br from-blue-50 to-indigo-50/50',
+    ADMINISTRATIVA: 'bg-gradient-to-br from-cyan-50 to-teal-50/50',
+};
+
 export function TaskCard({ task, onMove, onClick }: TaskCardProps) {
     const isUrgent = task.prioridad === 'URGENTE';
-
-    // Derived state for visual coding
-    // Derived state for visual coding
-    let borderColor = 'border-l-blue-500'; // Default
-
-    if (isUrgent) {
-        borderColor = 'border-l-red-600';
-    } else if (task.tipo === 'TALLER') {
-        borderColor = 'border-l-orange-500';
-    } else if (task.tipo === 'RECLAMACION') {
-        borderColor = 'border-l-purple-600';
-    } else {
-        // Fallback to priority for standard tasks
-        borderColor = task.prioridad === 'ALTA' ? 'border-l-orange-400' :
-            task.prioridad === 'MEDIA' ? 'border-l-blue-500' : 'border-l-green-500';
-    }
+    const isAlta = task.prioridad === 'ALTA';
+    const gradient = TYPE_GRADIENT[task.tipo] || 'from-slate-400 to-slate-500';
+    const cardBg = TYPE_BG[task.tipo] || 'bg-white';
+    const hasParticipants = task.participantes?.length > 0;
 
     return (
-        <Card
-            className={`mb-3 cursor-pointer hover:shadow-md transition-all border-l-4 ${borderColor} bg-white shadow-sm`}
+        <div
+            className={`group relative mb-3 cursor-pointer rounded-xl overflow-hidden transition-all duration-300 
+                hover:shadow-lg hover:shadow-black/5 hover:-translate-y-0.5 hover:scale-[1.01]
+                ${isUrgent ? 'ring-2 ring-red-400/60 ring-offset-1' : ''}
+                ${cardBg} border border-white/60 shadow-sm backdrop-blur-sm`}
             onClick={() => onClick(task.id)}
         >
-            <CardContent className="p-3 space-y-3">
+            {/* Top gradient accent bar */}
+            <div className={`h-1 bg-gradient-to-r ${gradient}`} />
 
-                {/* Header: Type and Priority */}
+            <div className="p-3.5 space-y-2.5">
+                {/* Header: Type badge + Priority + Actions */}
                 <div className="flex justify-between items-start">
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                         <TaskTypeBadge type={task.tipo} />
                         {isUrgent && (
-                            <span className="text-[10px] font-black bg-red-100 text-red-600 px-1.5 py-0.5 rounded animate-pulse">
-                                URGENTE
+                            <span className="inline-flex items-center gap-1 text-[10px] font-black bg-gradient-to-r from-red-500 to-rose-500 text-white px-2 py-0.5 rounded-full shadow-sm shadow-red-200 animate-pulse">
+                                <AlertTriangle className="w-3 h-3" /> URGENTE
+                            </span>
+                        )}
+                        {isAlta && !isUrgent && (
+                            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full">
+                                ALTA
                             </span>
                         )}
                     </div>
@@ -72,20 +88,20 @@ export function TaskCard({ task, onMove, onClick }: TaskCardProps) {
                     <div onClick={(e) => e.stopPropagation()}>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-6 w-6 p-0">
+                                <Button variant="ghost" className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <MoreHorizontal className="h-4 w-4 text-gray-400" />
                                 </Button>
                             </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Mover a...</DropdownMenuLabel>
-                                <DropdownMenuItem onClick={() => onMove(task.id, 'PENDIENTE')}>
-                                    <AlertCircle className="mr-2 h-4 w-4" /> Pendiente
+                            <DropdownMenuContent align="end" className="rounded-xl shadow-xl border-0">
+                                <DropdownMenuLabel className="text-xs text-gray-400">Mover a...</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => onMove(task.id, 'PENDIENTE')} className="rounded-lg">
+                                    <AlertCircle className="mr-2 h-4 w-4 text-slate-500" /> Pendiente
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onMove(task.id, 'EN_CURSO')}>
-                                    <PlayCircle className="mr-2 h-4 w-4" /> En Proceso
+                                <DropdownMenuItem onClick={() => onMove(task.id, 'EN_CURSO')} className="rounded-lg">
+                                    <PlayCircle className="mr-2 h-4 w-4 text-blue-500" /> En Proceso
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onMove(task.id, 'COMPLETADA')}>
-                                    <CheckCircle className="mr-2 h-4 w-4" /> Hecho
+                                <DropdownMenuItem onClick={() => onMove(task.id, 'COMPLETADA')} className="rounded-lg">
+                                    <CheckCircle className="mr-2 h-4 w-4 text-green-500" /> Hecho
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -94,56 +110,68 @@ export function TaskCard({ task, onMove, onClick }: TaskCardProps) {
 
                 {/* Title */}
                 <div>
-                    <h4 className="text-sm font-bold text-gray-800 leading-tight line-clamp-2">
+                    <h4 className="text-sm font-bold text-gray-800 leading-snug line-clamp-2 group-hover:text-gray-950 transition-colors">
                         {task.titulo}
                     </h4>
-                    <span className="text-[10px] text-gray-400 font-mono">#{task.id}</span>
+                    <span className="text-[10px] text-gray-400 font-mono mt-0.5 inline-block">#{task.id}</span>
                 </div>
 
-                {/* Context Info (Vehicle/Client) */}
-                {task.matricula && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-slate-50 p-1.5 rounded">
-                        <Truck className="w-3.5 h-3.5" />
-                        <span className="font-semibold">{task.matricula}</span>
-                    </div>
-                )}
-                {task.clienteNombre && (
-                    <div className="flex items-center gap-1.5 text-xs text-blue-600 bg-blue-50 p-1.5 rounded">
-                        <Building2 className="w-3.5 h-3.5" />
-                        <span className="font-semibold line-clamp-1">{task.clienteNombre}</span>
-                    </div>
-                )}
+                {/* Context: Vehicle / Client / Participants */}
+                <div className="space-y-1.5">
+                    {task.matricula && (
+                        <div className="flex items-center gap-1.5 text-xs bg-white/70 backdrop-blur rounded-lg px-2 py-1.5 border border-slate-100">
+                            <Truck className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                            <span className="font-bold text-slate-700">{task.matricula}</span>
+                        </div>
+                    )}
+                    {task.clienteNombre && (
+                        <div className="flex items-center gap-1.5 text-xs bg-white/70 backdrop-blur rounded-lg px-2 py-1.5 border border-blue-100">
+                            <Building2 className="w-3.5 h-3.5 text-indigo-500 flex-shrink-0" />
+                            <span className="font-semibold text-indigo-700 line-clamp-1">{task.clienteNombre}</span>
+                        </div>
+                    )}
+                </div>
 
-                {/* Footer: Avatar & Time */}
-                <div className="flex justify-between items-center pt-2 border-t border-gray-50">
-                    <div className="flex flex-col gap-1">
-                        {/* Assignee */}
-                        <div className="flex items-center gap-1.5 text-gray-500" title={task.asignadoA?.nombre || "Sin asignar"}>
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${task.asignadoA ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                {/* Footer */}
+                <div className="flex justify-between items-end pt-2 border-t border-gray-100/80">
+                    {/* Left: People */}
+                    <div className="flex items-center gap-2">
+                        {/* Assignee avatar */}
+                        <div className="flex items-center gap-1.5" title={task.asignadoA?.nombre || "Sin asignar"}>
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white ring-2 ring-white shadow-sm ${
+                                task.asignadoA ? 'bg-gradient-to-br from-blue-500 to-indigo-600' : 'bg-gray-300'
+                            }`}>
                                 {task.asignadoA ? task.asignadoA.nombre.charAt(0) : '?'}
                             </div>
-                            {task.asignadoA && <span className="text-[10px] max-w-[80px] truncate">{task.asignadoA.nombre}</span>}
+                            {task.asignadoA && (
+                                <span className="text-[11px] text-gray-600 font-medium max-w-[70px] truncate">
+                                    {task.asignadoA.nombre}
+                                </span>
+                            )}
                         </div>
-                        {/* Creator */}
-                        {task.creadoPor && (
-                            <span className="text-[9px] text-gray-400 ml-0.5">
-                                Creado por: {task.creadoPor.nombre}
-                            </span>
+
+                        {/* Participant count */}
+                        {hasParticipants && (
+                            <div className="flex items-center gap-0.5 text-[10px] text-gray-400" title={`${task.participantes.length} participantes`}>
+                                <Users className="w-3 h-3" />
+                                <span className="font-bold">{task.participantes.length}</span>
+                            </div>
                         )}
                     </div>
 
-                    <div className="flex flex-col items-end gap-0.5">
-                        <div className="flex items-center gap-1 text-[10px] text-gray-500 font-bold">
+                    {/* Right: Date */}
+                    <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1 text-[10px] text-gray-400 font-semibold">
                             <Clock className="w-3 h-3" />
                             {format(new Date(task.createdAt), 'dd MMM', { locale: es })}
                         </div>
-                        <span className="text-[9px] text-gray-400">
+                        <span className="text-[9px] text-gray-300">
                             {tryFormatDistance(task.createdAt)}
                         </span>
                     </div>
                 </div>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }
 

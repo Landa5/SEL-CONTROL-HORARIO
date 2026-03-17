@@ -9,6 +9,7 @@
  */
 
 import type { BinaryRawEvent, BinaryParseResult } from './tachograph-binary-parser';
+import { isMinistryCSV, parseMinistryCSV } from './tachograph-csv-parser';
 
 export { BinaryRawEvent, BinaryParseResult };
 
@@ -48,7 +49,7 @@ export interface TachographParseResult {
 }
 
 // Supported file extensions
-const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm'];
+const KNOWN_EXTENSIONS = ['.ddd', '.dtco', '.tgd', '.v1b', '.c1b', '.esm', '.csv'];
 
 function detectFileType(fileName: string): 'DRIVER_CARD' | 'VEHICLE_UNIT' | 'UNKNOWN' {
   const lower = fileName.toLowerCase();
@@ -186,8 +187,101 @@ export async function parseTachographFile(
   _extension: string
 ): Promise<TachographParseResult> {
   try {
+    // Check if this is a Ministry CSV file first
+    if (isMinistryCSV(fileBuffer, fileName)) {
+      console.log('[TachographParser] Detected Ministry CSV format, using CSV parser.');
+      const csvResult = parseMinistryCSV(fileBuffer, fileName);
+      
+      // Supplement metadata from filename
+      if (!csvResult.metadata.plateNumber) {
+        const plate = extractPlateFromFileName(fileName);
+        if (plate) {
+          csvResult.metadata.plateNumber = plate;
+          csvResult.warnings.push('La matrícula se extrajo del nombre del archivo.');
+        }
+      }
+      
+      const cardInfo = extractCardInfoFromFileName(fileName);
+      if (!csvResult.metadata.cardNumber && cardInfo.cardNumber) {
+        csvResult.metadata.cardNumber = cardInfo.cardNumber;
+      }
+      if (cardInfo.dni) {
+        csvResult.metadata.driverDni = cardInfo.dni;
+      }
+      
+      // Generate legacy activities from raw events
+      const legacyActivities = rawEventsToLegacyActivities(csvResult.rawEvents);
+      
+      return {
+        success: csvResult.success,
+        parserVersion: csvResult.parserVersion,
+        fileType: csvResult.fileType,
+        metadata: csvResult.metadata,
+        rawEvents: csvResult.rawEvents,
+        activities: legacyActivities,
+        warnings: csvResult.warnings,
+        errors: csvResult.errors,
+      };
+    }
+    
+    // Detect file type from name
+    const detectedType = detectFileType(fileName);
+    let specDiagnosticWarnings: string[] = [];
+    
+    // For DRIVER_CARD files, try spec parser first (TLV-based, EU 2016/799)
+    if (detectedType === 'DRIVER_CARD' || detectedType === 'UNKNOWN') {
+      const { parseDriverCardSpec } = await import('./tachograph-spec-parser');
+      const specResult = parseDriverCardSpec(fileBuffer, fileName);
+      
+      if (specResult.rawEvents.length > 0) {
+        console.log(`[TachographParser] Spec parser extracted ${specResult.rawEvents.length} events from ${new Set(specResult.rawEvents.map(e => e.rawStartAt.toISOString().substring(0, 10))).size} days.`);
+        
+        // Supplement metadata from filename
+        if (!specResult.metadata.plateNumber) {
+          const plate = extractPlateFromFileName(fileName);
+          if (plate) {
+            specResult.metadata.plateNumber = plate;
+            specResult.warnings.push('La matrícula se extrajo del nombre del archivo.');
+          }
+        }
+        
+        const cardInfo = extractCardInfoFromFileName(fileName);
+        if (!specResult.metadata.cardNumber && cardInfo.cardNumber) {
+          specResult.metadata.cardNumber = cardInfo.cardNumber;
+        }
+        if (cardInfo.dni) {
+          specResult.metadata.driverDni = cardInfo.dni;
+        }
+        
+        const legacyActivities = rawEventsToLegacyActivities(specResult.rawEvents);
+        
+        return {
+          success: specResult.success,
+          parserVersion: specResult.parserVersion,
+          fileType: specResult.fileType,
+          metadata: specResult.metadata,
+          rawEvents: specResult.rawEvents,
+          activities: legacyActivities,
+          warnings: specResult.warnings,
+          errors: specResult.errors,
+        };
+      }
+      
+      // Spec parser found no events — fall back to heuristic
+      // BUT preserve spec parser warnings for diagnostics (including hex dump)
+      console.log('[TachographParser] Spec parser found 0 events, falling back to heuristic parser.');
+      specResult.warnings.forEach(w => console.log(`  [spec-warning] ${w}`));
+      specDiagnosticWarnings = specResult.warnings.map(w => `[SPEC] ${w}`);
+    }
+    
+    // Fallback: heuristic binary parser
     const { parseBinaryTachograph } = await import('./tachograph-binary-parser');
     const result = parseBinaryTachograph(fileBuffer, fileName);
+    
+    // Add spec diagnostic warnings to result
+    if (specDiagnosticWarnings.length > 0) {
+      result.warnings.push(...specDiagnosticWarnings);
+    }
     
     // Suplementar metadatos del nombre de archivo
     if (!result.metadata.plateNumber) {
@@ -213,7 +307,7 @@ export async function parseTachographFile(
     }
 
     if (result.fileType === 'UNKNOWN') {
-      result.fileType = detectFileType(fileName);
+      result.fileType = detectedType;
     }
 
     // Generar legacy activities desde raw events

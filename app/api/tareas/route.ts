@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getSession } from '@/lib/auth';
 import { TareaTipo, TareaPrioridad, TareaEstado } from '@prisma/client';
+import {
+    buildVisibilityFilter,
+    determineVisibilidad,
+    determineAreaResponsable,
+    createNotificacion,
+    notifyParticipantes
+} from '@/lib/tareas-engine';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,6 +31,35 @@ const createTareaSchema = z.object({
     descargas: z.union([z.number(), z.string()]).nullable().optional(),
     contactoNombre: z.string().nullable().optional(),
     contactoTelefono: z.string().nullable().optional(),
+    // v3.1 - Nuevos campos
+    visibilidad: z.string().optional(),
+    subtipo: z.string().nullable().optional(),
+    areaResponsable: z.string().nullable().optional(),
+    reportadoPorCliente: z.boolean().optional(),
+    requiereValidacionDireccion: z.boolean().optional(),
+    // Extensión Taller
+    extensionTaller: z.object({
+        tipoAveria: z.string().nullable().optional(),
+        kmReporte: z.number().nullable().optional(),
+        costeEstimado: z.number().nullable().optional(),
+        vehiculoInmovilizado: z.boolean().optional(),
+        puedeCircular: z.boolean().optional(),
+        requiereGrua: z.boolean().optional(),
+        detalleAveria: z.string().nullable().optional(),
+        diagnosticoInicial: z.string().nullable().optional(),
+        proveedorTaller: z.string().nullable().optional(),
+        fechaEntradaTaller: z.string().nullable().optional(),
+    }).optional(),
+    // Extensión Reclamación
+    extensionReclamacion: z.object({
+        canalEntrada: z.string().nullable().optional(),
+        gravedad: z.string().nullable().optional(),
+        clienteNombre: z.string().nullable().optional(),
+        clienteTelefono: z.string().nullable().optional(),
+        empleadoImplicadoId: z.number().nullable().optional(),
+        detalleGravedad: z.string().nullable().optional(),
+        requiereRespuestaFormal: z.boolean().optional(),
+    }).optional(),
 }).refine(data => {
     if (data.activoTipo === 'CAMION' && !data.matricula) return false;
     return true;
@@ -74,6 +110,13 @@ export async function POST(request: Request) {
             prioridadFinal = body.prioridad as TareaPrioridad;
         }
 
+        // v3.1: Determinar visibilidad y área automáticamente
+        const asignadoId = body.asignadoAId ? Number(body.asignadoAId) : null;
+        const visibilidadFinal = (body.visibilidad as any) || determineVisibilidad(
+            tipoFinal, body.privada || false, asignadoId
+        );
+        const areaFinal = (body.areaResponsable as any) || determineAreaResponsable(tipoFinal);
+
         const tarea = await prisma.tarea.create({
             data: {
                 titulo: body.titulo,
@@ -93,19 +136,85 @@ export async function POST(request: Request) {
                 fechaLimite: body.fechaLimite ? new Date(body.fechaLimite) : null,
 
                 creadoPorId: Number(session.id),
-                asignadoAId: body.asignadoAId ? Number(body.asignadoAId) : undefined,
+                asignadoAId: asignadoId || undefined,
                 parentId: body.parentId ? Number(body.parentId) : undefined,
                 proyectoId: body.proyectoId ? Number(body.proyectoId) : undefined,
 
-                privada: body.privada || false, // Handle private tasks
+                privada: body.privada || false,
 
                 camionId: camionId,
                 descargas: body.descargas ? Number(body.descargas) : undefined,
 
                 contactoNombre: body.contactoNombre,
                 contactoTelefono: body.contactoTelefono,
+
+                // v3.1 campos nuevos
+                visibilidad: visibilidadFinal,
+                subtipo: body.subtipo,
+                areaResponsable: areaFinal,
+                reportadoPorCliente: body.reportadoPorCliente || false,
+                requiereValidacionDireccion: body.requiereValidacionDireccion || false,
             }
         });
+
+        // v3.1: Crear participante RESPONSABLE (creador)
+        await prisma.tareaParticipante.create({
+            data: {
+                tareaId: tarea.id,
+                empleadoId: Number(session.id),
+                rolParticipacion: 'RESPONSABLE',
+                notificar: true,
+            }
+        });
+
+        // Si hay asignado diferente al creador, añadir como SEGUIDOR
+        if (asignadoId && asignadoId !== Number(session.id)) {
+            await prisma.tareaParticipante.create({
+                data: {
+                    tareaId: tarea.id,
+                    empleadoId: asignadoId,
+                    rolParticipacion: 'SEGUIDOR',
+                    notificar: true,
+                }
+            });
+        }
+
+        // v3.1: Crear extensión de taller si es tipo TALLER
+        if (tipoFinal === 'TALLER') {
+            const ext = body.extensionTaller || {};
+            await prisma.tareaTaller.create({
+                data: {
+                    tareaId: tarea.id,
+                    tipoAveria: ext.tipoAveria as any || undefined,
+                    kmReporte: ext.kmReporte ?? undefined,
+                    costeEstimado: ext.costeEstimado ?? undefined,
+                    vehiculoInmovilizado: ext.vehiculoInmovilizado || false,
+                    puedeCircular: ext.puedeCircular !== false,
+                    requiereGrua: ext.requiereGrua || false,
+                    detalleAveria: ext.detalleAveria,
+                    diagnosticoInicial: ext.diagnosticoInicial,
+                    proveedorTaller: ext.proveedorTaller,
+                    fechaEntradaTaller: ext.fechaEntradaTaller ? new Date(ext.fechaEntradaTaller) : undefined,
+                }
+            });
+        }
+
+        // v3.1: Crear extensión de reclamación si es tipo RECLAMACION
+        if (tipoFinal === 'RECLAMACION') {
+            const ext = body.extensionReclamacion || {};
+            await prisma.tareaReclamacion.create({
+                data: {
+                    tareaId: tarea.id,
+                    canalEntrada: ext.canalEntrada as any || undefined,
+                    gravedad: ext.gravedad as any || undefined,
+                    clienteNombre: ext.clienteNombre,
+                    clienteTelefono: ext.clienteTelefono,
+                    empleadoImplicadoId: ext.empleadoImplicadoId ?? undefined,
+                    detalleGravedad: ext.detalleGravedad,
+                    requiereRespuestaFormal: ext.requiereRespuestaFormal || false,
+                }
+            });
+        }
 
         // Add initial history entry
         await prisma.tareaHistorial.create({
@@ -113,9 +222,39 @@ export async function POST(request: Request) {
                 tareaId: tarea.id,
                 autorId: Number(session.id),
                 tipoAccion: 'CREACION',
-                mensaje: `Tarea creada. Tipo: ${tarea.tipo}, Prioridad: ${tarea.prioridad}${tarea.privada ? ', Privada' : ''}`
+                mensaje: `Tarea creada. Tipo: ${tarea.tipo}, Prioridad: ${tarea.prioridad}, Visibilidad: ${tarea.visibilidad}`
             }
         });
+
+        // v3.1: Notificaciones
+        if (tipoFinal === 'TALLER') {
+            // Notificar a mecánicos (buscar empleados con rol MECANICO)
+            const mecanicos = await prisma.empleado.findMany({
+                where: { rol: 'MECANICO', activo: true },
+                select: { id: true }
+            });
+            for (const m of mecanicos) {
+                await createNotificacion({
+                    usuarioId: m.id,
+                    mensaje: `Nueva avería reportada: ${tarea.titulo}`,
+                    link: `/admin/tareas?id=${tarea.id}`,
+                    tipo: 'AVERIA_REPORTADA',
+                    tareaId: tarea.id,
+                    actorId: Number(session.id),
+                });
+            }
+        }
+
+        if (asignadoId) {
+            await createNotificacion({
+                usuarioId: asignadoId,
+                mensaje: `Te han asignado la tarea: ${tarea.titulo}`,
+                link: `/admin/tareas?id=${tarea.id}`,
+                tipo: 'TAREA_ASIGNADA',
+                tareaId: tarea.id,
+                actorId: Number(session.id),
+            });
+        }
 
         return NextResponse.json(tarea);
 
@@ -138,6 +277,8 @@ export async function GET(request: Request) {
         const prioridad = searchParams.get('prioridad');
         const asignadoAId = searchParams.get('asignadoAId');
         const parentId = searchParams.get('parentId');
+        const visibilidad = searchParams.get('visibilidad');
+        const auditoria = searchParams.get('auditoria') === 'true';
 
         let where: any = {};
 
@@ -146,61 +287,38 @@ export async function GET(request: Request) {
         if (estado) where.estado = estado as TareaEstado;
         if (prioridad) where.prioridad = prioridad as TareaPrioridad;
         if (asignadoAId) where.asignadoAId = Number(asignadoAId);
+        if (visibilidad) where.visibilidad = visibilidad;
 
         // Subtasks filtering
         if (parentId === 'null') where.parentId = null; // Top level tasks
         else if (parentId) where.parentId = Number(parentId);
 
-        // VISIBILITY RULES
-        const isGlobalAdmin = session.rol === 'ADMIN';
+        // v3.1: Motor de visibilidad
+        const visibilityFilter = buildVisibilityFilter(
+            { id: Number(session.id), rol: session.rol as string },
+            { auditoria }
+        );
 
-        if (!isGlobalAdmin) {
-            // BASIC RULE: Non-admins cannot see PRIVATE tasks unless they are the creator or assignee
-            // Since we want strict privacy for Admins, we might even exclude "asignadoAId" if it was assigned by mistake,
-            // but standard logic is: if assigned to you, you see it.
-
-            const privacyFilter = {
-                OR: [
-                    { privada: false },
-                    { creadoPorId: Number(session.id) },
-                    { asignadoAId: Number(session.id) }
-                ]
-            };
-
-            const isStaff = ['MECANICO', 'OFICINA'].includes(session.rol as string);
-
-            if (isStaff) {
-                // Staff: Can see their own, assigned to them, OR unassigned (pool) BUT NOT RECLAMACION
-                // They CANNOT see tasks assigned to others.
-                where.AND = [
-                    privacyFilter,
-                    {
-                        OR: [
-                            { creadoPorId: Number(session.id) },
-                            { asignadoAId: Number(session.id) },
-                            {
-                                AND: [
-                                    { asignadoAId: null },
-                                    { tipo: { not: 'RECLAMACION' } }
-                                ]
-                            },
-                            { tipo: 'TALLER' } // Mechanics and Office should see ALL workshop tasks (breakdowns)
-                        ]
-                    }
-                ];
-            } else {
-                // Regular Employee: Can only see their own or assigned to them
-                where.AND = [
-                    privacyFilter,
-                    {
-                        OR: [
-                            { creadoPorId: Number(session.id) },
-                            { asignadoAId: Number(session.id) }
-                        ]
-                    }
-                ];
-            }
+        // Auditoría: registrar acceso si admin usa modo auditoría
+        if (auditoria && session.rol === 'ADMIN') {
+            await prisma.auditoria.create({
+                data: {
+                    usuarioId: Number(session.id),
+                    accion: 'ACCESO_AUDITORIA_TAREAS',
+                    entidad: 'Tarea',
+                    entidadId: 0,
+                    detalles: `Admin accedió a vista de auditoría de tareas${visibilidad ? ` (filtro: ${visibilidad})` : ''}`
+                }
+            });
         }
+
+        // Combinar filtros
+        where = {
+            AND: [
+                where,
+                visibilityFilter
+            ].filter(f => Object.keys(f).length > 0)
+        };
 
         const tareas = await prisma.tarea.findMany({
             where,
@@ -212,14 +330,30 @@ export async function GET(request: Request) {
                 subtareas: {
                     select: { id: true, titulo: true, estado: true, asignadoA: { select: { nombre: true } } }
                 },
+                // v3.1: incluir extensiones y participantes
+                extensionTaller: true,
+                extensionReclamacion: {
+                    select: {
+                        id: true, canalEntrada: true, gravedad: true,
+                        clienteNombre: true, detalleGravedad: true,
+                        requiereRespuestaFormal: true, respuestaEmitida: true,
+                        // Ocultar empleadoImplicadoId a no-admin/oficina
+                        ...((['ADMIN', 'OFICINA'].includes(session.rol as string))
+                            ? { empleadoImplicadoId: true, visibleParaImplicado: true }
+                            : {}
+                        )
+                    }
+                },
+                participantes: {
+                    select: { empleadoId: true, rolParticipacion: true, empleado: { select: { nombre: true } } }
+                },
                 _count: {
                     select: { subtareas: true, adjuntos: true, historial: true }
                 }
             },
             orderBy: [
-                { prioridad: 'asc' }, // ALTA (0) -> MEDIA (?) wait, usually Enum order matters. 
-                // Default Enum order: ALTA, MEDIA, BAJA. So 'asc' is correct if ALTA is first.
-                { fechaLimite: 'asc' }, // Nulls last? Prisma sorts nulls based on DB. 
+                { prioridad: 'asc' },
+                { fechaLimite: 'asc' },
                 { createdAt: 'desc' }
             ]
         });
