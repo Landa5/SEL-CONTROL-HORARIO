@@ -225,7 +225,8 @@ function scanForDailyRecords(buf: Buffer): DailyRecord[] {
 
 /**
  * Scans for Spanish plate patterns (e.g. "4563LZS", "9946GWZ")
- * and nearby timestamps.
+ * and nearby timestamps. Looks for timestamps both before and after
+ * the plate to capture the vehicle usage period.
  */
 function scanForVehicles(buf: Buffer): { vrn: string; startDate: Date | null; endDate: Date | null }[] {
   const results: { vrn: string; startDate: Date | null; endDate: Date | null }[] = [];
@@ -239,23 +240,37 @@ function scanForVehicles(buf: Buffer): { vrn: string; startDate: Date | null; en
     
     const plate = match[1];
     
-    // Look for timestamps before the plate (within 20 bytes)
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
+    // Collect all plausible timestamps near the plate (before and after)
+    const nearbyTimestamps: Date[] = [];
     
+    // Look for timestamps BEFORE the plate (within 20 bytes)
     for (let tOff = Math.max(0, i - 20); tOff < i; tOff++) {
+      if (tOff + 4 > buf.length) break;
       const ts = readUint32BE(buf, tOff);
       if (ts >= TS_MIN && ts <= TS_MAX) {
         const d = new Date(ts * 1000);
         if (d.getFullYear() >= 2010 && d.getFullYear() <= 2040) {
-          if (!startDate) {
-            startDate = d;
-          } else if (!endDate) {
-            endDate = d;
-          }
+          nearbyTimestamps.push(d);
         }
       }
     }
+    
+    // Look for timestamps AFTER the plate (within 30 bytes)
+    const plateEndPos = i + match.index! + plate.length;
+    for (let tOff = plateEndPos; tOff < Math.min(buf.length - 4, plateEndPos + 30); tOff++) {
+      const ts = readUint32BE(buf, tOff);
+      if (ts >= TS_MIN && ts <= TS_MAX) {
+        const d = new Date(ts * 1000);
+        if (d.getFullYear() >= 2010 && d.getFullYear() <= 2040) {
+          nearbyTimestamps.push(d);
+        }
+      }
+    }
+    
+    // Sort timestamps and use first as start, last as end
+    nearbyTimestamps.sort((a, b) => a.getTime() - b.getTime());
+    const startDate = nearbyTimestamps.length > 0 ? nearbyTimestamps[0] : null;
+    const endDate = nearbyTimestamps.length > 1 ? nearbyTimestamps[nearbyTimestamps.length - 1] : startDate;
     
     const key = `${plate}_${startDate?.toISOString() || 'x'}`;
     if (!seen.has(key)) {
@@ -341,7 +356,12 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
       }
     }
     if (!vehicleId && metadata.plateNumber) {
-      vehicleId = metadata.plateNumber;
+      // Only use primary plate as fallback if no vehicle records exist at all
+      // If there ARE vehicle records but none match this day, leave vehicleId null
+      // to avoid assigning the wrong truck
+      if (vehicleRecords.length === 0) {
+        vehicleId = metadata.plateNumber;
+      }
     }
     
     for (let i = 0; i < day.activities.length; i++) {
@@ -358,10 +378,17 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
         const endTime = new Date(day.date.getTime() + endMinutes * 60000);
         const durationMinutes = endMinutes - act.minutes;
         
+        // If card is NOT inserted, the tachograph records the default activity
+        // (usually OTHER_WORK or AVAILABILITY). This is NOT real driver activity.
+        // Per EU regulation, when card is out = driver is at REST.
+        const effectiveActivityType = act.cardInserted === false && act.activityType !== 'REST' && act.activityType !== 'DRIVING'
+          ? 'REST' 
+          : act.activityType;
+        
         rawEvents.push({
           rawStartAt: startTime,
           rawEndAt: endTime,
-          rawActivityType: act.activityType,
+          rawActivityType: effectiveActivityType,
           rawDriverIdentifier: rawDriverId,
           rawVehicleIdentifier: vehicleId,
           rawPayload: {
@@ -375,9 +402,10 @@ export function parseDriverCardSpec(buffer: Buffer, fileName: string): BinaryPar
             dayDistance: day.dayDistance,
             activityCode: act.activityCode,
             startMinutes: act.minutes,
+            originalActivityType: act.activityType !== effectiveActivityType ? act.activityType : undefined,
           } as any,
-          extractionMethod: 'spec',
-          extractionNotes: `Scan: ${day.dateStr} ${act.activityType} ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
+          extractionMethod: act.cardInserted === false && act.activityType !== effectiveActivityType ? 'derived' : 'spec',
+          extractionNotes: `Scan: ${day.dateStr} ${effectiveActivityType}${act.cardInserted === false ? '(card-out)' : ''} ${act.minutes}m-${endMinutes}m (${durationMinutes}min)`,
           extractionStatus: 'OK',
         });
       } else {
