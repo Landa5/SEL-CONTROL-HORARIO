@@ -24,6 +24,8 @@ export default function MecanicoJornadaPage() {
     const [selectedCamion, setSelectedCamion] = useState('');
     const [kmInicial, setKmInicial] = useState('');
     const [kmFinal, setKmFinal] = useState('');
+    const [startingShift, setStartingShift] = useState(false);
+    const [endingShift, setEndingShift] = useState(false);
 
     // Delivery states
     const [litros, setLitros] = useState('');
@@ -130,7 +132,8 @@ export default function MecanicoJornadaPage() {
     };
 
     const handleStartShift = async () => {
-        if (!jornada || !selectedCamion || !kmInicial) return;
+        if (!jornada || !selectedCamion || !kmInicial || startingShift) return;
+        setStartingShift(true);
         try {
             const res = await fetch('/api/turnos', {
                 method: 'POST',
@@ -150,11 +153,14 @@ export default function MecanicoJornadaPage() {
             }
         } catch (error) {
             alert('Error de conexión');
+        } finally {
+            setStartingShift(false);
         }
     };
 
     const handleEndShift = async () => {
-        if (!activeTurno || !kmFinal) return;
+        if (!activeTurno || !kmFinal || endingShift) return;
+        setEndingShift(true);
         try {
             const res = await fetch('/api/turnos', {
                 method: 'PUT',
@@ -174,6 +180,8 @@ export default function MecanicoJornadaPage() {
             }
         } catch (error) {
             alert('Error de conexión');
+        } finally {
+            setEndingShift(false);
         }
     };
 
@@ -331,8 +339,8 @@ export default function MecanicoJornadaPage() {
                                                     <CheckCircle className="w-3 h-3" /> KM sugerido desde último viaje
                                                 </p>
                                             )}
-                                            <Button onClick={handleStartShift} className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 font-bold shadow-md">
-                                                INICIAR RUTA / MANTENIMIENTO
+                                            <Button onClick={handleStartShift} disabled={startingShift} className="w-full bg-indigo-600 hover:bg-indigo-700 h-12 font-bold shadow-md disabled:opacity-50">
+                                                {startingShift ? 'Iniciando...' : 'INICIAR RUTA / MANTENIMIENTO'}
                                             </Button>
                                         </div>
                                     </div>
@@ -379,8 +387,8 @@ export default function MecanicoJornadaPage() {
                                                 onChange={e => setKmFinal(e.target.value)}
                                                 className="h-12"
                                             />
-                                            <Button variant="outline" onClick={handleEndShift} className="w-full border-red-200 text-red-700 hover:bg-red-50 h-12 font-bold shadow-sm">
-                                                TERMINAR RUTA / PARAR VEHÍCULO
+                                            <Button variant="outline" onClick={handleEndShift} disabled={endingShift} className="w-full border-red-200 text-red-700 hover:bg-red-50 h-12 font-bold shadow-sm disabled:opacity-50">
+                                                {endingShift ? 'Finalizando...' : 'TERMINAR RUTA / PARAR VEHÍCULO'}
                                             </Button>
                                         </div>
                                     </div>

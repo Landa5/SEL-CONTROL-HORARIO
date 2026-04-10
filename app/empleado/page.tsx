@@ -95,6 +95,8 @@ export default function EmpleadoDashboard() {
     const [conflictData, setConflictData] = useState<any>(null);
     const [showConflictModal, setShowConflictModal] = useState(false);
     const [conflictPhoto, setConflictPhoto] = useState<string>('');
+    const [startingShift, setStartingShift] = useState(false);
+    const [endingShift, setEndingShift] = useState(false);
 
     // Mantenimiento Conductor Modal
     const [showMantenimientoModal, setShowMantenimientoModal] = useState(false);
@@ -347,25 +349,30 @@ export default function EmpleadoDashboard() {
     };
 
     const handleStartShift = async () => {
-        if (!jornada || !selectedCamion || !kmInicial) return;
-        const res = await fetch('/api/turnos', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jornadaId: jornada.id, camionId: selectedCamion, horaInicio: new Date(), kmInicial: parseInt(kmInicial) })
-        });
+        if (!jornada || !selectedCamion || !kmInicial || startingShift) return;
+        setStartingShift(true);
+        try {
+            const res = await fetch('/api/turnos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ jornadaId: jornada.id, camionId: selectedCamion, horaInicio: new Date(), kmInicial: parseInt(kmInicial) })
+            });
 
-        const data = await res.json();
+            const data = await res.json();
 
-        if (res.status === 409) {
-            setConflictData(data);
-            setShowConflictModal(true);
-            return;
-        }
+            if (res.status === 409) {
+                setConflictData(data);
+                setShowConflictModal(true);
+                return;
+            }
 
-        if (res.ok) {
-            fetchData();
-        } else {
-            alert(data.error || 'Error al iniciar ruta');
+            if (res.ok) {
+                fetchData();
+            } else {
+                alert(data.error || 'Error al iniciar ruta');
+            }
+        } finally {
+            setStartingShift(false);
         }
     };
 
@@ -397,29 +404,34 @@ export default function EmpleadoDashboard() {
     };
 
     const handleEndShift = async () => {
-        if (!activeTurno || !kmFinal) return;
-        // Auto-save pending values if they exist
-        const payload: any = {
-            id: activeTurno.id,
-            horaFin: new Date(),
-            kmFinal: parseInt(kmFinal)
-        };
+        if (!activeTurno || !kmFinal || endingShift) return;
+        setEndingShift(true);
+        try {
+            // Auto-save pending values if they exist
+            const payload: any = {
+                id: activeTurno.id,
+                horaFin: new Date(),
+                kmFinal: parseInt(kmFinal)
+            };
 
-        if (numDescargas) payload.descargasCount = numDescargas;
-        if (numViajes) payload.viajesCount = numViajes;
-        if (litrosRepostados) payload.litrosRepostados = litrosRepostados;
+            if (numDescargas) payload.descargasCount = numDescargas;
+            if (numViajes) payload.viajesCount = numViajes;
+            if (litrosRepostados) payload.litrosRepostados = litrosRepostados;
 
-        await fetch('/api/turnos', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+            await fetch('/api/turnos', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-        setKmFinal('');
-        setNumDescargas('');
-        setNumViajes('');
-        setLitrosRepostados('');
-        fetchData();
+            setKmFinal('');
+            setNumDescargas('');
+            setNumViajes('');
+            setLitrosRepostados('');
+            fetchData();
+        } finally {
+            setEndingShift(false);
+        }
     };
 
     const handleUpdateDescargas = async () => {
@@ -814,7 +826,7 @@ export default function EmpleadoDashboard() {
                                     {camiones.map(c => <option key={c.id} value={c.id}>{c.matricula}</option>)}
                                 </select>
                                 <Input type="number" placeholder="KM Iniciales" value={kmInicial} onChange={e => setKmInicial(e.target.value)} />
-                                <Button onClick={handleStartShift} className="w-full h-12 font-bold bg-indigo-600">INICIAR RUTA</Button>
+                                <Button onClick={handleStartShift} disabled={startingShift} className="w-full h-12 font-bold bg-indigo-600 disabled:opacity-50">{startingShift ? 'Iniciando...' : 'INICIAR RUTA'}</Button>
                             </div>
                         ) : (
                             <div className="space-y-6">
@@ -914,7 +926,7 @@ export default function EmpleadoDashboard() {
 
                                 <div className="pt-4 border-t space-y-2">
                                     <Input type="number" placeholder="KM Finales" value={kmFinal} onChange={e => setKmFinal(e.target.value)} />
-                                    <Button onClick={handleEndShift} variant="outline" className="w-full text-red-600 border-red-200">TERMINAR RUTA</Button>
+                                    <Button onClick={handleEndShift} disabled={endingShift} variant="outline" className="w-full text-red-600 border-red-200 disabled:opacity-50">{endingShift ? 'Finalizando...' : 'TERMINAR RUTA'}</Button>
                                 </div>
                             </div>
                         )}

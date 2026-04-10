@@ -118,8 +118,9 @@ export async function POST(request: Request) {
                     return day >= aStart && day <= aEnd;
                 });
 
-                // Get Shift
-                const shift = empShifts.find(s => isSameDay(new Date(s.fecha), day));
+                // Get ALL Shifts for this day (may have morning + afternoon)
+                // BUG FIX: Previously used find() which only returned the FIRST shift
+                const dayShifts = empShifts.filter(s => isSameDay(new Date(s.fecha), day));
 
                 let expectedMinutes = 0;
                 if (!isWeekendDay && !isHoliday && !absence) {
@@ -132,53 +133,74 @@ export async function POST(request: Request) {
                 let dailyKm = 0;
                 let dailyLiter = 0;
 
-                if (shift) {
-                    const startShift = new Date(shift.horaEntrada);
-                    const endShift = shift.horaSalida ? new Date(shift.horaSalida) : new Date();
+                if (dayShifts.length > 0) {
+                    // Sort by entry time
+                    dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
+                    const firstShift = dayShifts[0];
 
-                    // Strict Start Logic
-                    let effectiveStart = startShift;
-                    if (emp.horaEntradaPrevista) {
-                        const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
-                        const expectedStart = new Date(day);
-                        expectedStart.setHours(h, m, 0, 0);
-                        if (startShift < expectedStart) effectiveStart = expectedStart;
+                    // Accumulate minutes from ALL shifts
+                    for (const shift of dayShifts) {
+                        const startShift = new Date(shift.horaEntrada);
+                        const endShift = shift.horaSalida ? new Date(shift.horaSalida) : new Date();
+
+                        // Strict Start Logic (only for first shift)
+                        let effectiveStart = startShift;
+                        if (shift === firstShift && emp.horaEntradaPrevista) {
+                            const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
+                            const expectedStart = new Date(day);
+                            expectedStart.setHours(h, m, 0, 0);
+                            if (startShift < expectedStart) effectiveStart = expectedStart;
+                        }
+
+                        const shiftMinutes = differenceInMinutes(endShift, effectiveStart);
+                        workedMinutes += Math.max(0, shiftMinutes);
+
+                        // KM & Fuel from ALL shifts
+                        dailyKm += shift.usosCamion?.reduce((acc: number, u: any) => {
+                            const dist = (u.kmFinal || u.kmInicial) - u.kmInicial;
+                            return acc + Math.max(0, dist);
+                        }, 0) || 0;
+
+                        dailyLiter += shift.usosCamion?.reduce((acc: number, u: any) => acc + (u.litrosRepostados || 0), 0) || 0;
                     }
 
-                    // Net Minutes
-                    let minutes = differenceInMinutes(endShift, effectiveStart);
+                    // If single continuous shift, apply lunch deduction
+                    if (dayShifts.length === 1) {
+                        const startShift = new Date(firstShift.horaEntrada);
+                        const endShift = firstShift.horaSalida ? new Date(firstShift.horaSalida) : new Date();
 
-                    // Lunch Deduction
-                    if (emp.horaSalidaPrevista && emp.horaEntradaTarde) {
-                        const [hEnd, mEnd] = emp.horaSalidaPrevista.split(':').map(Number);
-                        const [hStart, mStart] = emp.horaEntradaTarde.split(':').map(Number);
-                        const lunchStart = new Date(startShift); lunchStart.setHours(hEnd, mEnd, 0, 0);
-                        const lunchEnd = new Date(startShift); lunchEnd.setHours(hStart, mStart, 0, 0);
+                        let effectiveStart = startShift;
+                        if (emp.horaEntradaPrevista) {
+                            const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
+                            const expectedStart = new Date(day);
+                            expectedStart.setHours(h, m, 0, 0);
+                            if (startShift < expectedStart) effectiveStart = expectedStart;
+                        }
 
-                        if (effectiveStart < lunchStart && endShift > lunchEnd) {
-                            const breakMinutes = differenceInMinutes(lunchEnd, lunchStart);
-                            if (breakMinutes > 0) minutes -= breakMinutes;
+                        if (emp.horaSalidaPrevista && emp.horaEntradaTarde) {
+                            const [hEnd, mEnd] = emp.horaSalidaPrevista.split(':').map(Number);
+                            const [hStart, mStart] = emp.horaEntradaTarde.split(':').map(Number);
+                            const lunchStart = new Date(startShift); lunchStart.setHours(hEnd, mEnd, 0, 0);
+                            const lunchEnd = new Date(startShift); lunchEnd.setHours(hStart, mStart, 0, 0);
+
+                            if (effectiveStart < lunchStart && endShift > lunchEnd) {
+                                const breakMinutes = differenceInMinutes(lunchEnd, lunchStart);
+                                if (breakMinutes > 0) {
+                                    workedMinutes = Math.max(0, differenceInMinutes(endShift, effectiveStart) - breakMinutes);
+                                }
+                            }
                         }
                     }
 
-                    workedMinutes = Math.max(0, minutes);
                     overtime = Math.max(0, workedMinutes - expectedMinutes);
 
-                    // Punctuality
+                    // Punctuality (based on first shift)
                     if (expectedMinutes > 0 && emp.horaEntradaPrevista) {
                         const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
-                        const shiftMinOfDay = startShift.getHours() * 60 + startShift.getMinutes();
+                        const shiftMinOfDay = new Date(firstShift.horaEntrada).getHours() * 60 + new Date(firstShift.horaEntrada).getMinutes();
                         const expMinOfDay = h * 60 + m;
                         punctuality = shiftMinOfDay - expMinOfDay;
                     }
-
-                    // KM & Fuel
-                    dailyKm = shift.usosCamion?.reduce((acc, u) => {
-                        const dist = (u.kmFinal || u.kmInicial) - u.kmInicial;
-                        return acc + Math.max(0, dist);
-                    }, 0) || 0;
-
-                    dailyLiter = shift.usosCamion?.reduce((acc, u) => acc + (u.litrosRepostados || 0), 0) || 0;
                 }
 
                 return {
@@ -186,9 +208,10 @@ export async function POST(request: Request) {
                     isWeekend: isWeekendDay,
                     isHoliday,
                     absenceType: absence?.tipo,
-                    hasShift: !!shift,
-                    start: shift ? format(new Date(shift.horaEntrada), 'HH:mm') : '-',
-                    end: shift?.horaSalida ? format(new Date(shift.horaSalida), 'HH:mm') : '-',
+                    hasShift: dayShifts.length > 0,
+                    start: dayShifts.length > 0 ? format(new Date(dayShifts[0].horaEntrada), 'HH:mm') : '-',
+                    end: dayShifts.length > 0 && dayShifts[dayShifts.length - 1].horaSalida
+                        ? format(new Date(dayShifts[dayShifts.length - 1].horaSalida!), 'HH:mm') : '-',
                     workedMinutes,
                     overtime,
                     punctuality,

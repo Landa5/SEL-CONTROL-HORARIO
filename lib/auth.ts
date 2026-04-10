@@ -3,8 +3,11 @@ import bcrypt from 'bcryptjs';
 import { cookies } from 'next/headers';
 import { NextRequest, NextResponse } from 'next/server';
 
-const SECRET_KEY = process.env.JWT_SECRET || 'default-secret-key';
-const key = new TextEncoder().encode(SECRET_KEY);
+const SECRET_KEY = process.env.JWT_SECRET;
+if (!SECRET_KEY) {
+    console.error('⚠️  SEGURIDAD: JWT_SECRET no está definida. Usando clave temporal SOLO para desarrollo.');
+}
+const key = new TextEncoder().encode(SECRET_KEY || 'dev-only-unsafe-key-change-in-production');
 
 export async function hashPassword(password: string) {
     return await bcrypt.hash(password, 10);
@@ -53,6 +56,8 @@ export async function updateSession(request: NextRequest) {
         name: 'session',
         value: await signToken(parsed),
         httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
         expires: new Date(Date.now() + 2 * 60 * 60 * 1000),
     });
     return res;

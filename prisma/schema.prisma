@@ -1830,3 +1830,173 @@ model TachographRegulationFinding {
   @@index([dateFrom])
   @@index([evaluationRunId])
 }
+
+// =======================
+// MÓDULO PANTALLAS / VNNOX
+// =======================
+
+enum DisplayDraftType {
+  PRICE
+  PROMO
+  MESSAGE
+  MIXED
+}
+
+enum DisplayDraftStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PUBLISHED
+  FAILED
+  ROLLED_BACK
+}
+
+enum DisplayLogAction {
+  TEST_CONNECTION
+  GENERATE_ASSET
+  APPROVE
+  PUBLISH
+  ROLLBACK
+  SCHEDULE_SCREEN
+  SCHEDULE_BRIGHTNESS
+}
+
+enum DisplayAssetType {
+  IMAGE
+  VIDEO
+}
+
+model DisplayProviderConfig {
+  id                    Int       @id @default(autoincrement())
+  provider              String    @default("VNNOX")
+  baseUrl               String    @default("https://open-au.vnnox.com")
+  appKey                String
+  appSecretEncrypted    String
+  defaultPlayerId       String?
+  isActive              Boolean   @default(true)
+  lastConnectionCheckAt DateTime?
+  lastConnectionStatus  String?   // OK, ERROR, TIMEOUT
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  screens               DisplayScreen[]
+}
+
+model DisplayScreen {
+  id               Int       @id @default(autoincrement())
+  providerConfigId Int
+  providerConfig   DisplayProviderConfig @relation(fields: [providerConfigId], references: [id], onDelete: Cascade)
+
+  playerId         String    @unique
+  playerName       String?
+  resolutionWidth  Int?
+  resolutionHeight Int?
+  orientation      String    @default("HORIZONTAL") // HORIZONTAL | VERTICAL
+  isOnline         Boolean   @default(false)
+  metadataJson     Json?
+  lastSyncAt       DateTime?
+
+  drafts           DisplayDraft[]
+
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model DisplayDraft {
+  id                 Int                @id @default(autoincrement())
+  screenId           Int
+  screen             DisplayScreen      @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  type               DisplayDraftType   @default(MIXED)
+  status             DisplayDraftStatus @default(DRAFT)
+
+  // Prices
+  priceDiesel        Float?
+  priceGasolina      Float?
+  priceDieselPlus    Float?
+  priceAdBlue        Float?
+  showAdBlue         Boolean            @default(false)
+
+  // Promo
+  promoTitle         String?
+  promoText          String?
+  promoImageUrl      String?
+  promoVideoUrl      String?
+
+  // Messages
+  messageText        String?
+
+  // Schedule
+  scheduleJson       Json?              // { startAt, endAt, daysOfWeek, etc. }
+
+  // Screen control plans
+  brightnessPlanJson Json?              // { timeSlots: [{ from, to, brightness }] }
+  screenStatusPlanJson Json?            // { timeSlots: [{ from, to, status }] }
+
+  // Template
+  templateId         String?            @default("default")
+
+  // Preview
+  previewImageUrl    String?
+  previewVideoUrl    String?
+
+  // VNNOX
+  vnnoxPayloadJson   Json?
+  vnnoxResponseJson  Json?
+
+  // Audit
+  publishedAt        DateTime?
+  publishedByUserId  Int?
+  approvedAt         DateTime?
+  approvedByUserId   Int?
+  createdByUserId    Int
+
+  assets             DisplayAsset[]
+  logs               DisplayPublicationLog[]
+
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  @@index([screenId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DisplayAsset {
+  id          Int              @id @default(autoincrement())
+  draftId     Int
+  draft       DisplayDraft     @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  type        DisplayAssetType
+  storageUrl  String           // Internal path in storage
+  publicUrl   String           // HTTPS accessible URL
+  mimeType    String
+  width       Int
+  height      Int
+  sizeBytes   Int
+  md5         String
+
+  createdAt   DateTime         @default(now())
+
+  @@index([draftId])
+}
+
+model DisplayPublicationLog {
+  id                  Int             @id @default(autoincrement())
+  draftId             Int
+  draft               DisplayDraft    @relation(fields: [draftId], references: [id], onDelete: Cascade)
+
+  action              DisplayLogAction
+  requestPayloadJson  Json?
+  responsePayloadJson Json?
+  success             Boolean         @default(false)
+  errorCode           String?
+  errorMessage        String?
+  performedByUserId   Int?
+
+  createdAt           DateTime        @default(now())
+
+  @@index([draftId])
+  @@index([action])
+  @@index([createdAt])
+}

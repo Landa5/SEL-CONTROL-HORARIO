@@ -2,7 +2,12 @@
 const { PrismaClient } = require('@prisma/client');
 
 async function main() {
-    const connectionString = "postgres://postgres.lwapyfqggmqdavdwqdtn:Sel962650400@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true";
+    // SEGURIDAD: Usar variables de entorno, NUNCA hardcodear credenciales
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+        console.error('ERROR: DATABASE_URL no está definida. Configúrala en .env');
+        process.exit(1);
+    }
     console.log(`Connecting to: ${connectionString.replace(/:[^:]*@/, ':****@')}`);
 
     const prisma = new PrismaClient({

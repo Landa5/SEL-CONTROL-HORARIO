@@ -65,6 +65,19 @@ export async function POST(request: Request) {
             }
         }
 
+        // ANTI-DUPLICATE CHECK: If there's already an open UsoCamion for this jornada+camion, return it
+        const existingOpen = await prisma.usoCamion.findFirst({
+            where: {
+                jornadaId: parseInt(jornadaId),
+                camionId: parseInt(camionId),
+                horaFin: null
+            }
+        });
+        if (existingOpen) {
+            // Already started, return existing instead of creating duplicate
+            return NextResponse.json(existingOpen);
+        }
+
         const uso = await prisma.usoCamion.create({
             data: {
                 jornadaId: parseInt(jornadaId),

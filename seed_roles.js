@@ -4,8 +4,15 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
-    const password = await bcrypt.hash('1234', 10);
-    const adminPass = await bcrypt.hash('admin123', 10);
+    // SEGURIDAD: Las contraseñas deben cambiarse después del primer login.
+    // Estas son contraseñas temporales SOLO para el seed inicial.
+    const defaultPass = process.env.SEED_DEFAULT_PASSWORD || '1234';
+    const adminDefaultPass = process.env.SEED_ADMIN_PASSWORD || 'admin123';
+    
+    console.log('⚠️  IMPORTANTE: Cambia las contraseñas después del primer login.');
+    
+    const password = await bcrypt.hash(defaultPass, 10);
+    const adminPass = await bcrypt.hash(adminDefaultPass, 10);
 
     const users = [
         {
@@ -53,7 +60,7 @@ async function main() {
                 where: { usuario: u.usuario },
                 data: {
                     rol: u.rol,
-                    password: u.password // Actualizamos pass para asegurar acceso
+                    password: u.password
                 }
             });
         }

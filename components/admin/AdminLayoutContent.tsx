@@ -38,7 +38,8 @@ import {
     Upload,
     UserCheck,
     Activity,
-    AlertCircle
+    AlertCircle,
+    Monitor
 } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
 import { format } from 'date-fns';
@@ -149,6 +150,13 @@ export default function AdminLayoutContent({ children }: { children: React.React
             label: 'Alquiler Garaje',
             items: [
                 { href: '/admin/alquiler', label: 'Gestión Plazas', icon: Car },
+            ]
+        },
+        {
+            type: 'group',
+            label: 'Pantallas / VNNOX',
+            items: [
+                { href: '/admin/pantallas', label: 'Gestión Pantallas', icon: Monitor },
             ]
         },
         {

@@ -218,10 +218,22 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
 
                                 {shift?.workedMinutes > 0 ? (
                                     <div className="mt-1 space-y-1">
-                                        <div className="flex justify-between items-center bg-blue-50 px-1 py-0.5 rounded">
-                                            <span className="text-[10px] font-mono text-blue-700">{shift.start}</span>
-                                            <span className="text-[10px] font-mono text-blue-700">{shift.end}</span>
-                                        </div>
+                                        {shift.allShiftTimes ? (
+                                            /* Jornada partida: mostrar cada rango */
+                                            <>
+                                                {shift.allShiftTimes.split(', ').map((range: string, idx: number) => (
+                                                    <div key={idx} className="flex justify-between items-center bg-blue-50 px-1 py-0.5 rounded">
+                                                        <span className="text-[10px] font-mono text-blue-700">{range.split('-')[0]}</span>
+                                                        <span className="text-[10px] font-mono text-blue-700">{range.split('-')[1]}</span>
+                                                    </div>
+                                                ))}
+                                            </>
+                                        ) : (
+                                            <div className="flex justify-between items-center bg-blue-50 px-1 py-0.5 rounded">
+                                                <span className="text-[10px] font-mono text-blue-700">{shift.start}</span>
+                                                <span className="text-[10px] font-mono text-blue-700">{shift.end}</span>
+                                            </div>
+                                        )}
                                         <div className="flex justify-between items-end">
                                             <span className="text-[10px] font-bold text-gray-500">{((shift.workedMinutes || 0) / 60).toFixed(1)}h</span>
                                             {shift.punctuality !== 0 && (
@@ -268,8 +280,14 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                             {shifts.map((s: any) => (
                                 <tr key={s.date} className="border-b last:border-0 hover:bg-gray-50">
                                     <td className="p-3 font-mono text-gray-600">{s.date}</td>
-                                    <td className="p-3 font-mono">{s.start}</td>
-                                    <td className="p-3 font-mono">{s.end}</td>
+                                    <td className="p-3 font-mono">
+                                        {s.allShiftTimes ? (
+                                            <span className="text-xs">{s.allShiftTimes}</span>
+                                        ) : (
+                                            <>{s.start}</>  
+                                        )}
+                                    </td>
+                                    <td className="p-3 font-mono">{s.allShiftTimes ? '' : s.end}</td>
                                     <td className="p-3 font-bold">{((s.workedMinutes || 0) / 60).toFixed(2)}h</td>
                                     <td className={`p-3 font-bold ${getPunctualityColor(s.punctuality)}`}>
                                         {s.punctuality > 0 ? `+${s.punctuality}m` : `${s.punctuality}m`}

@@ -1,9 +1,14 @@
 
 const { PrismaClient } = require('@prisma/client');
 
-async function checkConnection(password) {
-    const connectionString = `postgresql://postgres.lwapyfqggmqdavdwqdtn:${password}@aws-0-eu-west-1.pooler.supabase.com:6543/postgres?pgbouncer=true`;
-    console.log(`Testing with password: ${password.substring(0, 3)}...`);
+async function checkConnection() {
+    // SEGURIDAD: Usar variables de entorno, NUNCA hardcodear credenciales
+    const connectionString = process.env.DATABASE_URL;
+    if (!connectionString) {
+        console.error('ERROR: DATABASE_URL no está definida. Configúrala en .env');
+        process.exit(1);
+    }
+    console.log(`Testing with: ${connectionString.replace(/:[^:]*@/, ':****@')}`);
 
     const prisma = new PrismaClient({
         datasources: {
@@ -30,22 +35,10 @@ async function checkConnection(password) {
 
 async function main() {
     console.log('Checking database connection...');
-
-    // Try original password first (Mixed case)
-    const success1 = await checkConnection('Sel962650400');
-    if (success1) {
-        console.log('Password "Sel962650400" is correct.');
-        return;
+    const success = await checkConnection();
+    if (!success) {
+        console.log('Connection failed. Check your DATABASE_URL in .env');
     }
-
-    // Try uppercase password (as seen in .env)
-    const success2 = await checkConnection('SEL962650400');
-    if (success2) {
-        console.log('Password "SEL962650400" is correct.');
-        return;
-    }
-
-    console.log('Both passwords failed.');
 }
 
 main();

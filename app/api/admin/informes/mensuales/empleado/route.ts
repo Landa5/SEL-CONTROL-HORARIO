@@ -178,10 +178,10 @@ export async function GET(request: Request) {
                 return Math.max(0, total);
             };
 
-            // Find Shift
-            // Note: shifts from DB are UTC/Local. We match by comparing formatted strings or isSameDay.
-            // Assumption: shift.fecha is stored correctly as the shift day.
-            const shift = shifts.find(s => isSameDay(new Date(s.fecha), day));
+            // Find ALL Shifts for this day (may have morning + afternoon)
+            // BUG FIX: Previously used shifts.find() which only returned the FIRST shift,
+            // ignoring a second shift (e.g., afternoon). Now we use filter() to get ALL.
+            const dayShifts = shifts.filter(s => isSameDay(new Date(s.fecha), day));
 
             let workedMinutes = 0;
             let startStr = '--:--';
@@ -191,58 +191,77 @@ export async function GET(request: Request) {
             let viajesDia = 0;
             let descargasDia = 0;
 
-            if (shift) {
+            if (dayShifts.length > 0) {
                 daysWorkedCount++;
-                const start = new Date(shift.horaEntrada);
-                const end = shift.horaSalida ? new Date(shift.horaSalida) : null;
 
-                startStr = formatTime(start);
-                endStr = end ? formatTime(end) : 'En curso';
+                // Sort shifts by entry time to get the correct order
+                dayShifts.sort((a, b) => new Date(a.horaEntrada).getTime() - new Date(b.horaEntrada).getTime());
 
-                // Strict Schedule Logic: Count hours from Schedule Start if arrived early
-                let effectiveStart = start;
-                if (emp.horaEntradaPrevista) {
-                    const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
-                    const expectedStart = new Date(day);
-                    expectedStart.setHours(h, m, 0, 0);
+                // Display: first entry → last exit
+                const firstShift = dayShifts[0];
+                const lastShift = dayShifts[dayShifts.length - 1];
 
-                    // If arricved BEFORE schedule, count from schedule
-                    if (start < expectedStart) {
-                        effectiveStart = expectedStart;
+                startStr = formatTime(new Date(firstShift.horaEntrada));
+                endStr = lastShift.horaSalida ? formatTime(new Date(lastShift.horaSalida)) : 'En curso';
+
+                // Accumulate worked minutes from ALL shifts
+                for (const shift of dayShifts) {
+                    const shiftStart = new Date(shift.horaEntrada);
+                    const shiftEnd = shift.horaSalida ? new Date(shift.horaSalida) : new Date();
+
+                    // Strict Schedule Logic: Count hours from Schedule Start if arrived early (only for first shift)
+                    let effectiveStart = shiftStart;
+                    if (shift === firstShift && emp.horaEntradaPrevista) {
+                        const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
+                        const expectedStart = new Date(day);
+                        expectedStart.setHours(h, m, 0, 0);
+                        if (shiftStart < expectedStart) {
+                            effectiveStart = expectedStart;
+                        }
+                    }
+
+                    // For individual shifts, we do NOT deduct lunch (each shift is already separated)
+                    const shiftMinutes = differenceInMinutes(shiftEnd, effectiveStart);
+                    workedMinutes += Math.max(0, shiftMinutes);
+
+                    // Accumulate truck usage from ALL shifts
+                    if (shift.usosCamion && shift.usosCamion.length > 0) {
+                        shift.usosCamion.forEach((u: any) => {
+                            kmDia += (u.kmRecorridos || 0);
+                            viajesDia += (u.viajesCount || 0);
+                            descargasDia += (u.descargasCount || 0);
+                        });
                     }
                 }
 
-                // Always recalculate to ensure lunch break deduction is applied. 
-                // We ignore DB totalHoras because it might be inflated (missing the deduction).
-                const refEnd = end || new Date();
-                workedMinutes = calculateNetWorkedMinutes(effectiveStart, refEnd);
+                // If there's only ONE shift that spans the whole day (no split),
+                // apply the lunch deduction as before
+                if (dayShifts.length === 1) {
+                    const singleStart = new Date(firstShift.horaEntrada);
+                    const singleEnd = firstShift.horaSalida ? new Date(firstShift.horaSalida) : new Date();
 
-                // Punctuality (Only if expected to work)
+                    let effectiveStart = singleStart;
+                    if (emp.horaEntradaPrevista) {
+                        const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
+                        const expectedStart = new Date(day);
+                        expectedStart.setHours(h, m, 0, 0);
+                        if (singleStart < expectedStart) effectiveStart = expectedStart;
+                    }
+
+                    // Recalculate with lunch deduction for single continuous shift
+                    workedMinutes = calculateNetWorkedMinutes(effectiveStart, singleEnd);
+                }
+
+                // Punctuality (based on first shift entry vs expected schedule)
                 if (expectedMinutes > 0 && emp.horaEntradaPrevista) {
                     const [h, m] = emp.horaEntradaPrevista.split(':').map(Number);
-                    const expectedStart = new Date(day);
-                    expectedStart.setHours(h, m, 0, 0);
 
-                    // Compare shift start with expected start
-                    // We interpret the "expected start" as being in local time (Madrid) relative to the day
-                    // But 'start' is a UTC timestamp.
-                    // To compare correctly, we should get the "local time minutes" of the shift
-
-                    // Simple approach: parse the HH:mm we just formatted
                     const [sh, sm] = startStr.split(':').map(Number);
                     const shiftMinutes = sh * 60 + sm;
                     const expectedMinutes = h * 60 + m;
 
                     punctualityForDay = shiftMinutes - expectedMinutes;
                     punctualityScore += punctualityForDay;
-                }
-
-                if (shift.usosCamion && shift.usosCamion.length > 0) {
-                    shift.usosCamion.forEach((u: any) => {
-                        kmDia += (u.kmRecorridos || 0);
-                        viajesDia += (u.viajesCount || 0);
-                        descargasDia += (u.descargasCount || 0);
-                    });
                 }
             }
 
@@ -258,7 +277,7 @@ export async function GET(request: Request) {
             totalExpectedMinutes += expectedMinutes;
 
             return {
-                id: shift?.id,
+                id: dayShifts[0]?.id,
                 date: dateStr,
                 dayType,
                 start: startStr,
@@ -269,7 +288,15 @@ export async function GET(request: Request) {
                 km: kmDia,
                 viajes: viajesDia,
                 descargas: descargasDia,
-                status: shift?.estado || (absence ? absence.estado : isWeekendDay ? 'WEEKEND' : 'MISSING')
+                shiftCount: dayShifts.length,
+                allShiftTimes: dayShifts.length > 1
+                    ? dayShifts.map(s => {
+                        const sStart = formatTime(new Date(s.horaEntrada));
+                        const sEnd = s.horaSalida ? formatTime(new Date(s.horaSalida)) : 'En curso';
+                        return `${sStart}-${sEnd}`;
+                    }).join(', ')
+                    : undefined,
+                status: dayShifts[0]?.estado || (absence ? absence.estado : isWeekendDay ? 'WEEKEND' : 'MISSING')
             };
         });
 
