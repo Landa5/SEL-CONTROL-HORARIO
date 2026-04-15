@@ -42,6 +42,7 @@ import {
     Monitor
 } from 'lucide-react';
 import QuickIncidentReport from '@/components/incidencias/QuickIncidentReport';
+import NotificationBell from '@/components/admin/NotificationBell';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -287,6 +288,7 @@ export default function AdminLayoutContent({ children }: { children: React.React
                                 {currentDate}
                             </p>
                         </div>
+                        <NotificationBell />
                         <Button
                             variant="ghost"
                             className="text-red-600 hover:bg-red-50 gap-2 font-bold transition-all"

@@ -48,17 +48,23 @@ export async function POST(request: Request) {
                     }
                 });
 
-                // Notify Admin
-                // Assuming we have an ADMIN user or a specific way to notify. 
-                // Creating a Notification record linked to no specific user (global) or all admins.
-                // For now, let's try to notify the admin user if exists, or just create a generic notification if schema supports it.
-                // Schema has `Notificacion` linked to `Empleado`. We need to find Admins.
-                const admins = await prisma.empleado.findMany({ where: { rol: 'ADMIN' } });
+                // Notify Admin with enriched info
+                const [admins, camionInfo, jornadaInfo] = await Promise.all([
+                    prisma.empleado.findMany({ where: { rol: 'ADMIN' } }),
+                    prisma.camion.findUnique({ where: { id: parseInt(camionId) }, select: { matricula: true } }),
+                    prisma.jornada.findUnique({ where: { id: parseInt(jornadaId) }, include: { empleado: { select: { nombre: true, apellidos: true } } } })
+                ]);
+                const matricula = camionInfo?.matricula || `ID ${camionId}`;
+                const conductorNombre = jornadaInfo?.empleado ? `${jornadaInfo.empleado.nombre} ${jornadaInfo.empleado.apellidos || ''}`.trim() : 'Desconocido';
+                const diff = kInitial - (lastUsage.kmFinal || 0);
+                const diffLabel = diff > 0 ? `+${diff} km de más` : `${diff} km de menos`;
+
                 for (const admin of admins) {
                     await prisma.notificacion.create({
                         data: {
                             usuarioId: admin.id,
-                            mensaje: `Descuadre de KM en camión ${camionId} corregido. Anterior: ${lastUsage.kmFinal}, Corregido: ${kInitial}. Foto: Sí.`
+                            mensaje: `⚠️ Descuadre KM — ${matricula}: ${conductorNombre} reportó ${kInitial} km, esperado ${lastUsage.kmFinal} km (${diffLabel}). KM anterior corregido. Foto adjunta.`,
+                            link: `/admin/jornadas?tab=list`,
                         }
                     });
                 }
