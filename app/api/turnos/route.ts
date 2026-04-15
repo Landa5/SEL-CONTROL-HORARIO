@@ -52,7 +52,7 @@ export async function POST(request: Request) {
                 const [admins, camionInfo, jornadaInfo] = await Promise.all([
                     prisma.empleado.findMany({ where: { rol: 'ADMIN' } }),
                     prisma.camion.findUnique({ where: { id: parseInt(camionId) }, select: { matricula: true } }),
-                    prisma.jornada.findUnique({ where: { id: parseInt(jornadaId) }, include: { empleado: { select: { nombre: true, apellidos: true } } } })
+                    prisma.jornadaLaboral.findUnique({ where: { id: parseInt(jornadaId) }, include: { empleado: { select: { nombre: true, apellidos: true } } } })
                 ]);
                 const matricula = camionInfo?.matricula || `ID ${camionId}`;
                 const conductorNombre = jornadaInfo?.empleado ? `${jornadaInfo.empleado.nombre} ${jornadaInfo.empleado.apellidos || ''}`.trim() : 'Desconocido';
