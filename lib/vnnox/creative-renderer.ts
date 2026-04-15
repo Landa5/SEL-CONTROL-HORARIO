@@ -78,7 +78,7 @@ export const TEMPLATES: Record<string, TemplateDefinition> = {
     promoColors: { bg: '#f59e0b', text: '#0f172a' },
     messageColors: { bg: 'rgba(255,255,255,0.1)', text: '#e2e8f0' },
     accentColor: '#3b82f6',
-    fuelBarColors: { diesel: '#fbbf24', gasolina: '#ef4444', dieselPlus: '#8b5cf6', adBlue: '#06b6d4' },
+    fuelBarColors: { diesel: '#1a1a1a', gasolina: '#16a34a', dieselPlus: '#1e3a5f', adBlue: '#06b6d4' },
   },
   energy: {
     id: 'energy',
@@ -90,7 +90,7 @@ export const TEMPLATES: Record<string, TemplateDefinition> = {
     promoColors: { bg: '#fbbf24', text: '#064e3b' },
     messageColors: { bg: 'rgba(255,255,255,0.1)', text: '#d1fae5' },
     accentColor: '#34d399',
-    fuelBarColors: { diesel: '#fbbf24', gasolina: '#f87171', dieselPlus: '#c084fc', adBlue: '#22d3ee' },
+    fuelBarColors: { diesel: '#1a1a1a', gasolina: '#16a34a', dieselPlus: '#1e3a5f', adBlue: '#22d3ee' },
   },
   premium: {
     id: 'premium',
@@ -102,7 +102,7 @@ export const TEMPLATES: Record<string, TemplateDefinition> = {
     promoColors: { bg: '#ef4444', text: '#ffffff' },
     messageColors: { bg: 'rgba(239,68,68,0.15)', text: '#fca5a5' },
     accentColor: '#f59e0b',
-    fuelBarColors: { diesel: '#f59e0b', gasolina: '#ef4444', dieselPlus: '#a78bfa', adBlue: '#67e8f9' },
+    fuelBarColors: { diesel: '#1a1a1a', gasolina: '#16a34a', dieselPlus: '#1e3a5f', adBlue: '#67e8f9' },
   },
   daylight: {
     id: 'daylight',
@@ -114,7 +114,7 @@ export const TEMPLATES: Record<string, TemplateDefinition> = {
     promoColors: { bg: '#2563eb', text: '#ffffff' },
     messageColors: { bg: 'rgba(0,0,0,0.05)', text: '#334155' },
     accentColor: '#2563eb',
-    fuelBarColors: { diesel: '#d97706', gasolina: '#dc2626', dieselPlus: '#7c3aed', adBlue: '#0891b2' },
+    fuelBarColors: { diesel: '#1a1a1a', gasolina: '#16a34a', dieselPlus: '#1e3a5f', adBlue: '#0891b2' },
   },
   corporate: {
     id: 'corporate',
@@ -126,7 +126,7 @@ export const TEMPLATES: Record<string, TemplateDefinition> = {
     promoColors: { bg: '#f97316', text: '#ffffff' },
     messageColors: { bg: 'rgba(255,255,255,0.08)', text: '#bae6fd' },
     accentColor: '#0ea5e9',
-    fuelBarColors: { diesel: '#fbbf24', gasolina: '#f87171', dieselPlus: '#a78bfa', adBlue: '#22d3ee' },
+    fuelBarColors: { diesel: '#1a1a1a', gasolina: '#16a34a', dieselPlus: '#1e3a5f', adBlue: '#22d3ee' },
   },
 };
 
@@ -150,7 +150,7 @@ interface FuelItem {
 }
 
 function buildFuelItems(prices: PriceData | undefined, tpl: TemplateDefinition): FuelItem[] {
-  const colors = tpl.fuelBarColors || { diesel: '#fbbf24', gasolina: '#ef4444', dieselPlus: '#8b5cf6', adBlue: '#06b6d4' };
+  const colors = tpl.fuelBarColors || { diesel: '#1a1a1a', gasolina: '#16a34a', dieselPlus: '#1e3a5f', adBlue: '#06b6d4' };
   const items: FuelItem[] = [];
   if (prices?.diesel) items.push({ label: 'DIÉSEL', shortLabel: 'D', value: prices.diesel, color: colors.diesel });
   if (prices?.gasolina) items.push({ label: 'GASOLINA', shortLabel: 'G', value: prices.gasolina, color: colors.gasolina });
