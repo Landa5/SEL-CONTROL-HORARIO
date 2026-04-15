@@ -3,9 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
 import jwt from 'jsonwebtoken';
 
-function getUserFromToken(): { id: number; rol: string } | null {
+async function getUserFromToken(): Promise<{ id: number; rol: string } | null> {
     try {
-        const cookieStore = cookies();
+        const cookieStore = await cookies();
         const token = cookieStore.get('token')?.value;
         if (!token) return null;
         const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
