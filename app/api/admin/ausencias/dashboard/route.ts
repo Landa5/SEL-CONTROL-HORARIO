@@ -7,7 +7,7 @@ export async function GET() {
         const today = new Date();
         const startToday = startOfDay(today);
         const endToday = endOfDay(today);
-        const next3Days = addDays(today, 3);
+        const next7Days = addDays(today, 7);
 
         // 1. Who is absent TODAY?
         const absentToday = await prisma.ausencia.findMany({
@@ -28,13 +28,13 @@ export async function GET() {
             }
         });
 
-        // 2. Upcoming Absences (Next 3 days)
+        // 2. Upcoming Absences (Next 7 days)
         const upcomingAbsences = await prisma.ausencia.findMany({
             where: {
                 estado: 'APROBADA',
                 fechaInicio: {
                     gt: endToday,
-                    lte: next3Days
+                    lte: next7Days
                 }
             },
             include: {

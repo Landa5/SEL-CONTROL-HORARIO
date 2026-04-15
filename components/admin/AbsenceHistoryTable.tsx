@@ -58,7 +58,7 @@ const PAGE_SIZE = 8;
 export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProps) {
     const router = useRouter();
     const [filterType, setFilterType] = useState<string>('TODOS');
-    const [filterState, setFilterState] = useState<string>('TODOS');
+    const [filterState, setFilterState] = useState<string>('PENDIENTE');
     const [processingId, setProcessingId] = useState<number | null>(null);
     const [showPendingFirst, setShowPendingFirst] = useState(true);
     const [currentPage, setCurrentPage] = useState(1);

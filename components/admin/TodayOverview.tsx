@@ -207,7 +207,7 @@ export default function TodayOverview({ stats, loading }: TodayOverviewProps) {
                                 <CalendarDays className="w-4 h-4 text-blue-600" />
                             </div>
                             <div>
-                                <h4 className="text-sm font-bold text-gray-700">Próximos 3 Días</h4>
+                                <h4 className="text-sm font-bold text-gray-700">Próximos 7 Días</h4>
                             </div>
                         </div>
                         <span className={`text-2xl font-black ${
