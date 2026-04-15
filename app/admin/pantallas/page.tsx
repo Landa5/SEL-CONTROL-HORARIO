@@ -150,7 +150,7 @@ function ConfigTab() {
 
   // Form state
   const [formData, setFormData] = useState({
-    baseUrl: 'https://open-au.vnnox.com',
+    baseUrl: 'https://open-eu.vnnox.com',
     appKey: '',
     appSecret: '',
     isActive: true,
@@ -323,7 +323,7 @@ function ConfigTab() {
               value={formData.baseUrl}
               onChange={e => setFormData(prev => ({ ...prev, baseUrl: e.target.value }))}
               className="w-full rounded-lg border px-3 py-2 text-sm font-mono text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              placeholder="https://open-au.vnnox.com"
+              placeholder="https://open-eu.vnnox.com"
             />
           </div>
           <div className="flex items-end gap-2">

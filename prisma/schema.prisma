@@ -1869,7 +1869,7 @@ enum DisplayAssetType {
 model DisplayProviderConfig {
   id                    Int       @id @default(autoincrement())
   provider              String    @default("VNNOX")
-  baseUrl               String    @default("https://open-au.vnnox.com")
+  baseUrl               String    @default("https://open-eu.vnnox.com")
   appKey                String
   appSecretEncrypted    String
   defaultPlayerId       String?
@@ -1888,6 +1888,7 @@ model DisplayScreen {
   providerConfig   DisplayProviderConfig @relation(fields: [providerConfigId], references: [id], onDelete: Cascade)
 
   playerId         String    @unique
+  serialNumber     String?   // SN del hardware (ej: 2ZTA54120W2A10002575)
   playerName       String?
   resolutionWidth  Int?
   resolutionHeight Int?

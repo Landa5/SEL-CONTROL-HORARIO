@@ -1,7 +1,7 @@
 /**
  * VNNOX / NovaCloud Open Platform API Client
  * 
- * API oficial v2: https://open-au.vnnox.com
+ * API oficial v2: https://open-eu.vnnox.com (región EU)
  * 
  * Autenticación por headers:
  *   AppKey    — clave pública de la aplicación
@@ -233,7 +233,7 @@ export class VnnoxClient {
 
   constructor(config?: VnnoxConfig) {
     this.config = config || {
-      baseUrl: process.env.VNNOX_BASE_URL || 'https://open-au.vnnox.com',
+      baseUrl: process.env.VNNOX_BASE_URL || 'https://open-eu.vnnox.com',
       appKey: process.env.VNNOX_APP_KEY || '',
       appSecret: process.env.VNNOX_APP_SECRET || '',
     };
@@ -324,7 +324,7 @@ export class VnnoxClient {
         success: apiSuccess,
         code: typeof apiData?.code === 'number' ? apiData.code : response.status,
         message: typeof apiData?.msg === 'string' ? apiData.msg : (typeof apiData?.message === 'string' ? apiData.message : undefined),
-        data: (apiData?.data ?? apiData) as T,
+        data: apiData as T,
         rawResponse: responseData,
       };
     } catch (error) {
@@ -364,7 +364,10 @@ export class VnnoxClient {
     const rawData = result.data as any;
     let players: VnnoxPlayer[] = [];
 
-    if (Array.isArray(rawData)) {
+    // VNNOX v2 API devuelve { pageInfo, total, rows: [...] }
+    if (rawData?.rows && Array.isArray(rawData.rows)) {
+      players = rawData.rows.map(VnnoxClient.normalizePlayer);
+    } else if (Array.isArray(rawData)) {
       players = rawData.map(VnnoxClient.normalizePlayer);
     } else if (rawData?.list && Array.isArray(rawData.list)) {
       players = rawData.list.map(VnnoxClient.normalizePlayer);
@@ -560,13 +563,13 @@ export class VnnoxClient {
     return {
       playerId: String(raw.playerId ?? raw.id ?? raw.terminalId ?? ''),
       playerName: raw.playerName ?? raw.name ?? raw.terminalName ?? 'Sin nombre',
-      width: raw.width ?? raw.terminalWidth,
-      height: raw.height ?? raw.terminalHeight,
+      width: parseInt(raw.width ?? raw.terminalWidth ?? '0', 10) || undefined,
+      height: parseInt(raw.height ?? raw.terminalHeight ?? '0', 10) || undefined,
       rotation: raw.rotation,
       status: (raw.onlineStatus === 1 || raw.status === 1 || raw.online === true) ? 'ONLINE' : 'OFFLINE',
       lastOnlineTime: raw.lastOnlineTime ?? raw.lastHeartbeatTime,
-      model: raw.model ?? raw.terminalModel,
-      firmwareVersion: raw.firmwareVersion ?? raw.version,
+      model: raw.productName ?? raw.model ?? raw.terminalModel,
+      firmwareVersion: raw.firmwareVersion ?? raw.version ?? raw.osVersion,
       metadata: raw,
     };
   }

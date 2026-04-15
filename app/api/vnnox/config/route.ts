@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       config = await prisma.displayProviderConfig.create({
         data: {
           provider: 'VNNOX',
-          baseUrl: baseUrl || 'https://open-au.vnnox.com',
+          baseUrl: baseUrl || 'https://open-eu.vnnox.com',
           appKey,
           appSecretEncrypted: encrypt(appSecret),
           defaultPlayerId: defaultPlayerId || null,

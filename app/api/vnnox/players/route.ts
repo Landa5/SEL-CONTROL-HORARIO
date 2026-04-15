@@ -96,13 +96,16 @@ export async function POST(req: NextRequest) {
 
     const detail = playerInfo.data;
 
+    const sn = (detail.metadata as any)?.sn || (detail.metadata as any)?.list?.sn || null;
+
     // Upsert screen in DB
     const screen = await prisma.displayScreen.upsert({
       where: { playerId },
       update: {
         playerName: detail.playerName,
-        resolutionWidth: detail.resolutionWidth || null,
-        resolutionHeight: detail.resolutionHeight || null,
+        serialNumber: sn,
+        resolutionWidth: detail.resolutionWidth || detail.width || null,
+        resolutionHeight: detail.resolutionHeight || detail.height || null,
         orientation: detail.orientation || 'HORIZONTAL',
         isOnline: detail.isOnline,
         metadataJson: (detail.metadata || {}) as any,
@@ -112,8 +115,9 @@ export async function POST(req: NextRequest) {
         providerConfigId: configId,
         playerId,
         playerName: detail.playerName,
-        resolutionWidth: detail.resolutionWidth || null,
-        resolutionHeight: detail.resolutionHeight || null,
+        serialNumber: sn,
+        resolutionWidth: detail.resolutionWidth || detail.width || null,
+        resolutionHeight: detail.resolutionHeight || detail.height || null,
         orientation: detail.orientation || 'HORIZONTAL',
         isOnline: detail.isOnline,
         metadataJson: (detail.metadata || {}) as any,

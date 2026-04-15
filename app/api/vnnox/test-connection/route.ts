@@ -53,21 +53,8 @@ export async function POST() {
       },
     });
 
-    // Log the test
-    await prisma.displayPublicationLog.create({
-      data: {
-        draftId: 0, // No draft associated
-        action: 'TEST_CONNECTION',
-        requestPayloadJson: { baseUrl: config.baseUrl, appKey: config.appKey.substring(0, 8) + '...' },
-        responsePayloadJson: { success: result.success, message: result.message },
-        success: result.success,
-        errorMessage: result.success ? null : result.message,
-        performedByUserId: (session as any).id,
-      },
-    }).catch(() => {
-      // Log creation may fail if no draft exists — that's OK for test connections
-      console.warn('[VNNOX] Could not create log entry for test connection (no draftId)');
-    });
+    // Note: test connection is logged via registrarAuditoria below.
+    // DisplayPublicationLog requires a valid draftId, so we skip it for test connections.
 
     await registrarAuditoria(
       (session as any).id,

@@ -165,7 +165,7 @@ async function step1_listPlayers(): Promise<StepResult> {
     }
 
     // Extract players
-    const players = data?.data ?? data?.list ?? (Array.isArray(data) ? data : []);
+    const players = data?.rows ?? data?.data ?? data?.list ?? (Array.isArray(data) ? data : []);
     const playerList: any[] = Array.isArray(players) ? players : [];
 
     pass(`Conexión exitosa — ${playerList.length} player(s) encontrado(s)`);
@@ -209,7 +209,7 @@ async function step2_onlineStatus(playerId: string): Promise<StepResult> {
       return { passed: false };
     }
 
-    const items = data?.data ?? data?.list ?? [];
+    const items = Array.isArray(data) ? data : (data?.data ?? data?.list ?? []);
     const playerInfo = Array.isArray(items) ? items[0] : items;
 
     if (!playerInfo) {
