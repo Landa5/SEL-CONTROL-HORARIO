@@ -7,7 +7,7 @@ import { es } from 'date-fns/locale';
 import {
     FileText, CheckCircle, XCircle, Trash2, Calendar, Clock,
     Sun, Thermometer, ArrowRight, Filter, Pencil, AlertCircle,
-    ChevronDown, ChevronUp
+    ChevronDown, ChevronUp, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { Button } from "@/components/ui/Button";
 import { toast } from "sonner";
@@ -53,12 +53,15 @@ const STATUS_CONFIG: Record<string, { icon: typeof Clock; label: string; badge: 
     DENEGADA:  { icon: XCircle, label: 'Denegada', badge: 'bg-red-100 text-red-600', row: 'bg-red-50/30' },
 };
 
+const PAGE_SIZE = 8;
+
 export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProps) {
     const router = useRouter();
     const [filterType, setFilterType] = useState<string>('TODOS');
     const [filterState, setFilterState] = useState<string>('TODOS');
     const [processingId, setProcessingId] = useState<number | null>(null);
     const [showPendingFirst, setShowPendingFirst] = useState(true);
+    const [currentPage, setCurrentPage] = useState(1);
 
     // Edit State
     const [editingAbsence, setEditingAbsence] = useState<Absence | null>(null);
@@ -88,6 +91,16 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
         return filtered;
     }, [history, filterType, filterState, showPendingFirst]);
 
+    // Pagination
+    const totalPages = Math.ceil(filteredHistory.length / PAGE_SIZE);
+    const paginatedHistory = useMemo(() => {
+        const start = (currentPage - 1) * PAGE_SIZE;
+        return filteredHistory.slice(start, start + PAGE_SIZE);
+    }, [filteredHistory, currentPage]);
+
+    // Reset page when filters change
+    useMemo(() => { setCurrentPage(1); }, [filterType, filterState]);
+
     // Count by status/type for filter pills
     const counts = useMemo(() => ({
         total: history.length,
@@ -98,6 +111,13 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
         baja: history.filter(a => a.tipo === 'BAJA').length,
         permiso: history.filter(a => a.tipo === 'PERMISO').length,
     }), [history]);
+
+    // Totals for summary bar
+    const totalDias = useMemo(() => {
+        return history
+            .filter(a => a.estado === 'APROBADA')
+            .reduce((sum, a) => sum + differenceInCalendarDays(new Date(a.fechaFin), new Date(a.fechaInicio)) + 1, 0);
+    }, [history]);
 
     const handleUpdateStatus = async (id: number, newStatus: 'APROBADA' | 'DENEGADA') => {
         setProcessingId(id);
@@ -189,21 +209,43 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
 
     return (
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            {/* ─── Summary Cards ─── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-gradient-to-br from-gray-50 via-white to-gray-50 border-b">
+                <div className="bg-white rounded-lg border p-3 shadow-sm">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
+                    <p className="text-2xl font-black text-gray-900 leading-tight">{counts.total}</p>
+                    <p className="text-[10px] text-gray-400">{totalDias} días aprobados</p>
+                </div>
+                <div className={`rounded-lg border p-3 shadow-sm ${counts.pendiente > 0 ? 'bg-amber-50 border-amber-200 ring-1 ring-amber-100' : 'bg-white'}`}>
+                    <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wider">Pendientes</p>
+                    <p className={`text-2xl font-black leading-tight ${counts.pendiente > 0 ? 'text-amber-600' : 'text-gray-300'}`}>{counts.pendiente}</p>
+                    <p className="text-[10px] text-amber-400">{counts.pendiente > 0 ? 'Requieren acción' : 'Todo al día'}</p>
+                </div>
+                <div className="bg-white rounded-lg border p-3 shadow-sm">
+                    <p className="text-[10px] font-bold text-green-500 uppercase tracking-wider">Aprobadas</p>
+                    <p className="text-2xl font-black text-green-600 leading-tight">{counts.aprobada}</p>
+                    <p className="text-[10px] text-gray-400">{counts.total > 0 ? Math.round((counts.aprobada / counts.total) * 100) : 0}% del total</p>
+                </div>
+                <div className="bg-white rounded-lg border p-3 shadow-sm">
+                    <p className="text-[10px] font-bold text-red-400 uppercase tracking-wider">Denegadas</p>
+                    <p className="text-2xl font-black text-red-500 leading-tight">{counts.denegada}</p>
+                    <p className="text-[10px] text-gray-400">{counts.total > 0 ? Math.round((counts.denegada / counts.total) * 100) : 0}% del total</p>
+                </div>
+            </div>
+
             {/* ─── Header con filtros ─── */}
-            <div className="p-4 border-b bg-gradient-to-r from-gray-50 to-white">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                    <div>
-                        <h3 className="font-bold text-gray-800 flex items-center gap-2">
-                            <Filter className="w-4 h-4 text-gray-400" />
-                            Historial y Solicitudes
-                        </h3>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                            {filteredHistory.length} de {history.length} registros
-                        </p>
+            <div className="p-3 border-b">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                    <div className="flex items-center gap-2">
+                        <Filter className="w-3.5 h-3.5 text-gray-400" />
+                        <span className="text-xs font-medium text-gray-500">
+                            {filteredHistory.length} registro{filteredHistory.length !== 1 ? 's' : ''}
+                            {filterType !== 'TODOS' || filterState !== 'TODOS' ? ' (filtrado)' : ''}
+                        </span>
                     </div>
 
                     {/* Filter Pills */}
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1">
                         {/* Status Filters */}
                         {([
                             { key: 'TODOS', label: 'Todos', count: counts.total, color: 'bg-gray-100 text-gray-700 border-gray-200' },
@@ -214,35 +256,35 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                             <button
                                 key={f.key}
                                 onClick={() => setFilterState(f.key)}
-                                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                className={`px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
                                     filterState === f.key
-                                        ? `${f.color} shadow-sm ring-1 ring-offset-1 ring-gray-300`
-                                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                        ? `${f.color} shadow-sm ring-1 ring-offset-1 ring-gray-200`
+                                        : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                             >
                                 {f.label}
                                 {f.count > 0 && (
-                                    <span className="ml-1 opacity-70">({f.count})</span>
+                                    <span className="ml-0.5 opacity-70">({f.count})</span>
                                 )}
                             </button>
                         ))}
 
-                        <div className="w-px bg-gray-200 mx-1 self-stretch" />
+                        <div className="w-px bg-gray-200 mx-0.5 self-stretch" />
 
                         {/* Type Filters */}
                         {([
-                            { key: 'TODOS', label: 'Todo', typeFilter: true },
-                            { key: 'VACACIONES', label: '🌴', count: counts.vacaciones },
-                            { key: 'BAJA', label: '🏥', count: counts.baja },
-                            { key: 'PERMISO', label: '📋', count: counts.permiso },
+                            { key: 'TODOS', label: 'Todo' },
+                            { key: 'VACACIONES', label: '🌴' },
+                            { key: 'BAJA', label: '🏥' },
+                            { key: 'PERMISO', label: '📋' },
                         ] as const).map(f => (
                             <button
                                 key={`type-${f.key}`}
                                 onClick={() => setFilterType(f.key)}
-                                className={`px-2 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                                className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
                                     filterType === f.key
                                         ? 'bg-indigo-100 text-indigo-700 border-indigo-200 shadow-sm'
-                                        : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                                        : 'bg-white text-gray-400 border-gray-100 hover:bg-gray-50'
                                 }`}
                                 title={f.key === 'TODOS' ? 'Todos los tipos' : f.key}
                             >
@@ -255,10 +297,10 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
 
             {/* ─── Pending Alert Banner ─── */}
             {counts.pendiente > 0 && filterState !== 'APROBADA' && filterState !== 'DENEGADA' && (
-                <div className="px-4 py-2.5 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
-                    <p className="text-xs text-amber-700 font-medium">
-                        <span className="font-bold">{counts.pendiente}</span> solicitud{counts.pendiente > 1 ? 'es' : ''} pendiente{counts.pendiente > 1 ? 's' : ''} de aprobación
+                <div className="px-4 py-2 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                    <p className="text-[11px] text-amber-700 font-medium">
+                        <span className="font-bold">{counts.pendiente}</span> solicitud{counts.pendiente > 1 ? 'es' : ''} pendiente{counts.pendiente > 1 ? 's' : ''}
                     </p>
                     <button
                         onClick={() => setShowPendingFirst(!showPendingFirst)}
@@ -275,16 +317,16 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50/50">
-                            <TableHead className="font-bold text-gray-600">Empleado</TableHead>
-                            <TableHead className="font-bold text-gray-600">Tipo</TableHead>
-                            <TableHead className="font-bold text-gray-600">Periodo</TableHead>
-                            <TableHead className="font-bold text-gray-600">Estado</TableHead>
-                            <TableHead className="font-bold text-gray-600 text-center">Adj.</TableHead>
-                            <TableHead className="font-bold text-gray-600 text-right">Acciones</TableHead>
+                            <TableHead className="font-bold text-gray-600 text-xs">Empleado</TableHead>
+                            <TableHead className="font-bold text-gray-600 text-xs">Tipo</TableHead>
+                            <TableHead className="font-bold text-gray-600 text-xs">Periodo</TableHead>
+                            <TableHead className="font-bold text-gray-600 text-xs">Estado</TableHead>
+                            <TableHead className="font-bold text-gray-600 text-center text-xs">Adj.</TableHead>
+                            <TableHead className="font-bold text-gray-600 text-right text-xs">Acciones</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredHistory.length === 0 ? (
+                        {paginatedHistory.length === 0 ? (
                             <TableRow>
                                 <TableCell colSpan={6} className="text-center py-12">
                                     <Calendar className="w-10 h-10 mx-auto mb-2 text-gray-200" />
@@ -293,7 +335,7 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            filteredHistory.map(abs => {
+                            paginatedHistory.map(abs => {
                                 const typeCfg = TYPE_CONFIG[abs.tipo] || TYPE_CONFIG.OTROS;
                                 const statusCfg = STATUS_CONFIG[abs.estado] || STATUS_CONFIG.PENDIENTE;
                                 const TypeIcon = typeCfg.icon;
@@ -309,7 +351,7 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                                         }`}
                                     >
                                         <TableCell>
-                                            <div className="font-semibold text-gray-900">{abs.empleado.nombre} {abs.empleado.apellidos}</div>
+                                            <div className="font-semibold text-gray-900 text-sm">{abs.empleado.nombre} {abs.empleado.apellidos}</div>
                                             <div className="text-[10px] text-gray-400 uppercase font-medium">{abs.empleado.rol}</div>
                                         </TableCell>
                                         <TableCell>
@@ -416,6 +458,44 @@ export default function AbsenceHistoryTable({ history }: AbsenceHistoryTableProp
                     </TableBody>
                 </Table>
             </div>
+
+            {/* ─── Paginación ─── */}
+            {totalPages > 1 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-gray-50/50">
+                    <p className="text-[11px] text-gray-500">
+                        Mostrando <span className="font-bold">{(currentPage - 1) * PAGE_SIZE + 1}</span>–<span className="font-bold">{Math.min(currentPage * PAGE_SIZE, filteredHistory.length)}</span> de <span className="font-bold">{filteredHistory.length}</span>
+                    </p>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="p-1.5 rounded-lg border bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronLeft className="w-4 h-4" />
+                        </button>
+                        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                            <button
+                                key={page}
+                                onClick={() => setCurrentPage(page)}
+                                className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
+                                    page === currentPage
+                                        ? 'bg-blue-600 text-white shadow-sm'
+                                        : 'bg-white border text-gray-500 hover:bg-gray-50'
+                                }`}
+                            >
+                                {page}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="p-1.5 rounded-lg border bg-white text-gray-500 hover:bg-gray-50 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                            <ChevronRight className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ─── Edit Dialog ─── */}
             <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
