@@ -18,7 +18,7 @@ async function getUserFromToken(): Promise<{ id: number; rol: string } | null> {
 // GET — Fetch notifications for the current user
 export async function GET(request: NextRequest) {
     try {
-        const user = getUserFromToken();
+        const user = await getUserFromToken();
         if (!user) {
             return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
         }
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
 // PATCH — Mark notifications as read
 export async function PATCH(request: NextRequest) {
     try {
-        const user = getUserFromToken();
+        const user = await getUserFromToken();
         if (!user) {
             return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
         }
