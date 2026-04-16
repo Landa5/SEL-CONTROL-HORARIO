@@ -483,19 +483,39 @@ export class VnnoxClient {
     const programBody = {
       name: payload.name,
       playerIds: [payload.playerId],
-      width: payload.width,
-      height: payload.height,
-      programItems: payload.layers.map((layer, idx) => ({
-        ordinal: idx + 1,
-        type: 'IMAGE',
-        url: layer.url,
-        width: layer.width,
-        height: layer.height,
-        x: layer.x ?? 0,
-        y: layer.y ?? 0,
-        duration: layer.duration ?? 10,
+      schedule: {
+        startDate: new Date().toISOString().split('T')[0],
+        endDate: '2060-12-31',
+        plans: [
+          {
+            weekDays: [1, 2, 3, 4, 5, 6, 7],
+            startTime: '00:00:00',
+            endTime: '23:59:59',
+          },
+        ],
+      },
+      pages: payload.layers.map((layer, idx) => ({
+        name: `page-${idx + 1}`,
+        repeatCount: 1,
+        widgets: [
+          {
+            zIndex: 1,
+            type: 'PICTURE',
+            url: layer.url,
+            duration: (layer.duration ?? 10) * 1000, // API expects milliseconds
+            layout: {
+              x: `${((layer.x ?? 0) / payload.width * 100).toFixed(1)}%`,
+              y: `${((layer.y ?? 0) / payload.height * 100).toFixed(1)}%`,
+              width: `${(layer.width / payload.width * 100).toFixed(1)}%`,
+              height: `${(layer.height / payload.height * 100).toFixed(1)}%`,
+            },
+            inAnimation: {
+              type: 'NONE',
+              duration: 1000,
+            },
+          },
+        ],
       })),
-      duration: payload.duration,
     };
 
     return this.request('POST', '/v2/player/program/normal', programBody);
