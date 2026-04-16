@@ -509,6 +509,8 @@ export class VnnoxClient {
             zIndex: 1,
             type: 'PICTURE',
             url: layer.url,
+            md5: layer.md5 || '',
+            size: layer.size || 0,
             duration: (layer.duration ?? 10) * 1000, // API expects milliseconds
             layout: {
               x: '0%',
