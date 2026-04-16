@@ -29,8 +29,8 @@ export async function GET(
         }
 
         const svgContent = renderToSvg({
-            width: draft.screen.resolutionWidth,
-            height: draft.screen.resolutionHeight,
+            width: draft.screen.resolutionWidth || 128,
+            height: draft.screen.resolutionHeight || 128,
             templateId: draft.templateId || 'default',
             prices: {
                 diesel: draft.priceDiesel,
