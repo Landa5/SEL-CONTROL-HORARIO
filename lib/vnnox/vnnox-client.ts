@@ -495,7 +495,7 @@ export class VnnoxClient {
         endDate,
         plans: [
           {
-            weekDays: [1, 2, 3, 4, 5, 6, 7],
+            weekDays: [0, 1, 2, 3, 4, 5, 6],
             startTime: '00:00:00',
             endTime: '23:59:59',
           },
