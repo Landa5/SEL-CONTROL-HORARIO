@@ -81,6 +81,8 @@ export interface VnnoxProgramLayer {
   x?: number;
   y?: number;
   duration?: number;       // segundos que se muestra la imagen
+  md5?: string;            // MD5 hex del archivo
+  size?: number;           // tamaño en bytes del archivo
 }
 
 export interface VnnoxSchedulePayload {
@@ -502,6 +504,8 @@ export class VnnoxClient {
             zIndex: 1,
             type: 'PICTURE',
             url: layer.url,
+            md5: layer.md5 || '',
+            size: layer.size || 0,
             duration: (layer.duration ?? 10) * 1000, // API expects milliseconds
             layout: {
               x: `${((layer.x ?? 0) / payload.width * 100).toFixed(1)}%`,

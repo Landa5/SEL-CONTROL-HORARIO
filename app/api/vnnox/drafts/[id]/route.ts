@@ -357,17 +357,27 @@ async function handlePublish(draft: any, userId: number) {
     message: { text: draft.messageText },
   });
 
-  // TODO: Subir a Supabase Storage y usar URL pública HTTPS 
-  const svgBase64 = Buffer.from(svgContent).toString('base64');
-  const dataUrl = `data:image/svg+xml;base64,${svgBase64}`;
+  // Calcular MD5 y tamaño del SVG para VNNOX
+  const crypto = await import('crypto');
+  const svgBuffer = Buffer.from(svgContent, 'utf-8');
+  const svgMd5 = crypto.createHash('md5').update(svgBuffer).digest('hex');
+  const svgSize = svgBuffer.length;
+
+  // URL pública HTTPS — VNNOX descargará la imagen desde este endpoint
+  const baseUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : (process.env.NEXTAUTH_URL || 'http://localhost:3000');
+  const publicImageUrl = `${baseUrl}/api/vnnox/images/${draft.id}`;
 
   // MVP 1: solo imágenes, sin capas de vídeo
   const layers = [{
     type: 'IMAGE' as const,
-    url: dataUrl,
+    url: publicImageUrl,
     width: screen.resolutionWidth,
     height: screen.resolutionHeight,
     duration: 10,
+    md5: svgMd5,
+    size: svgSize,
   }];
 
   const programPayload = {
