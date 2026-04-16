@@ -482,12 +482,17 @@ export class VnnoxClient {
    * (MVP 1: solo imágenes, vídeo queda para fase posterior.)
    */
   async publishNormalProgram(payload: VnnoxProgramPayload): Promise<VnnoxApiResponse> {
+    // Build schedule: all day, every day, for 10 years
+    const now = new Date();
+    const startDate = now.toISOString().split('T')[0];
+    const endYear = now.getFullYear() + 10;
+    const endDate = `${endYear}-12-31`;
+
     const programBody = {
-      name: payload.name,
       playerIds: [payload.playerId],
       schedule: {
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: '2060-12-31',
+        startDate,
+        endDate,
         plans: [
           {
             weekDays: [1, 2, 3, 4, 5, 6, 7],
@@ -497,21 +502,19 @@ export class VnnoxClient {
         ],
       },
       pages: payload.layers.map((layer, idx) => ({
-        name: `page-${idx + 1}`,
+        name: `${payload.name}-page-${idx + 1}`,
         repeatCount: 1,
         widgets: [
           {
             zIndex: 1,
             type: 'PICTURE',
             url: layer.url,
-            md5: layer.md5 || '',
-            size: layer.size || 0,
             duration: (layer.duration ?? 10) * 1000, // API expects milliseconds
             layout: {
-              x: `${((layer.x ?? 0) / payload.width * 100).toFixed(1)}%`,
-              y: `${((layer.y ?? 0) / payload.height * 100).toFixed(1)}%`,
-              width: `${(layer.width / payload.width * 100).toFixed(1)}%`,
-              height: `${(layer.height / payload.height * 100).toFixed(1)}%`,
+              x: '0%',
+              y: '0%',
+              width: '100%',
+              height: '100%',
             },
             inAnimation: {
               type: 'NONE',
