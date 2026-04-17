@@ -428,7 +428,22 @@ export default function EmpleadoDashboard() {
             setNumDescargas('');
             setNumViajes('');
             setLitrosRepostados('');
-            fetchData();
+            await fetchData();
+
+            // Preguntar si quiere cerrar la jornada también
+            const wantClose = confirm('✅ Ruta finalizada correctamente.\n\n¿Quieres también FICHAR SALIDA y cerrar tu jornada de hoy?');
+            if (wantClose && jornada && !jornada.horaSalida) {
+                const res = await fetch('/api/jornadas', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: jornada.id, horaSalida: new Date(), observaciones: observaciones || '' })
+                });
+                if (res.ok) {
+                    toast.success('Jornada cerrada correctamente');
+                    await fetchData();
+                    setActiveSection('summary');
+                }
+            }
         } finally {
             setEndingShift(false);
         }
@@ -821,12 +836,19 @@ export default function EmpleadoDashboard() {
                             <p className="text-center text-gray-500">Inicia el día para asignar vehículo.</p>
                         ) : !activeTurno ? (
                             <div className="space-y-4">
-                                <select className="w-full p-3 border rounded" value={selectedCamion} onChange={e => setSelectedCamion(e.target.value)}>
+                                <select className="w-full p-4 border rounded-xl text-base" value={selectedCamion} onChange={e => setSelectedCamion(e.target.value)}>
                                     <option value="">Seleccione Camión...</option>
                                     {camiones.map(c => <option key={c.id} value={c.id}>{c.matricula}</option>)}
                                 </select>
-                                <Input type="number" placeholder="KM Iniciales" value={kmInicial} onChange={e => setKmInicial(e.target.value)} />
-                                <Button onClick={handleStartShift} disabled={startingShift} className="w-full h-12 font-bold bg-indigo-600 disabled:opacity-50">{startingShift ? 'Iniciando...' : 'INICIAR RUTA'}</Button>
+                                <Input type="number" placeholder="KM Iniciales" value={kmInicial} onChange={e => setKmInicial(e.target.value)} className="h-14 text-lg" />
+                                <Button onClick={handleStartShift} disabled={startingShift} className="w-full h-14 text-lg font-bold bg-indigo-600 disabled:opacity-50">{startingShift ? 'Iniciando...' : 'INICIAR RUTA'}</Button>
+
+                                {/* Botón fichar salida visible directamente si no hay camión activo */}
+                                <div className="pt-4 border-t border-dashed">
+                                    <Button onClick={handleClockOut} variant="outline" className="w-full h-12 text-red-600 border-red-200 font-bold">
+                                        <LogOut className="w-4 h-4 mr-2" /> FICHAR SALIDA (sin coger camión)
+                                    </Button>
+                                </div>
                             </div>
                         ) : (
                             <div className="space-y-6">
@@ -924,9 +946,9 @@ export default function EmpleadoDashboard() {
                                     )}
                                 </div>
 
-                                <div className="pt-4 border-t space-y-2">
-                                    <Input type="number" placeholder="KM Finales" value={kmFinal} onChange={e => setKmFinal(e.target.value)} />
-                                    <Button onClick={handleEndShift} disabled={endingShift} variant="outline" className="w-full text-red-600 border-red-200 disabled:opacity-50">{endingShift ? 'Finalizando...' : 'TERMINAR RUTA'}</Button>
+                                <div className="pt-4 border-t space-y-3">
+                                    <Input type="number" placeholder="KM Finales" value={kmFinal} onChange={e => setKmFinal(e.target.value)} className="h-14 text-lg" />
+                                    <Button onClick={handleEndShift} disabled={endingShift} className="w-full h-14 text-lg font-bold bg-red-600 hover:bg-red-700 text-white disabled:opacity-50">{endingShift ? 'Finalizando...' : '🛑 TERMINAR RUTA'}</Button>
                                 </div>
                             </div>
                         )}

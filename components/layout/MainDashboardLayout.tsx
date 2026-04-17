@@ -148,11 +148,51 @@ export default function MainDashboardLayout({
                 )}
 
                 {/* CONTENT AREA */}
-                <main className="flex-1 p-6 md:p-8 overflow-x-hidden">
+                <main className="flex-1 p-4 sm:p-6 md:p-8 pb-24 md:pb-8 overflow-x-hidden">
                     <div className="max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
                         {children}
                     </div>
                 </main>
+
+                {/* MOBILE BOTTOM NAV BAR */}
+                <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-[0_-4px_12px_rgba(0,0,0,0.08)] z-30 safe-area-pb">
+                    <div className="flex justify-around items-center py-1">
+                        {navItems.slice(0, 5).map((item) => {
+                            const Icon = item.icon;
+                            const isActive = activeSection === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    onClick={() => onNavigate(item.id)}
+                                    className={`flex flex-col items-center justify-center py-2 px-1 min-w-[60px] relative transition-colors ${
+                                        isActive ? 'text-blue-600' : 'text-gray-400'
+                                    }`}
+                                >
+                                    <Icon className={`w-5 h-5 ${isActive ? 'text-blue-600' : 'text-gray-400'}`} />
+                                    <span className={`text-[10px] mt-0.5 font-medium leading-tight text-center ${isActive ? 'text-blue-600 font-bold' : 'text-gray-400'}`}>
+                                        {item.label.length > 10 ? item.label.split(' ')[0] : item.label}
+                                    </span>
+                                    {item.badgeCount ? (
+                                        <span className="absolute -top-0.5 right-1 w-4 h-4 bg-red-500 text-white rounded-full text-[9px] font-bold flex items-center justify-center">
+                                            {item.badgeCount}
+                                        </span>
+                                    ) : null}
+                                    {isActive && (
+                                        <div className="absolute -top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-blue-600 rounded-full" />
+                                    )}
+                                </button>
+                            );
+                        })}
+                        {/* More button to open sidebar */}
+                        <button
+                            onClick={() => setMobileMenuOpen(true)}
+                            className="flex flex-col items-center justify-center py-2 px-1 min-w-[60px] text-gray-400"
+                        >
+                            <Menu className="w-5 h-5" />
+                            <span className="text-[10px] mt-0.5 font-medium">Más</span>
+                        </button>
+                    </div>
+                </nav>
             </div>
         </div>
     );
