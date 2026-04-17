@@ -800,6 +800,7 @@ function HistoryTab() {
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
   const [statusFilter, setStatusFilter] = useState('');
+  const [republishing, setRepublishing] = useState<number | null>(null);
 
   const fetchDrafts = useCallback(async () => {
     setLoading(true);
@@ -837,6 +838,30 @@ function HistoryTab() {
     ROLLED_BACK: 'Rollback',
   };
 
+  const handleRepublish = async (draft: DisplayDraft) => {
+    if (!confirm(`¿Re-publicar draft #${draft.id} con los mismos precios a la pantalla?`)) return;
+    setRepublishing(draft.id);
+    try {
+      const res = await fetch(`/api/vnnox/drafts/${draft.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'publish' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        alert('✅ Re-publicado correctamente');
+      } else {
+        alert(`❌ Error: ${data.error || data.message || 'Error desconocido'}`);
+      }
+      fetchDrafts();
+    } catch (err) {
+      console.error('Error re-publishing:', err);
+      alert('❌ Error de conexión');
+    } finally {
+      setRepublishing(null);
+    }
+  };
+
   const handleDuplicate = async (draft: DisplayDraft) => {
     try {
       const res = await fetch('/api/vnnox/drafts', {
@@ -855,7 +880,10 @@ function HistoryTab() {
           templateId: draft.templateId,
         }),
       });
-      if (res.ok) fetchDrafts();
+      if (res.ok) {
+        alert('✅ Duplicado creado — ve a "Crear Publicación" para editarlo');
+        fetchDrafts();
+      }
     } catch (err) {
       console.error('Error duplicating:', err);
     }
@@ -945,13 +973,27 @@ function HistoryTab() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
+                        {/* Re-publicar */}
+                        <button
+                          onClick={() => handleRepublish(d)}
+                          disabled={republishing === d.id}
+                          title="Re-publicar (enviar de nuevo a pantalla)"
+                          className="p-1.5 rounded hover:bg-green-50 text-green-600 disabled:opacity-50"
+                        >
+                          {republishing === d.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <Send className="w-3.5 h-3.5" />
+                          }
+                        </button>
+                        {/* Duplicar */}
                         <button
                           onClick={() => handleDuplicate(d)}
-                          title="Duplicar"
+                          title="Duplicar (crear copia como borrador)"
                           className="p-1.5 rounded hover:bg-blue-50 text-blue-500"
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
+                        {/* Rollback */}
                         {(d.status === 'PUBLISHED' || d.status === 'FAILED') && (
                           <button
                             onClick={() => handleRollback(d.id)}
