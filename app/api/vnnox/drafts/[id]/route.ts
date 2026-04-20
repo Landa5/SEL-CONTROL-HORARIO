@@ -357,13 +357,20 @@ async function handlePublish(draft: any, userId: number) {
     message: { text: draft.messageText },
   });
 
-  // Calcular MD5 y tamaño del SVG para VNNOX
-  const crypto = await import('crypto');
-  const svgBuffer = Buffer.from(svgContent, 'utf-8');
-  const svgMd5 = crypto.createHash('md5').update(svgBuffer).digest('hex');
-  const svgSize = svgBuffer.length;
+  // Renderizar SVG a PNG (VNNOX requiere imagen rasterizada, no SVG)
+  const { Resvg } = await import('@resvg/resvg-js');
+  const resvg = new Resvg(svgContent, {
+    fitTo: { mode: 'width', value: screen.resolutionWidth },
+  });
+  const pngBuffer = resvg.render().asPng();
 
-  // URL pública HTTPS — VNNOX descargará la imagen desde este endpoint
+  // Calcular MD5 y tamaño del PNG para VNNOX
+  const crypto = await import('crypto');
+  const pngMd5 = crypto.createHash('md5').update(pngBuffer).digest('hex');
+  const pngSize = pngBuffer.length;
+  console.log(`[VNNOX] PNG generated: ${pngSize} bytes, md5: ${pngMd5}`);
+
+  // URL pública HTTPS — VNNOX descargará la imagen PNG desde este endpoint
   // IMPORTANTE: NO usar VERCEL_URL porque devuelve la URL de preview del deploy (temporal).
   // VNNOX necesita una URL pública estable que siempre resuelva al mismo sitio.
   const baseUrl = process.env.VNNOX_PUBLIC_URL
@@ -381,8 +388,8 @@ async function handlePublish(draft: any, userId: number) {
     width: screen.resolutionWidth,
     height: screen.resolutionHeight,
     duration: 10,
-    md5: svgMd5,
-    size: svgSize,
+    md5: pngMd5,
+    size: pngSize,
   }];
 
   const programPayload = {

@@ -1,12 +1,13 @@
 /**
  * GET /api/vnnox/images/[id]
  * 
- * Sirve la imagen SVG generada para un draft de display (sin autenticación).
- * VNNOX necesita una URL pública HTTPS para descargar las imágenes.
+ * Sirve la imagen PNG renderizada para un draft de display (sin autenticación).
+ * VNNOX necesita una URL pública HTTPS con imagen PNG/JPG para descargar.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { renderToSvg } from '@/lib/vnnox/creative-renderer';
+import { Resvg } from '@resvg/resvg-js';
 
 export async function GET(
     request: NextRequest,
@@ -28,9 +29,12 @@ export async function GET(
             return NextResponse.json({ error: 'Draft no encontrado' }, { status: 404 });
         }
 
+        const width = draft.screen.resolutionWidth || 128;
+        const height = draft.screen.resolutionHeight || 128;
+
         const svgContent = renderToSvg({
-            width: draft.screen.resolutionWidth || 128,
-            height: draft.screen.resolutionHeight || 128,
+            width,
+            height,
             templateId: draft.templateId || 'default',
             prices: {
                 diesel: draft.priceDiesel,
@@ -43,10 +47,18 @@ export async function GET(
             message: { text: draft.messageText },
         });
 
-        return new NextResponse(svgContent, {
+        // Renderizar SVG a PNG usando resvg
+        const resvg = new Resvg(svgContent, {
+            fitTo: { mode: 'width', value: width },
+        });
+        const pngData = resvg.render();
+        const pngBuffer = pngData.asPng();
+
+        return new NextResponse(pngBuffer, {
             status: 200,
             headers: {
-                'Content-Type': 'image/svg+xml',
+                'Content-Type': 'image/png',
+                'Content-Length': pngBuffer.length.toString(),
                 'Cache-Control': 'no-cache, no-store, must-revalidate',
                 'Pragma': 'no-cache',
                 'Expires': '0',
