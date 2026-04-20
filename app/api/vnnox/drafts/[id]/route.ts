@@ -357,22 +357,8 @@ async function handlePublish(draft: any, userId: number) {
     message: { text: draft.messageText },
   });
 
-  // Renderizar SVG a PNG usando sharp (incluido en Next.js, funciona en Vercel serverless)
-  const sharp = (await import('sharp')).default;
-  const pngBuffer = await sharp(Buffer.from(svgContent))
-    .resize(screen.resolutionWidth, screen.resolutionHeight)
-    .png()
-    .toBuffer();
-
-  // Calcular MD5 y tamaño del PNG para VNNOX
-  const crypto = await import('crypto');
-  const pngMd5 = crypto.createHash('md5').update(pngBuffer).digest('hex');
-  const pngSize = pngBuffer.length;
-  console.log(`[VNNOX] PNG generated: ${pngSize} bytes, md5: ${pngMd5}`);
-
   // URL pública HTTPS — VNNOX descargará la imagen PNG desde este endpoint
   // IMPORTANTE: NO usar VERCEL_URL porque devuelve la URL de preview del deploy (temporal).
-  // VNNOX necesita una URL pública estable que siempre resuelva al mismo sitio.
   const baseUrl = process.env.VNNOX_PUBLIC_URL
     || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
     || process.env.NEXTAUTH_URL
@@ -380,6 +366,24 @@ async function handlePublish(draft: any, userId: number) {
   const cacheBuster = Date.now();
   const publicImageUrl = `${baseUrl}/api/vnnox/images/${draft.id}?v=${cacheBuster}`;
   console.log('[VNNOX] Image URL for player:', publicImageUrl);
+
+  // Descargar la imagen PNG generada por nuestro propio endpoint para obtener MD5 y tamaño reales
+  let pngMd5 = '';
+  let pngSize = 0;
+  try {
+    const imgRes = await fetch(publicImageUrl);
+    if (imgRes.ok) {
+      const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+      const crypto = await import('crypto');
+      pngMd5 = crypto.createHash('md5').update(imgBuffer).digest('hex');
+      pngSize = imgBuffer.length;
+      console.log(`[VNNOX] PNG fetched: ${pngSize} bytes, md5: ${pngMd5}`);
+    } else {
+      console.warn(`[VNNOX] Could not fetch PNG for MD5 calc: ${imgRes.status}`);
+    }
+  } catch (e) {
+    console.warn('[VNNOX] Could not fetch PNG for MD5 calc:', e);
+  }
 
   // MVP 1: solo imágenes, sin capas de vídeo
   const layers = [{
