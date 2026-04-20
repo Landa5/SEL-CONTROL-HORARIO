@@ -357,12 +357,12 @@ async function handlePublish(draft: any, userId: number) {
     message: { text: draft.messageText },
   });
 
-  // Renderizar SVG a PNG (VNNOX requiere imagen rasterizada, no SVG)
-  const { Resvg } = await import('@resvg/resvg-js');
-  const resvg = new Resvg(svgContent, {
-    fitTo: { mode: 'width', value: screen.resolutionWidth },
-  });
-  const pngBuffer = resvg.render().asPng();
+  // Renderizar SVG a PNG usando sharp (incluido en Next.js, funciona en Vercel serverless)
+  const sharp = (await import('sharp')).default;
+  const pngBuffer = await sharp(Buffer.from(svgContent))
+    .resize(screen.resolutionWidth, screen.resolutionHeight)
+    .png()
+    .toBuffer();
 
   // Calcular MD5 y tamaño del PNG para VNNOX
   const crypto = await import('crypto');

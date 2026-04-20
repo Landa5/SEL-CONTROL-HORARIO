@@ -2,12 +2,13 @@
  * GET /api/vnnox/images/[id]
  * 
  * Sirve la imagen PNG renderizada para un draft de display (sin autenticación).
- * VNNOX necesita una URL pública HTTPS con imagen PNG/JPG para descargar.
+ * VNNOX necesita una URL pública HTTPS con imagen PNG para descargar.
+ * Usa sharp (incluido en Next.js) para convertir SVG → PNG.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { renderToSvg } from '@/lib/vnnox/creative-renderer';
-import { Resvg } from '@resvg/resvg-js';
+import sharp from 'sharp';
 
 export async function GET(
     request: NextRequest,
@@ -47,12 +48,13 @@ export async function GET(
             message: { text: draft.messageText },
         });
 
-        // Renderizar SVG a PNG usando resvg
-        const resvg = new Resvg(svgContent, {
-            fitTo: { mode: 'width', value: width },
-        });
-        const pngData = resvg.render();
-        const pngBuffer = pngData.asPng();
+        // Convertir SVG a PNG usando sharp (incluido en Next.js, funciona en Vercel)
+        const pngBuffer = await sharp(Buffer.from(svgContent))
+            .resize(width, height)
+            .png()
+            .toBuffer();
+
+        console.log(`[VNNOX IMG] Draft ${draftId}: SVG→PNG ${pngBuffer.length} bytes`);
 
         return new NextResponse(pngBuffer, {
             status: 200,
@@ -67,6 +69,6 @@ export async function GET(
         });
     } catch (error) {
         console.error('GET /api/vnnox/images/[id] error:', error);
-        return NextResponse.json({ error: 'Error generando imagen' }, { status: 500 });
+        return NextResponse.json({ error: 'Error generando imagen: ' + (error as Error).message }, { status: 500 });
     }
 }
