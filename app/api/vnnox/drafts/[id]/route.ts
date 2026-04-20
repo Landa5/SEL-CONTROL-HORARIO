@@ -364,12 +364,15 @@ async function handlePublish(draft: any, userId: number) {
   const svgSize = svgBuffer.length;
 
   // URL pública HTTPS — VNNOX descargará la imagen desde este endpoint
-  // Añadimos timestamp para forzar que VNNOX descargue siempre la versión más reciente
-  const baseUrl = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : (process.env.NEXTAUTH_URL || 'http://localhost:3000');
+  // IMPORTANTE: NO usar VERCEL_URL porque devuelve la URL de preview del deploy (temporal).
+  // VNNOX necesita una URL pública estable que siempre resuelva al mismo sitio.
+  const baseUrl = process.env.VNNOX_PUBLIC_URL
+    || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null)
+    || process.env.NEXTAUTH_URL
+    || 'http://localhost:3000';
   const cacheBuster = Date.now();
   const publicImageUrl = `${baseUrl}/api/vnnox/images/${draft.id}?v=${cacheBuster}`;
+  console.log('[VNNOX] Image URL for player:', publicImageUrl);
 
   // MVP 1: solo imágenes, sin capas de vídeo
   const layers = [{
