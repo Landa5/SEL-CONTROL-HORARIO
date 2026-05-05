@@ -262,7 +262,7 @@ export default function FichaTecnica({ camionId, onClose }: FichaTecnicaProps) {
                                                     <div className="space-y-1">
                                                         <div className="flex items-center gap-3">
                                                             <span className="text-sm font-black text-gray-900">{t.titulo}</span>
-                                                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${t.estado === 'CERRADA' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${['COMPLETADA', 'CANCELADA'].includes(t.estado) ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                                                 {t.estado}
                                                             </span>
                                                         </div>

@@ -90,9 +90,11 @@ export default function OficinaDashboard() {
 
     const fetchTareas = async () => {
         try {
-            const res = await fetch('/api/tareas?estado=ABIERTA');
+            const res = await fetch('/api/tareas');
             if (res.ok) {
-                setTareas(await res.json());
+                const data = await res.json();
+                // Filtrar solo tareas activas (no completadas ni canceladas)
+                setTareas(data.filter((t: any) => !['COMPLETADA', 'CANCELADA'].includes(t.estado)));
             }
         } catch (e) { console.error(e); }
     };
@@ -161,7 +163,7 @@ export default function OficinaDashboard() {
         { id: 'historial-personal', label: 'Mi Historial', icon: FileText },
         { id: 'conductores', label: 'Días Conductores', icon: Users },
         { id: 'camiones', label: 'Gestionar Camiones', icon: Truck },
-        { id: 'taller', label: 'Averías / Taller', icon: AlertCircle, badgeCount: tareas.filter(t => t.estado === 'ABIERTA').length },
+        { id: 'taller', label: 'Averías / Taller', icon: AlertCircle, badgeCount: tareas.length },
         { id: 'formacion', label: 'Formación', icon: BookOpen },
         { id: 'tacografo', label: 'Tacógrafo Digital', icon: Disc3 }
     ];

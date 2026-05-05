@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   /* config options here */
   reactCompiler: false,
   serverExternalPackages: ['pdf-parse'],
+  turbopack: {},
 };
 
 import withPWAInit from "@ducanh2912/next-pwa";

@@ -39,12 +39,46 @@ export default function MisTareasPage() {
         }
     };
 
-    const filtradas = tareas.filter(t => filtroEstado === 'TODAS' || t.estado === filtroEstado);
+    // Agrupar estados para filtro simplificado
+    const getEstadoGrupo = (estado: string) => {
+        if (['BACKLOG', 'PENDIENTE'].includes(estado)) return 'ABIERTAS';
+        if (['EN_CURSO', 'BLOQUEADA', 'REVISION'].includes(estado)) return 'EN_PROCESO';
+        if (['COMPLETADA', 'CANCELADA'].includes(estado)) return 'CERRADAS';
+        return 'ABIERTAS';
+    };
+
+    const filtradas = tareas.filter(t => {
+        if (filtroEstado === 'TODAS') return true;
+        return getEstadoGrupo(t.estado) === filtroEstado;
+    });
 
     const getPriorityColor = (p: string) => {
         if (p === 'ALTA') return 'text-red-600 bg-red-50';
         if (p === 'MEDIA') return 'text-orange-600 bg-orange-50';
         return 'text-green-600 bg-green-50';
+    };
+
+    const getEstadoColor = (estado: string) => {
+        if (['BACKLOG', 'PENDIENTE'].includes(estado)) return 'text-yellow-600';
+        if (estado === 'EN_CURSO') return 'text-blue-600';
+        if (estado === 'BLOQUEADA') return 'text-red-600';
+        if (estado === 'REVISION') return 'text-purple-600';
+        if (estado === 'COMPLETADA') return 'text-green-600';
+        if (estado === 'CANCELADA') return 'text-gray-500';
+        return 'text-gray-600';
+    };
+
+    const getEstadoLabel = (estado: string) => {
+        const labels: Record<string, string> = {
+            BACKLOG: 'En Cola',
+            PENDIENTE: 'Pendiente',
+            EN_CURSO: 'En Curso',
+            BLOQUEADA: 'Bloqueada',
+            REVISION: 'En Revisión',
+            COMPLETADA: 'Completada',
+            CANCELADA: 'Cancelada',
+        };
+        return labels[estado] || estado;
     };
 
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando tus tickets...</div>;
@@ -69,13 +103,18 @@ export default function MisTareasPage() {
                 </header>
 
                 <div className="flex bg-white p-1 rounded-lg border shadow-sm w-fit">
-                    {['TODAS', 'ABIERTA', 'EN_CURSO', 'CERRADA'].map(e => (
+                    {[
+                        { key: 'TODAS', label: 'Todos' },
+                        { key: 'ABIERTAS', label: 'Abiertas' },
+                        { key: 'EN_PROCESO', label: 'En Proceso' },
+                        { key: 'CERRADAS', label: 'Cerradas' },
+                    ].map(e => (
                         <button
-                            key={e}
-                            onClick={() => setFiltroEstado(e)}
-                            className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${filtroEstado === e ? 'bg-blue-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
+                            key={e.key}
+                            onClick={() => setFiltroEstado(e.key)}
+                            className={`px-4 py-2 text-xs font-bold rounded-md transition-all ${filtroEstado === e.key ? 'bg-blue-900 text-white' : 'text-gray-500 hover:bg-gray-50'}`}
                         >
-                            {e === 'TODAS' ? 'Todos' : e.replace('_', ' ')}
+                            {e.label}
                         </button>
                     ))}
                 </div>
@@ -103,8 +142,8 @@ export default function MisTareasPage() {
                                 <div className="flex items-center justify-between w-full md:w-auto gap-8 border-t md:border-t-0 pt-4 md:pt-0">
                                     <div className="text-left md:text-right">
                                         <p className="text-[10px] text-gray-400 font-bold uppercase">Estado</p>
-                                        <p className={`text-sm font-bold ${t.estado === 'ABIERTA' ? 'text-yellow-600' : t.estado === 'EN_CURSO' ? 'text-blue-600' : 'text-green-600'}`}>
-                                            {t.estado}
+                                        <p className={`text-sm font-bold ${getEstadoColor(t.estado)}`}>
+                                            {getEstadoLabel(t.estado)}
                                         </p>
                                     </div>
                                     <ArrowRight className="text-gray-300 w-5 h-5" />

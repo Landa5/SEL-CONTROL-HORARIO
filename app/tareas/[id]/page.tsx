@@ -43,7 +43,7 @@ export default function DetalleTareaPage() {
     };
 
     const handleUpdateStatus = async (estado: string) => {
-        if (estado === 'CERRADA' && !resumenCierre && !task.resumenCierre) {
+        if (estado === 'COMPLETADA' && !resumenCierre && !task.resumenCierre) {
             alert("Es obligatorio rellenar el resumen de cierre.");
             return;
         }
@@ -54,7 +54,7 @@ export default function DetalleTareaPage() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     estado,
-                    resumenCierre: estado === 'CERRADA' ? resumenCierre : undefined
+                    resumenCierre: estado === 'COMPLETADA' ? resumenCierre : undefined
                 })
             });
 
@@ -70,6 +70,10 @@ export default function DetalleTareaPage() {
     if (loading) return <div className="p-8 text-center text-gray-500">Cargando incidencia...</div>;
     if (error) return <div className="p-8 text-center text-red-500 font-bold">{error}</div>;
     if (!task) return null;
+
+    const isActive = !['COMPLETADA', 'CANCELADA'].includes(task.estado);
+    const canStartProgress = ['BACKLOG', 'PENDIENTE'].includes(task.estado);
+    const canResolve = ['BACKLOG', 'PENDIENTE', 'EN_CURSO', 'BLOQUEADA', 'REVISION'].includes(task.estado);
 
     return (
         <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
@@ -98,15 +102,15 @@ export default function DetalleTareaPage() {
                     </div>
                 </div>
 
-                {/* ACTION BUTTONS (Only for Admin/Mechanic if Open) */}
-                {task.estado !== 'CERRADA' && task.estado !== 'CANCELADA' && (
+                {/* ACTION BUTTONS */}
+                {isActive && (
                     <div className="flex items-center gap-2">
-                        {task.estado === 'ABIERTA' && (
+                        {canStartProgress && (
                             <Button onClick={() => handleUpdateStatus('EN_CURSO')} className="bg-blue-600 hover:bg-blue-700 shadow-blue-200 shadow-lg text-white font-bold">
                                 <Clock className="w-4 h-4 mr-2" /> MARCAR EN CURSO
                             </Button>
                         )}
-                        {(task.estado === 'ABIERTA' || task.estado === 'EN_CURSO') && (
+                        {canResolve && (
                             <Button onClick={() => setShowCloseForm(!showCloseForm)} className="bg-green-600 hover:bg-green-700 shadow-green-200 shadow-lg text-white font-bold">
                                 <CheckCircle className="w-4 h-4 mr-2" /> RESOLVER INCIDENCIA
                             </Button>
@@ -130,7 +134,7 @@ export default function DetalleTareaPage() {
                     ></textarea>
                     <div className="flex gap-2 mt-4 justify-end">
                         <Button variant="ghost" onClick={() => setShowCloseForm(false)}>Cancelar</Button>
-                        <Button onClick={() => handleUpdateStatus('CERRADA')} className="bg-green-600 text-white font-bold">
+                        <Button onClick={() => handleUpdateStatus('COMPLETADA')} className="bg-green-600 text-white font-bold">
                             CONFIRMAR CIERRE
                         </Button>
                     </div>
@@ -213,7 +217,7 @@ export default function DetalleTareaPage() {
                     </div>
 
                     {/* CLOSURE SUMMARY (IF CLOSED) */}
-                    {task.estado === 'CERRADA' && task.resumenCierre && (
+                    {task.estado === 'COMPLETADA' && task.resumenCierre && (
                         <div className="bg-green-50 p-6 rounded-xl border border-green-100">
                             <h2 className="text-lg font-bold text-green-900 mb-2 flex items-center gap-2">
                                 <CheckCircle className="w-5 h-5" /> Resolución

@@ -212,7 +212,7 @@ export default function EmpleadoDashboard() {
             const allTasks = await res.json();
             // Filter for active tasks relevant to the employee
             const activeTasks = allTasks.filter((t: any) =>
-                ['PENDIENTE', 'EN_CURSO', 'REVISION'].includes(t.estado)
+                ['BACKLOG', 'PENDIENTE', 'EN_CURSO', 'BLOQUEADA', 'REVISION'].includes(t.estado)
             );
             setTareas(activeTasks);
         }

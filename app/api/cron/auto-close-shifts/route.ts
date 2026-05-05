@@ -26,6 +26,12 @@ function getSpanish2330(fecha: Date): Date {
 
 export async function GET(request: Request) {
     try {
+        // Protección: solo permitir con CRON_SECRET
+        const authHeader = request.headers.get('authorization');
+        if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
         const now = new Date();
 
         // Find all open shifts (include ALL truck usages, not just open ones)

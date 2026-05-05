@@ -1,10 +1,19 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Loader2, Clock, AlertTriangle, CheckCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { Loader2, Clock, AlertTriangle, CheckCircle, Calendar as CalendarIcon, Save, Edit3, Palmtree, TrendingUp } from 'lucide-react';
+
+interface NominaLinea {
+    codigo: string;
+    nombre: string;
+    cantidad: number;
+    rate: number;
+    importe: number;
+    notas?: string;
+}
 
 interface MonthlyEmployeeViewProps {
     employeeId: number;
@@ -16,10 +25,64 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
     const [reportData, setReportData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
+    // --- Payroll editable state ---
+    const [nominaLineas, setNominaLineas] = useState<NominaLinea[]>([]);
+    const [nominaStatus, setNominaStatus] = useState<string>('NUEVO');
+    const [saving, setSaving] = useState(false);
+    const [saveMsg, setSaveMsg] = useState<string | null>(null);
+    const [nominaLoaded, setNominaLoaded] = useState(false);
+
+    // Initialize payroll lines from report data
+    const initNominaFromReport = useCallback((data: any) => {
+        const lines: NominaLinea[] = [];
+        const s = data.summary;
+        const shifts = data.shifts || [];
+
+        // Calculate totals from shifts
+        let totalKm = 0, totalDescargas = 0, totalViajes = 0;
+        shifts.forEach((sh: any) => {
+            totalKm += (sh.km || 0);
+            totalDescargas += (sh.descargas || 0);
+            totalViajes += (sh.viajes || 0);
+        });
+
+        // KM line
+        const kmRate = data.incentives?.find((i: any) => i.codigo === 'PRECIO_KM')?.precio || 0;
+        lines.push({ codigo: 'PRECIO_KM', nombre: 'Kilometraje', cantidad: totalKm, rate: kmRate, importe: totalKm * kmRate });
+
+        // Descargas line
+        const descRate = data.incentives?.find((i: any) => i.codigo === 'PRECIO_DESCARGA')?.precio || 0;
+        lines.push({ codigo: 'DESCARGAS', nombre: 'Descargas', cantidad: totalDescargas, rate: descRate, importe: totalDescargas * descRate });
+
+        // Horas Extra
+        const horasExtra = s.totalOvertime || 0;
+        const heRate = data.incentives?.find((i: any) => i.codigo === 'HORAS_EXTRA')?.precio || 0;
+        lines.push({ codigo: 'HORAS_EXTRA', nombre: 'Horas Extra', cantidad: parseFloat(horasExtra.toFixed(2)), rate: heRate, importe: parseFloat((horasExtra * heRate).toFixed(2)) });
+
+        // Vacaciones
+        const vacDays = shifts.filter((sh: any) => sh.dayType === 'VACACIONES').length;
+        lines.push({ codigo: 'VACACIONES', nombre: 'Vacaciones', cantidad: vacDays, rate: 0, importe: 0, notas: `${vacDays} días` });
+
+        // Horas Trabajadas (reference)
+        lines.push({ codigo: 'HORAS_TRABAJADAS', nombre: 'Horas Trabajadas', cantidad: parseFloat((s.totalHours || 0).toFixed(2)), rate: 0, importe: 0, notas: `de ${(s.expectedHours || 0).toFixed(1)}h esperadas` });
+
+        // Add existing incentives that are not already covered
+        const coveredCodes = ['PRECIO_KM', 'DESCARGAS', 'HORAS_EXTRA', 'VACACIONES', 'HORAS_TRABAJADAS'];
+        (data.incentives || []).forEach((inc: any) => {
+            if (!coveredCodes.includes(inc.codigo)) {
+                lines.push({ codigo: inc.codigo, nombre: inc.nombre, cantidad: inc.cantidad, rate: inc.precio, importe: inc.total });
+            }
+        });
+
+        return lines;
+    }, []);
+
+    // Load report
     useEffect(() => {
         if (!employeeId) return;
         const fetchData = async () => {
             setLoading(true);
+            setNominaLoaded(false);
             try {
                 const res = await fetch(`/api/admin/informes/mensuales/empleado?employeeId=${employeeId}&year=${year}&month=${month}`);
                 if (res.ok) {
@@ -31,6 +94,82 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
         };
         fetchData();
     }, [employeeId, year, month]);
+
+    // Load saved payroll or init from report
+    useEffect(() => {
+        if (!reportData || nominaLoaded) return;
+        const loadNomina = async () => {
+            try {
+                const res = await fetch(`/api/admin/informes/mensuales/empleado/nomina?empleadoId=${employeeId}&year=${year}&month=${month}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.nomina && data.nomina.lineas && data.nomina.lineas.length > 0) {
+                        setNominaStatus(data.nomina.estado);
+                        setNominaLineas(data.nomina.lineas.map((l: any) => ({
+                            codigo: l.conceptoCodigo,
+                            nombre: l.conceptoNombre,
+                            cantidad: l.cantidad,
+                            rate: l.rate,
+                            importe: l.importe,
+                            notas: l.notas
+                        })));
+                        setNominaLoaded(true);
+                        return;
+                    }
+                }
+            } catch (e) { console.error(e); }
+            // No saved data, init from report
+            setNominaLineas(initNominaFromReport(reportData));
+            setNominaStatus('NUEVO');
+            setNominaLoaded(true);
+        };
+        loadNomina();
+    }, [reportData, employeeId, year, month, nominaLoaded, initNominaFromReport]);
+
+    // Update a line field
+    const updateLinea = (idx: number, field: 'cantidad' | 'rate' | 'importe' | 'notas', value: string) => {
+        setNominaLineas(prev => {
+            const updated = [...prev];
+            const line = { ...updated[idx] };
+            if (field === 'notas') {
+                line.notas = value;
+            } else {
+                const num = parseFloat(value) || 0;
+                line[field] = num;
+                if (field === 'cantidad' || field === 'rate') {
+                    line.importe = parseFloat((line.cantidad * line.rate).toFixed(2));
+                }
+            }
+            updated[idx] = line;
+            return updated;
+        });
+        setSaveMsg(null);
+    };
+
+    // Save payroll
+    const saveNomina = async () => {
+        setSaving(true);
+        setSaveMsg(null);
+        try {
+            const res = await fetch('/api/admin/informes/mensuales/empleado/nomina', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ empleadoId: employeeId, year, month, lineas: nominaLineas })
+            });
+            if (res.ok) {
+                setSaveMsg('✓ Nómina guardada correctamente');
+                setNominaStatus('BORRADOR');
+            } else {
+                const err = await res.json();
+                setSaveMsg(`✗ Error: ${err.error}`);
+            }
+        } catch (e) {
+            setSaveMsg('✗ Error de conexión');
+        }
+        setSaving(false);
+    };
+
+    const nominaTotal = nominaLineas.reduce((sum, l) => sum + l.importe, 0);
 
     if (loading) return <div className="p-8 text-center flex justify-center items-center"><Loader2 className="animate-spin inline mr-2" /> Cargando informe...</div>;
     if (!reportData) return <div className="p-8 text-center text-gray-500">Sin datos disponibles</div>;
@@ -132,6 +271,122 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                         <p className="text-xs text-purple-500 mt-1">Estimación bruta</p>
                     </CardContent>
                 </Card>
+            </div>
+
+            {/* ═══════════════════════════════════════════════ */}
+            {/* RESUMEN NÓMINA EDITABLE                        */}
+            {/* ═══════════════════════════════════════════════ */}
+            <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+                <div className="bg-gradient-to-r from-emerald-600 to-teal-600 px-6 py-4 flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                        <div className="bg-white/20 p-2 rounded-lg">
+                            <TrendingUp className="w-5 h-5 text-white" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-black text-white uppercase tracking-tight">Resumen Nómina</h3>
+                            <p className="text-emerald-100 text-xs">Datos editables para generación de nómina · {nominaStatus === 'NUEVO' ? 'Sin guardar' : `Estado: ${nominaStatus}`}</p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={saveNomina}
+                        disabled={saving || nominaStatus === 'CERRADA'}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-white text-emerald-700 rounded-lg font-bold text-sm hover:bg-emerald-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+                    >
+                        {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {saving ? 'Guardando...' : 'Guardar Nómina'}
+                    </button>
+                </div>
+
+                {saveMsg && (
+                    <div className={`px-6 py-2 text-sm font-bold ${saveMsg.startsWith('✓') ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                        {saveMsg}
+                    </div>
+                )}
+
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                        <thead className="bg-gray-50 uppercase text-xs font-bold text-gray-500 border-b">
+                            <tr>
+                                <th className="px-6 py-3">Concepto</th>
+                                <th className="px-4 py-3 text-center">Cantidad</th>
+                                <th className="px-4 py-3 text-center">Precio Unit. (€)</th>
+                                <th className="px-4 py-3 text-right">Total (€)</th>
+                                <th className="px-4 py-3 text-center">Notas</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {nominaLineas.map((linea, idx) => {
+                                const isEditable = nominaStatus !== 'CERRADA';
+                                const isHighlight = ['PRECIO_KM', 'DESCARGAS', 'HORAS_EXTRA'].includes(linea.codigo);
+                                const isVacation = linea.codigo === 'VACACIONES';
+                                const isHours = linea.codigo === 'HORAS_TRABAJADAS';
+                                let rowBg = 'hover:bg-gray-50';
+                                if (isHighlight) rowBg = 'bg-emerald-50/50 hover:bg-emerald-50';
+                                if (isVacation) rowBg = 'bg-amber-50/50 hover:bg-amber-50';
+                                if (isHours) rowBg = 'bg-blue-50/50 hover:bg-blue-50';
+
+                                return (
+                                    <tr key={linea.codigo + idx} className={`transition-colors ${rowBg}`}>
+                                        <td className="px-6 py-3">
+                                            <div className="flex items-center gap-2">
+                                                {isVacation && <Palmtree className="w-4 h-4 text-amber-500" />}
+                                                {isHours && <Clock className="w-4 h-4 text-blue-500" />}
+                                                {isHighlight && <Edit3 className="w-3 h-3 text-emerald-400" />}
+                                                <span className="font-bold text-gray-800">{linea.nombre}</span>
+                                            </div>
+                                            <span className="text-[10px] text-gray-400 font-mono">{linea.codigo}</span>
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={linea.cantidad}
+                                                onChange={e => updateLinea(idx, 'cantidad', e.target.value)}
+                                                disabled={!isEditable}
+                                                className="w-24 text-center font-mono font-bold text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none disabled:bg-gray-100 disabled:text-gray-400 transition-all"
+                                            />
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={linea.rate}
+                                                onChange={e => updateLinea(idx, 'rate', e.target.value)}
+                                                disabled={!isEditable}
+                                                className="w-24 text-center font-mono font-bold text-gray-700 border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none disabled:bg-gray-100 disabled:text-gray-400 transition-all"
+                                            />
+                                        </td>
+                                        <td className="px-4 py-3 text-right">
+                                            <input
+                                                type="number"
+                                                step="any"
+                                                value={linea.importe}
+                                                onChange={e => updateLinea(idx, 'importe', e.target.value)}
+                                                disabled={!isEditable}
+                                                className="w-28 text-right font-mono font-black text-gray-900 border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 outline-none disabled:bg-gray-100 disabled:text-gray-400 transition-all"
+                                            />
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <input
+                                                type="text"
+                                                value={linea.notas || ''}
+                                                onChange={e => updateLinea(idx, 'notas', e.target.value)}
+                                                disabled={!isEditable}
+                                                placeholder="—"
+                                                className="w-full max-w-[160px] text-center text-xs text-gray-500 border border-gray-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-400 outline-none disabled:bg-gray-100 transition-all"
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            <tr className="bg-gradient-to-r from-emerald-50 to-teal-50 border-t-2 border-emerald-200">
+                                <td colSpan={3} className="px-6 py-4 text-right font-black text-emerald-800 uppercase text-sm">Total Nómina Variable</td>
+                                <td className="px-4 py-4 text-right font-black text-2xl text-emerald-700">{nominaTotal.toFixed(2)} €</td>
+                                <td></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
             {/* INCENTIVES TABLE DETAIL */}

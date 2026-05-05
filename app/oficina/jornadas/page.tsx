@@ -45,7 +45,7 @@ function OficinaJornadasContent() {
     const fetchStats = async () => {
         try {
             const [tRes, jRes] = await Promise.all([
-                fetch('/api/tareas?estado=ABIERTA'),
+                fetch('/api/tareas'),
                 fetch(`/api/jornadas?date=${new Date().toISOString()}`)
             ]);
             if (tRes.ok) setNumTareas((await tRes.json()).length);

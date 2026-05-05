@@ -20,7 +20,7 @@ export async function GET() {
             where: { activo: true },
             include: {
                 _count: {
-                    select: { tareas: { where: { estado: 'ABIERTA' } } }
+                    select: { tareas: { where: { estado: { notIn: ['COMPLETADA', 'CANCELADA'] } } } }
                 },
                 mantenimientos: {
                     take: 5,

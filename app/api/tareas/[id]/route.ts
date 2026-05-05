@@ -8,6 +8,7 @@ import {
     checkPermission,
     createNotificacion,
     notifyParticipantes,
+    buildVisibilityFilter,
 } from '@/lib/tareas-engine';
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,8 +17,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
     try {
-        const tarea = await prisma.tarea.findUnique({
-            where: { id: Number(id) },
+        // v3.1: Aplicar filtro de visibilidad también en consultas individuales
+        const visibilityFilter = buildVisibilityFilter(
+            { id: Number(session.id), rol: session.rol as string }
+        );
+
+        const tarea = await prisma.tarea.findFirst({
+            where: {
+                id: Number(id),
+                ...visibilityFilter,
+            },
             include: {
                 creadoPor: { select: { id: true, nombre: true, rol: true } },
                 asignadoA: { select: { id: true, nombre: true, rol: true } },

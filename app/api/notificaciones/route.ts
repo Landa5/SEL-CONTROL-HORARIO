@@ -1,38 +1,26 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
-import jwt from 'jsonwebtoken';
-
-async function getUserFromToken(): Promise<{ id: number; rol: string } | null> {
-    try {
-        const cookieStore = await cookies();
-        const token = cookieStore.get('token')?.value;
-        if (!token) return null;
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
-        return { id: decoded.empleadoId || decoded.id, rol: decoded.rol };
-    } catch {
-        return null;
-    }
-}
+import { getSession } from '@/lib/auth';
 
 // GET — Fetch notifications for the current user
 export async function GET(request: NextRequest) {
     try {
-        const user = await getUserFromToken();
-        if (!user) {
+        const session = await getSession();
+        if (!session) {
             return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
         }
 
+        const userId = Number(session.id);
         const { searchParams } = new URL(request.url);
         const unreadOnly = searchParams.get('unread') === 'true';
         const limit = parseInt(searchParams.get('limit') || '20');
 
-        const where: any = { usuarioId: user.id };
+        const where: any = { usuarioId: userId };
         if (unreadOnly) {
             where.readAt = null;
         }
 
-        const [notifications, unreadCount] = await Promise.all([
+        const [notificaciones, noLeidas] = await Promise.all([
             prisma.notificacion.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
@@ -44,11 +32,18 @@ export async function GET(request: NextRequest) {
                 }
             }),
             prisma.notificacion.count({
-                where: { usuarioId: user.id, readAt: null }
+                where: { usuarioId: userId, readAt: null }
             })
         ]);
 
-        return NextResponse.json({ notifications, unreadCount });
+        // Devolver con ambos formatos para compatibilidad con los dos NotificationBell
+        return NextResponse.json({
+            notificaciones,
+            noLeidas,
+            // Aliases para componente admin que usa nombres en inglés
+            notifications: notificaciones,
+            unreadCount: noLeidas,
+        });
     } catch (error) {
         console.error('GET /api/notificaciones error:', error);
         return NextResponse.json({ error: 'Error interno' }, { status: 500 });
@@ -58,22 +53,24 @@ export async function GET(request: NextRequest) {
 // PATCH — Mark notifications as read
 export async function PATCH(request: NextRequest) {
     try {
-        const user = await getUserFromToken();
-        if (!user) {
+        const session = await getSession();
+        if (!session) {
             return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
         }
 
+        const userId = Number(session.id);
         const body = await request.json();
-        const { ids, markAll } = body;
+        // Aceptar ambos nombres: markAll (admin) y marcarTodas (tareas)
+        const { ids, markAll, marcarTodas } = body;
 
-        if (markAll) {
+        if (markAll || marcarTodas) {
             await prisma.notificacion.updateMany({
-                where: { usuarioId: user.id, readAt: null },
+                where: { usuarioId: userId, readAt: null },
                 data: { readAt: new Date(), leida: true }
             });
         } else if (ids && Array.isArray(ids)) {
             await prisma.notificacion.updateMany({
-                where: { id: { in: ids }, usuarioId: user.id },
+                where: { id: { in: ids }, usuarioId: userId },
                 data: { readAt: new Date(), leida: true }
             });
         }
@@ -84,3 +81,4 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'Error interno' }, { status: 500 });
     }
 }
+
