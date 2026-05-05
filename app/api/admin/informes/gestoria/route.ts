@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { endOfMonth } from 'date-fns';
+import { endOfMonth, isSameDay, isWeekend, eachDayOfInterval, differenceInMinutes } from 'date-fns';
 
 export async function GET(request: Request) {
     try {
@@ -25,19 +25,12 @@ export async function GET(request: Request) {
         const getTarifa = (code: string, empId: number, role: string) => {
             const concepto = conceptos.find(c => c.codigo === code);
             if (!concepto) return 0;
-
-            // 1. Employee Specific
             const empTarifa = concepto.tarifas.find(t => t.empleadoId === empId);
             if (empTarifa) return empTarifa.valor;
-
-            // 2. Role Specific
             const roleTarifa = concepto.tarifas.find(t => t.rol === role && !t.empleadoId);
             if (roleTarifa) return roleTarifa.valor;
-
-            // 3. Global
             const globalTarifa = concepto.tarifas.find(t => !t.rol && !t.empleadoId);
             if (globalTarifa) return globalTarifa.valor;
-
             return 0;
         };
 
@@ -53,9 +46,24 @@ export async function GET(request: Request) {
                 fecha: { gte: startDate, lte: endDate }
             },
             include: {
-                usosCamion: { select: { kmRecorridos: true, litrosRepostados: true } },
+                usosCamion: { select: { kmRecorridos: true, litrosRepostados: true, descargasCount: true, viajesCount: true } },
             }
         });
+
+        // Fetch Holidays
+        const allHolidays = await prisma.fiestaLocal.findMany({
+            where: { activa: true }
+        });
+
+        const isHolidayDay = (day: Date) => {
+            return allHolidays.some(h => {
+                const hDate = new Date(h.fecha);
+                if (h.esAnual) {
+                    return hDate.getDate() === day.getDate() && hDate.getMonth() === day.getMonth();
+                }
+                return isSameDay(hDate, day);
+            });
+        };
 
         // Fetch Absences (Bajas) > 3 days
         const ausencias = await prisma.ausencia.findMany({
@@ -64,9 +72,17 @@ export async function GET(request: Request) {
                     { fechaInicio: { lte: endDate }, fechaFin: { gte: startDate } }
                 ],
                 estado: 'APROBADA',
-                tipo: 'BAJA_MEDICA'
             }
         });
+
+        // Fetch saved NominaMes for all employees this month
+        const nominasSaved = await prisma.nominaMes.findMany({
+            where: { year, month },
+            include: { lineas: true }
+        });
+
+        // Helper to get saved nomina for an employee
+        const getSavedNomina = (empId: number) => nominasSaved.find(n => n.empleadoId === empId);
 
         // -----------------------------
         // PROCESSING DATA PER EMPLOYEE
@@ -75,48 +91,80 @@ export async function GET(request: Request) {
             const empJornadas = jornadas.filter(j => j.empleadoId === emp.id);
 
             let totalKm = 0;
+            let totalDescargas = 0;
+            let totalViajes = 0;
             let diasTrabajados = 0;
             let totalHoras = 0;
+            let horasExtrasFestivos = 0;
 
             empJornadas.forEach(jor => {
-                const km = jor.usosCamion.reduce((acc, uso) => acc + (uso.kmRecorridos || 0), 0);
-                totalKm += km;
+                jor.usosCamion.forEach(uso => {
+                    totalKm += (uso.kmRecorridos || 0);
+                    totalDescargas += (uso.descargasCount || 0);
+                    totalViajes += (uso.viajesCount || 0);
+                });
                 diasTrabajados++;
                 totalHoras += (jor.totalHoras || 0);
+
+                // Check if this day is a holiday or weekend (festivo worked)
+                const jorDate = new Date(jor.fecha);
+                if (isHolidayDay(jorDate) || isWeekend(jorDate)) {
+                    // Count hours worked on festivo
+                    if (jor.horaEntrada && jor.horaSalida) {
+                        const mins = differenceInMinutes(new Date(jor.horaSalida), new Date(jor.horaEntrada));
+                        horasExtrasFestivos += Math.max(0, mins / 60);
+                    } else {
+                        horasExtrasFestivos += (jor.totalHoras || 0);
+                    }
+                }
             });
 
-            // Financials
-            const dietasRate = getTarifa('DIETAS', emp.id, emp.rol);
-            const totalDietas = diasTrabajados * dietasRate;
+            // Check if there's a saved NominaMes with edited data
+            const savedNomina = getSavedNomina(emp.id);
+            let totalDietas = 0;
+            let totalProductividad = 0;
+            let totalIncentivos = 0;
 
-            const productividadFija = getTarifa('PRODUCTIVIDAD_FIJA', emp.id, emp.rol);
-            const totalProductividad = productividadFija; // Fixed monthly
-
-            const incentivosRate = getTarifa('INCENTIVOS', emp.id, emp.rol);
-            const totalIncentivos = incentivosRate; // Fixed monthly? Or per trip? Assuming fixed for now.
-
-            // EXTRA HOURS (ADMIN ONLY ON HOLIDAYS) - Simplified Logic
-            let horasExtrasFestivos = 0;
-            if (emp.rol === 'OFICINA' || emp.rol === 'ADMIN') {
-                // Here we would check against holidays.
+            if (savedNomina && savedNomina.lineas.length > 0) {
+                // Use saved nomina data (edited by admin)
+                savedNomina.lineas.forEach(linea => {
+                    if (linea.conceptoCodigo === 'DIETAS' || linea.conceptoCodigo === 'DIETA_NACION') {
+                        totalDietas += linea.importe;
+                    } else if (linea.conceptoCodigo === 'PRODUCTIVIDAD' || linea.conceptoCodigo === 'PRODUCTIVIDAD_FIJA') {
+                        totalProductividad += linea.importe;
+                    } else if (linea.conceptoCodigo === 'INCENTIVOS' || linea.conceptoCodigo === 'BONUS_SEGURIDAD' || linea.conceptoCodigo === 'BONUS_PUNTUALIDAD' || linea.conceptoCodigo === 'BONUS_CONSUMO') {
+                        totalIncentivos += linea.importe;
+                    }
+                });
+                // If nomina has KM data, use it
+                const kmLine = savedNomina.lineas.find(l => l.conceptoCodigo === 'PRECIO_KM');
+                if (kmLine) totalKm = kmLine.cantidad;
+                // If nomina has horas extra, use it
+                const heLine = savedNomina.lineas.find(l => l.conceptoCodigo === 'HORAS_EXTRA');
+                if (heLine && heLine.importe > 0) horasExtrasFestivos = heLine.cantidad;
+            } else {
+                // Fallback: Calculate from tariffs
+                const dietasRate = getTarifa('DIETAS', emp.id, emp.rol);
+                totalDietas = diasTrabajados * dietasRate;
+                totalProductividad = getTarifa('PRODUCTIVIDAD_FIJA', emp.id, emp.rol);
+                totalIncentivos = getTarifa('INCENTIVOS', emp.id, emp.rol);
             }
 
             // BAJAS > 3 DAYS
-            const baja = ausencias.find(a => a.empleadoId === emp.id);
+            const empAusencias = ausencias.filter(a => a.empleadoId === emp.id && (a.tipo === 'BAJA' || a.tipo === 'BAJA_MEDICA'));
             let diasBaja = 0;
             let esBajaLarga = false;
 
-            if (baja) {
+            empAusencias.forEach(baja => {
                 const totalDuration = Math.ceil((Math.abs((baja.fechaFin || endDate).getTime() - baja.fechaInicio.getTime())) / (1000 * 3600 * 24)) + 1;
-
                 if (totalDuration > 3) {
                     const start = baja.fechaInicio < startDate ? startDate : baja.fechaInicio;
                     const end = baja.fechaFin && baja.fechaFin < endDate ? baja.fechaFin : endDate;
                     const diffTime = Math.abs(end.getTime() - start.getTime());
-                    diasBaja = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                    diasBaja += Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
                     esBajaLarga = true;
                 }
-            }
+            });
 
             return {
                 id: emp.id,
@@ -125,14 +173,17 @@ export async function GET(request: Request) {
                 dni: emp.dni || '',
                 rol: emp.rol,
                 diasTrabajados,
-                horasPresencia: totalHoras, // New field
+                horasPresencia: totalHoras,
                 totalKm,
-                totalDietas, // New field
-                totalProductividad, // New field
-                totalIncentivos, // New field
-                horasExtrasFestivos: horasExtrasFestivos > 0 ? horasExtrasFestivos : '',
+                totalDescargas,
+                totalViajes,
+                totalDietas,
+                totalProductividad,
+                totalIncentivos,
+                horasExtrasFestivos: horasExtrasFestivos > 0 ? parseFloat(horasExtrasFestivos.toFixed(2)) : '',
                 diasBaja: esBajaLarga ? diasBaja : '',
-                bajaLarga: esBajaLarga ? 'SI' : ''
+                bajaLarga: esBajaLarga ? 'SI' : '',
+                tieneNominaGuardada: !!savedNomina
             };
         });
 
