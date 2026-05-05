@@ -106,13 +106,15 @@ export async function GET(request: Request) {
             // Check flags
             const isWeekendDay = isWeekend(day);
 
-            // Check Holiday
+            // Check Holiday (timezone-safe: compare formatted strings)
+            const dayStr = format(day, 'MM-dd');
             const isHoliday = allHolidays.some(h => {
                 const hDate = new Date(h.fecha);
+                const hStr = format(hDate, 'MM-dd');
                 if (h.esAnual) {
-                    return hDate.getDate() === day.getDate() && hDate.getMonth() === day.getMonth();
+                    return hStr === dayStr;
                 }
-                return isSameDay(hDate, day);
+                return format(hDate, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd');
             });
 
             // Check Absence

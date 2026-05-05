@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { endOfMonth, isSameDay, isWeekend, eachDayOfInterval, differenceInMinutes } from 'date-fns';
+import { endOfMonth, isSameDay, isWeekend, eachDayOfInterval, differenceInMinutes, format } from 'date-fns';
 
 export async function GET(request: Request) {
     try {
@@ -56,12 +56,14 @@ export async function GET(request: Request) {
         });
 
         const isHolidayDay = (day: Date) => {
+            const dayStr = format(day, 'MM-dd');
             return allHolidays.some(h => {
                 const hDate = new Date(h.fecha);
+                const hStr = format(hDate, 'MM-dd');
                 if (h.esAnual) {
-                    return hDate.getDate() === day.getDate() && hDate.getMonth() === day.getMonth();
+                    return hStr === dayStr;
                 }
-                return isSameDay(hDate, day);
+                return format(hDate, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd');
             });
         };
 
