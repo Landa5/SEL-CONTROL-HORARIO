@@ -341,41 +341,121 @@ export async function GET(request: Request) {
         // Merge: Specific overrides Global
         const tariffs = { ...globalTariffs, ...specificTariffs };
 
-        // 6. Calculate Incentives
-        // Variables
-        // Calculated below from UsosCamion
-
-        // Wait, 'jornadaLaboral' in schema has 'kmRecorridos'? NO.
-        // It has relations 'usosCamion'.
-        // Let's recalculate KM from UsosCamion
+        // 6. Calculate ALL totals from UsosCamion
         let verifiedKm = 0;
+        let verifiedDescargas = 0;
+        let verifiedViajes = 0;
         shifts.forEach(s => {
             if (s.usosCamion && s.usosCamion.length > 0) {
-                s.usosCamion.forEach((u: any) => verifiedKm += (u.kmRecorridos || 0));
+                s.usosCamion.forEach((u: any) => {
+                    verifiedKm += (u.kmRecorridos || 0);
+                    verifiedDescargas += (u.descargasCount || 0);
+                    verifiedViajes += (u.viajesCount || 0);
+                });
             }
         });
 
-        // Trips / Downloads logic? 
-        // We lack a direct "Viajes" field in JornadaLaboral but let's assume specific logic or placeholders.
-        // For now, we'll assume 0 if not tracked, or try to infer.
-        // 'Viajes' usually in 'RegistroViaje' but that table might not be linked here directly.
-        // Simplification: We will only calculate what we have data for: KM, Punctuality, etc.
+        // Count vacation and absence days from absences
+        let diasVacaciones = 0;
+        let diasAusencia = 0;
+        absences.forEach(a => {
+            const aStart = new Date(a.fechaInicio) < startDate ? startDate : new Date(a.fechaInicio);
+            const aEnd = new Date(a.fechaFin) > endDate ? endDate : new Date(a.fechaFin);
+            const diff = Math.ceil((aEnd.getTime() - aStart.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+            const days = Math.max(0, diff);
+            if (a.tipo === 'VACACIONES') {
+                diasVacaciones += days;
+            } else {
+                diasAusencia += days;
+            }
+        });
 
-        const incentives = [];
+        // Horas extra
+        const horasExtra = totalOvertimeMinutes / 60;
+
+        // 7. Build Incentives array (ALL concepts)
+        const incentives: any[] = [];
 
         // --- A. PRECIO_KM ---
-        if (tariffs['PRECIO_KM']) {
+        const pKm = tariffs['PRECIO_KM'] || 0;
+        incentives.push({
+            codigo: 'PRECIO_KM',
+            nombre: 'Kilometraje',
+            cantidad: verifiedKm,
+            precio: pKm,
+            total: verifiedKm * pKm,
+            tipo: 'VARIABLE'
+        });
+
+        // --- B. DESCARGAS ---
+        const pDescarga = tariffs['PRECIO_DESCARGA'] || 0;
+        incentives.push({
+            codigo: 'PRECIO_DESCARGA',
+            nombre: 'Descargas',
+            cantidad: verifiedDescargas,
+            precio: pDescarga,
+            total: verifiedDescargas * pDescarga,
+            tipo: 'VARIABLE'
+        });
+
+        // --- C. VIAJES ---
+        const pViaje = tariffs['PRECIO_VIAJE'] || 0;
+        incentives.push({
+            codigo: 'PRECIO_VIAJE',
+            nombre: 'Viajes',
+            cantidad: verifiedViajes,
+            precio: pViaje,
+            total: verifiedViajes * pViaje,
+            tipo: 'VARIABLE'
+        });
+
+        // --- D. HORAS EXTRA ---
+        const pHoraExtra = tariffs['HORAS_EXTRA'] || 0;
+        incentives.push({
+            codigo: 'HORAS_EXTRA',
+            nombre: 'Horas Extra',
+            cantidad: parseFloat(horasExtra.toFixed(2)),
+            precio: pHoraExtra,
+            total: parseFloat((horasExtra * pHoraExtra).toFixed(2)),
+            tipo: 'VARIABLE'
+        });
+
+        // --- E. VACACIONES ---
+        incentives.push({
+            codigo: 'VACACIONES',
+            nombre: 'Vacaciones',
+            cantidad: diasVacaciones,
+            precio: 0,
+            total: 0,
+            tipo: 'INFO',
+            meta: diasVacaciones > 0 ? `${diasVacaciones} día(s) de vacaciones` : 'Sin vacaciones'
+        });
+
+        // --- F. AUSENCIAS ---
+        if (diasAusencia > 0) {
             incentives.push({
-                codigo: 'PRECIO_KM',
-                nombre: 'Kilometraje',
-                cantidad: verifiedKm,
-                precio: tariffs['PRECIO_KM'],
-                total: verifiedKm * tariffs['PRECIO_KM'],
-                tipo: 'VARIABLE'
+                codigo: 'AUSENCIAS',
+                nombre: 'Ausencias / Bajas',
+                cantidad: diasAusencia,
+                precio: 0,
+                total: 0,
+                tipo: 'INFO',
+                meta: `${diasAusencia} día(s)`
             });
         }
 
-        // --- B. PLUS_ANTIGUEDAD ---
+        // --- G. HORAS TRABAJADAS (referencia) ---
+        incentives.push({
+            codigo: 'HORAS_TRABAJADAS',
+            nombre: 'Horas Trabajadas',
+            cantidad: parseFloat((totalWorkedMinutes / 60).toFixed(2)),
+            precio: 0,
+            total: 0,
+            tipo: 'INFO',
+            meta: `de ${(totalExpectedMinutes / 60).toFixed(1)}h esperadas`
+        });
+
+        // --- H. PLUS_ANTIGUEDAD ---
         if (tariffs['PLUS_ANTIGUEDAD']) {
             incentives.push({
                 codigo: 'PLUS_ANTIGUEDAD',
@@ -387,9 +467,7 @@ export async function GET(request: Request) {
             });
         }
 
-        // --- C. BONUS_SEGURIDAD ---
-        // Logic: active unless there is an "Incidencia" or "Accidente"? 
-        // We don't have that data fully linked yet. Assume 100% for estimation.
+        // --- I. BONUS_SEGURIDAD ---
         if (tariffs['BONUS_SEGURIDAD']) {
             incentives.push({
                 codigo: 'BONUS_SEGURIDAD',
@@ -401,22 +479,20 @@ export async function GET(request: Request) {
             });
         }
 
-        // --- D. PLUS_DISPONIBILIDAD ---
+        // --- J. PLUS_DISPONIBILIDAD ---
         if (tariffs['PLUS_DISPONIBILIDAD']) {
             incentives.push({
                 codigo: 'PLUS_DISPONIBILIDAD',
                 nombre: 'Plus Disponibilidad',
                 cantidad: 1,
                 precio: tariffs['PLUS_DISPONIBILIDAD'],
-                total: tariffs['PLUS_DISPONIBILIDAD'], // Could be daily? Usually monthly fixed.
+                total: tariffs['PLUS_DISPONIBILIDAD'],
                 tipo: 'FIJO'
             });
         }
 
-        // --- E. BONUS_PUNTUALIDAD ---
-        // Logic: avgPunctuality <= 5 mins late? 
-        // Let's say if avgPunctuality <= 5 (meaning late by 5 mins or less, or early)
-        const isPunctual = (daysWorkedCount > 0 && (punctualityScore / daysWorkedCount) <= 15); // 15 min courtesy?
+        // --- K. BONUS_PUNTUALIDAD ---
+        const isPunctual = (daysWorkedCount > 0 && (punctualityScore / daysWorkedCount) <= 15);
         if (tariffs['BONUS_PUNTUALIDAD']) {
             incentives.push({
                 codigo: 'BONUS_PUNTUALIDAD',
@@ -429,23 +505,19 @@ export async function GET(request: Request) {
             });
         }
 
-        // --- F. BONUS_CONSUMO (Eficiente) ---
-        // If we had consumption data...
-        // Placeholder
+        // --- L. BONUS_CONSUMO ---
         if (tariffs['BONUS_CONSUMO']) {
             incentives.push({
                 codigo: 'BONUS_CONSUMO',
                 nombre: 'Conducción Eficiente',
-                cantidad: 1, // Assume OK
+                cantidad: 1,
                 precio: tariffs['BONUS_CONSUMO'],
                 total: tariffs['BONUS_CONSUMO'],
                 tipo: 'BONUS'
             });
         }
 
-        // --- G. DIETAS ---
-        // If shifts have "Dietas" flag?
-        // Let's assume Dietas = Days Worked * Price (simple approach)
+        // --- M. DIETAS ---
         if (tariffs['DIETA_NACION']) {
             incentives.push({
                 codigo: 'DIETA_NACION',
@@ -464,13 +536,17 @@ export async function GET(request: Request) {
             summary: {
                 totalHours: totalWorkedMinutes / 60,
                 totalOvertime: totalOvertimeMinutes / 60,
-                daysWorked: daysWorkedCount, // Days physically present
+                daysWorked: daysWorkedCount,
                 avgPunctuality: daysWorkedCount > 0 ? Math.round(punctualityScore / daysWorkedCount) : 0,
                 expectedHours: totalExpectedMinutes / 60,
-                totalKm: verifiedKm
+                totalKm: verifiedKm,
+                totalDescargas: verifiedDescargas,
+                totalViajes: verifiedViajes,
+                diasVacaciones,
+                diasAusencia
             },
             shifts: shiftDetails,
-            incentives: incentives, // NEW FIELD
+            incentives: incentives,
             incentivesTotal: incentives.reduce((acc, i) => acc + i.total, 0)
         };
 

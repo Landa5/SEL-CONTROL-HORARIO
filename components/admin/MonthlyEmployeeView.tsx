@@ -418,7 +418,8 @@ export default function MonthlyEmployeeView({ employeeId, year, month }: Monthly
                                             <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase
                                                 ${inc.tipo === 'FIJO' ? 'bg-blue-100 text-blue-700' :
                                                     inc.tipo === 'VARIABLE' ? 'bg-orange-100 text-orange-700' :
-                                                        'bg-purple-100 text-purple-700'}`}>
+                                                        inc.tipo === 'INFO' ? 'bg-teal-100 text-teal-700' :
+                                                            'bg-purple-100 text-purple-700'}`}>
                                                 {inc.tipo}
                                             </span>
                                         </td>
