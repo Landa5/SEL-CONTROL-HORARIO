@@ -19,8 +19,7 @@ export async function GET(request: Request) {
         // Fetch Jornadas within month
         const jornadas = await prisma.jornadaLaboral.findMany({
             where: {
-                fecha: { gte: startDate, lte: endDate },
-                totalHoras: { not: null }
+                fecha: { gte: startDate, lte: endDate }
             },
             include: {
                 empleado: { select: { id: true, nombre: true, apellidos: true, rol: true } },
@@ -87,7 +86,12 @@ export async function GET(request: Request) {
                 };
             }
 
-            const horas = jor.totalHoras || 0;
+            let horas = jor.totalHoras;
+            if (horas === null) {
+                const start = new Date(jor.horaEntrada).getTime();
+                const end = jor.horaSalida ? new Date(jor.horaSalida).getTime() : Date.now();
+                horas = Math.max(0, (end - start) / (1000 * 60 * 60));
+            }
             totalHoras += horas;
 
             // Employee Accumulation

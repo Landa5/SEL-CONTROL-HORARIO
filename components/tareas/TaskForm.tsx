@@ -464,7 +464,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                                 <option value="TELEFONO">Teléfono</option>
                                 <option value="EMAIL">Email</option>
                                 <option value="PRESENCIAL">Presencial</option>
-                                <option value="FORMULARIO_WEB">Formulario Web</option>
+                                <option value="WEB">Formulario Web</option>
                                 <option value="OTRO">Otro</option>
                             </select>
                         </div>
@@ -474,7 +474,7 @@ export default function TaskForm({ rol, onSuccess, initialData }: TaskFormProps)
                                 onChange={e => setReclamacionGravedad(e.target.value)}>
                                 <option value="">-- Seleccionar --</option>
                                 <option value="LEVE">Leve</option>
-                                <option value="MODERADA">Moderada</option>
+                                <option value="MEDIA">Moderada</option>
                                 <option value="GRAVE">Grave</option>
                                 <option value="CRITICA">Crítica</option>
                             </select>
