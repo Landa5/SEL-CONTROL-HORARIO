@@ -1,20 +1,40 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { hashPassword } from '@/lib/auth';
+import { hashPassword, getSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
+    const session: any = await getSession();
+    if (!session) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
+    const isPrivileged = session.rol === 'ADMIN' || session.rol === 'OFICINA';
 
     if (id) {
+        const empId = parseInt(id);
         const empleado = await prisma.empleado.findUnique({
-            where: { id: parseInt(id) },
+            where: { id: empId },
             include: { perfilProfesional: true }
         });
         if (!empleado) return NextResponse.json({ error: 'Empleado no encontrado' }, { status: 404 });
 
-        const { password, ...safe } = empleado;
-        return NextResponse.json(safe);
+        // Privileged or the user themselves gets full profile
+        if (isPrivileged || empId === session.id) {
+            const { password, ...safe } = empleado;
+            return NextResponse.json(safe);
+        }
+
+        // Other users only get non-sensitive public info
+        return NextResponse.json({
+            id: empleado.id,
+            nombre: empleado.nombre,
+            apellidos: empleado.apellidos,
+            rol: empleado.rol,
+            puestoTrabajo: empleado.puestoTrabajo,
+            activo: empleado.activo
+        });
     }
 
     const empleados = await prisma.empleado.findMany({
@@ -22,16 +42,29 @@ export async function GET(request: Request) {
             { rol: 'asc' },
             { nombre: 'asc' }
         ],
-        include: { perfilProfesional: true }
+        include: { perfilProfesional: isPrivileged }
     });
-    // Omit passwords
-    const safeEmpleados = empleados.map(({ password, ...rest }) => rest);
-    return NextResponse.json(safeEmpleados);
+
+    if (isPrivileged) {
+        // Omit passwords only
+        const safeEmpleados = empleados.map(({ password, ...rest }) => rest);
+        return NextResponse.json(safeEmpleados);
+    }
+
+    // Directory view for non-privileged staff
+    const directoryEmpleados = empleados.map(e => ({
+        id: e.id,
+        nombre: e.nombre,
+        apellidos: e.apellidos,
+        rol: e.rol,
+        puestoTrabajo: e.puestoTrabajo,
+        activo: e.activo
+    }));
+    return NextResponse.json(directoryEmpleados);
 }
 
-const ALLOWED_ROLES = ['ADMIN', 'OFICINA', 'CONDUCTOR', 'MECANICO', 'EMPLEADO'];
+const ALLOWED_ROLES = ['ADMIN', 'OFICINA', 'CONDUCTOR', 'MECANICO', 'EMPLEADO', 'COMERCIAL'];
 
-// Helper to sanitize optional fields (empty string -> null)
 // Helper to sanitize optional fields (empty string/whitespace -> null)
 const sanitize = (val: any) => {
     if (typeof val === 'string') {
@@ -43,6 +76,11 @@ const sanitize = (val: any) => {
 
 export async function POST(request: Request) {
     try {
+        const session: any = await getSession();
+        if (!session || session.rol !== 'ADMIN') {
+            return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de Administrador.' }, { status: 403 });
+        }
+
         const data = await request.json();
 
         // 1. Role Validation
@@ -66,7 +104,6 @@ export async function POST(request: Request) {
                 direccion: sanitize(data.direccion),
                 observaciones: sanitize(data.observaciones),
                 activo: data.activo !== undefined ? data.activo : true,
-                // @ts-ignore
                 // Configuración Horaria
                 horaEntradaPrevista: sanitize(data.horaEntradaPrevista),
                 horaSalidaPrevista: sanitize(data.horaSalidaPrevista),
@@ -112,32 +149,58 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
+        const session: any = await getSession();
+        if (!session) {
+            return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+        }
+
         const data = await request.json();
         const { id, password, ...rest } = data;
+        const targetId = parseInt(id);
+
+        const isAdmin = session.rol === 'ADMIN';
+        const isOffice = session.rol === 'OFICINA';
+        const isSelf = session.id === targetId;
+
+        if (!isAdmin && !isOffice && !isSelf) {
+            return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+        }
 
         const updateData: any = {
             nombre: rest.nombre,
             apellidos: sanitize(rest.apellidos),
-            dni: sanitize(rest.dni),
             telefono: sanitize(rest.telefono),
             email: sanitize(rest.email),
             direccion: sanitize(rest.direccion),
-            rol: rest.rol,
-            observaciones: sanitize(rest.observaciones),
-            activo: rest.activo,
-            horaEntradaPrevista: sanitize(rest.horaEntradaPrevista),
-            horaSalidaPrevista: sanitize(rest.horaSalidaPrevista),
-            horaEntradaTarde: sanitize(rest.horaEntradaTarde),
-            horaSalidaTarde: sanitize(rest.horaSalidaTarde),
-            puestoTrabajo: sanitize(rest.puestoTrabajo),
         };
 
+        // Only privileged users can edit DNI, work schedule, job title, notes
+        if (isAdmin || isOffice) {
+            updateData.dni = sanitize(rest.dni);
+            updateData.observaciones = sanitize(rest.observaciones);
+            updateData.horaEntradaPrevista = sanitize(rest.horaEntradaPrevista);
+            updateData.horaSalidaPrevista = sanitize(rest.horaSalidaPrevista);
+            updateData.horaEntradaTarde = sanitize(rest.horaEntradaTarde);
+            updateData.horaSalidaTarde = sanitize(rest.horaSalidaTarde);
+            updateData.puestoTrabajo = sanitize(rest.puestoTrabajo);
+        }
+
+        // Only ADMIN can change roles and active status
+        if (isAdmin) {
+            if (rest.rol && ALLOWED_ROLES.includes(rest.rol)) updateData.rol = rest.rol;
+            if (rest.activo !== undefined) updateData.activo = rest.activo;
+        }
+
+        // Password change: only ADMIN or user themselves
         if (password) {
+            if (!isAdmin && !isSelf) {
+                return NextResponse.json({ error: 'No tienes permiso para cambiar la contraseña de otro usuario' }, { status: 403 });
+            }
             updateData.password = await hashPassword(password);
         }
 
         const empleado = await prisma.empleado.update({
-            where: { id: parseInt(id) },
+            where: { id: targetId },
             data: {
                 ...updateData,
                 perfilProfesional: (rest.rol === 'CONDUCTOR' || rest.rol === 'MECANICO') && rest.dniCaducidad ? {
@@ -172,10 +235,15 @@ export async function PUT(request: Request) {
         console.error("PUT Error:", error);
         return NextResponse.json({ error: 'Error actualizando empleado' }, { status: 500 });
     }
-} // Removed delete for now to be safe, or can add if requested. User asked for CRUD.
+}
 
 export async function DELETE(request: Request) {
     try {
+        const session: any = await getSession();
+        if (!session || session.rol !== 'ADMIN') {
+            return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de Administrador.' }, { status: 403 });
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });

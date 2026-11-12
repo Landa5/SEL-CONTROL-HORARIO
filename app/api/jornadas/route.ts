@@ -120,18 +120,37 @@ export async function POST(request: Request) {
                 empleadoId: Number(user.id),
                 horaSalida: null,
                 fecha: { lt: startOfToday }
-            }
+            },
+            include: { usosCamion: true }
         });
 
         if (orphans.length > 0) {
-            await prisma.jornadaLaboral.updateMany({
-                where: { id: { in: orphans.map(o => o.id) } },
-                data: {
-                    horaSalida: now,
-                    estado: 'CERRADA',
-                    observaciones: 'Cierre automático por nueva entrada'
+            const maxReasonableMs = 16 * 60 * 60 * 1000;
+            for (const orphan of orphans) {
+                const startMs = new Date(orphan.horaEntrada).getTime();
+                let maxUsoFin: Date | null = null;
+                for (const u of orphan.usosCamion) {
+                    if (u.horaFin) {
+                        const fin = new Date(u.horaFin);
+                        const diff = fin.getTime() - startMs;
+                        if (diff > 0 && diff <= maxReasonableMs) {
+                            if (!maxUsoFin || fin > maxUsoFin) maxUsoFin = fin;
+                        }
+                    }
                 }
-            });
+                const effectiveEnd = maxUsoFin || new Date(startMs + 8 * 60 * 60 * 1000);
+                const totalHoras = Math.round(((effectiveEnd.getTime() - startMs) / (1000 * 60 * 60)) * 100) / 100;
+
+                await prisma.jornadaLaboral.update({
+                    where: { id: orphan.id },
+                    data: {
+                        horaSalida: effectiveEnd,
+                        totalHoras: Math.max(0, totalHoras),
+                        estado: 'CERRADA',
+                        observaciones: orphan.observaciones || 'Cierre automático por nueva entrada'
+                    }
+                });
+            }
         }
 
         // STILL RULE: Cannot have two entries on the SAME day without an exit
@@ -192,44 +211,33 @@ export async function PUT(request: Request) {
                 const totalHours = parseFloat((diff / (1000 * 60 * 60)).toFixed(2));
                 data.totalHoras = totalHours;
 
-                // HOLIDAY DETECTION & COMPENSATION
-                const jDate = new Date(current.fecha);
-                const day = jDate.getDate();
-                const month = jDate.getMonth();
+                // HOLIDAY DETECTION & COMPENSATION (Zona horaria Madrid)
+                const madridParts = new Intl.DateTimeFormat('en-CA', {
+                    timeZone: 'Europe/Madrid',
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).formatToParts(current.fecha);
+                const day = parseInt(madridParts.find(p => p.type === 'day')?.value || '1');
+                const month = parseInt(madridParts.find(p => p.type === 'month')?.value || '1') - 1;
+                const jYear = parseInt(madridParts.find(p => p.type === 'year')?.value || '2026');
 
-                // Find active holiday on this date
-                const fiesta = await prisma.fiestaLocal.findFirst({
-                    where: {
-                        activa: true,
-                        OR: [
-                            {
-                                // Specific date
-                                fecha: {
-                                    gte: new Date(jDate.getFullYear(), month, day, 0, 0, 0),
-                                    lte: new Date(jDate.getFullYear(), month, day, 23, 59, 59)
-                                }
-                            },
-                            {
-                                // Annual holiday (same day/month)
-                                esAnual: true,
-                                fecha: {
-                                    // We check if it matches month/day via Prisma query or just fetch and filter
-                                    // SQLite doesn't have easy DATE_PART, so let's check a range or fetch and filter
-                                }
-                            }
-                        ]
-                    }
-                });
-
-                // Since SQLite doesn't support complex date functions easily in Prisma where, 
-                // let's fetch active holidays and filter manually for simplicity and reliability.
                 const allFiestas = await prisma.fiestaLocal.findMany({ where: { activa: true } });
                 const matchingFiesta = allFiestas.find(f => {
-                    const fDate = new Date(f.fecha);
+                    const fParts = new Intl.DateTimeFormat('en-CA', {
+                        timeZone: 'Europe/Madrid',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    }).formatToParts(f.fecha);
+                    const fDay = parseInt(fParts.find(p => p.type === 'day')?.value || '1');
+                    const fMonth = parseInt(fParts.find(p => p.type === 'month')?.value || '1') - 1;
+                    const fYear = parseInt(fParts.find(p => p.type === 'year')?.value || '2026');
+
                     if (f.esAnual) {
-                        return fDate.getDate() === day && fDate.getMonth() === month;
+                        return fDay === day && fMonth === month;
                     } else {
-                        return fDate.getDate() === day && fDate.getMonth() === month && fDate.getFullYear() === jDate.getFullYear();
+                        return fDay === day && fMonth === month && fYear === jYear;
                     }
                 });
 

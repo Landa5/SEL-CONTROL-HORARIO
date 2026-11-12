@@ -43,12 +43,17 @@ export async function POST(request: Request) {
                     }, { status: 409 });
                 }
 
-                // Fix previous usage
+                // Fix previous usage safely without creating 50,000km spikes from odometer digit corrections
+                const newRecorridos = kInitial - lastUsage.kmInicial;
+                const safeRecorridos = (newRecorridos >= 0 && newRecorridos <= 1200)
+                    ? newRecorridos
+                    : (lastUsage.kmRecorridos ?? Math.max(0, (lastUsage.kmFinal || lastUsage.kmInicial) - lastUsage.kmInicial));
+
                 await prisma.usoCamion.update({
                     where: { id: lastUsage.id },
                     data: {
                         kmFinal: kInitial,
-                        kmRecorridos: kInitial - lastUsage.kmInicial
+                        kmRecorridos: safeRecorridos
                     }
                 });
 
@@ -111,25 +116,39 @@ export async function PUT(request: Request) {
         if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
         const body = await request.json();
-        const { id, horaFin, kmFinal, descargasCount, viajesCount, litrosRepostados } = body;
+        const { id, horaFin, kmFinal, descargasCount, viajesCount, litrosRepostados, confirmHighKm } = body;
 
         if (!id || kmFinal === undefined) {
             return NextResponse.json({ error: 'ID y KM finales son requeridos' }, { status: 400 });
         }
 
         const kFinal = parseInt(kmFinal);
+        if (isNaN(kFinal)) {
+            return NextResponse.json({ error: 'KM finales inválidos' }, { status: 400 });
+        }
 
         const current = await prisma.usoCamion.findUnique({ where: { id: parseInt(id) } });
         if (!current) return NextResponse.json({ error: 'Tramo no encontrado' }, { status: 404 });
 
         if (kFinal < current.kmInicial) {
-            return NextResponse.json({ error: 'Los KM finales no pueden ser menores que los iniciales' }, { status: 400 });
+            return NextResponse.json({
+                error: `Los KM finales (${kFinal}) no pueden ser menores que los iniciales (${current.kmInicial}).`
+            }, { status: 400 });
+        }
+
+        const kmDiff = kFinal - current.kmInicial;
+        if (kmDiff > 800 && !confirmHighKm) {
+            return NextResponse.json({
+                error: `Has indicado ${kmDiff} km en un solo turno (${current.kmInicial} → ${kFinal}). Verifica que no haya un dígito de más.`,
+                highKmWarning: true,
+                kmRecorridos: kmDiff
+            }, { status: 409 });
         }
 
         const data: any = {
             horaFin: new Date(horaFin),
             kmFinal: kFinal,
-            kmRecorridos: kFinal - current.kmInicial
+            kmRecorridos: kmDiff
         };
 
         if (descargasCount !== undefined && descargasCount !== '') data.descargasCount = parseInt(descargasCount);

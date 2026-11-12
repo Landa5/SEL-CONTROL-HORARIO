@@ -3,9 +3,10 @@
 import { useEffect, useState, use } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Calculator, CheckCircle, AlertTriangle, FileText, ChevronDown, ChevronUp, Edit2, Save, X } from 'lucide-react';
+import { Calculator, CheckCircle, AlertTriangle, FileText, ChevronDown, ChevronUp, Edit2, Save, X, Download } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable'; // Ensure this is installed or handle absence
+import { downloadExcelWorkbook } from '@/lib/excel';
 
 type Props = {
     params: Promise<{
@@ -195,6 +196,130 @@ export default function PayrollMonthDetail(props: Props) {
         doc.save(`Nomina_${details.empleado.nombre}_${month}_${year}.pdf`);
     };
 
+    const computeGestoriaColumns = (p: any) => {
+        let dietasExplicit = 0;
+        let dispExplicit = 0;
+        let prodExplicit = 0;
+        let prodFija = 0;
+        let horasExtra = 0;
+        let incentivos = 0;
+        let activityPool = 0; // KM + Descargas + Viajes when stored as itemized lines
+        let otherDietas = 0;
+        const notes: string[] = [];
+
+        if (p?.lineas) {
+            p.lineas.forEach((l: any) => {
+                const code = l.conceptoCodigo;
+                const amount = Number(l.importe) || 0;
+
+                if (['INCENTIVOS', 'PLUS_ANTIGUEDAD', 'BONUS_SEGURIDAD', 'PLUS_FORMACION', 'PLUS_DISPONIBILIDAD', 'BONUS_PUNTUALIDAD', 'BONUS_CONSUMO', 'FESTIVO_TRABAJADO'].includes(code)) {
+                    incentivos += amount;
+                } else if (code === 'DISPONIBILIDAD') {
+                    dispExplicit += amount;
+                } else if (code === 'HORAS_EXTRA') {
+                    horasExtra += amount;
+                } else if (code === 'PRODUCTIVIDAD') {
+                    prodExplicit += amount;
+                } else if (code === 'PRODUCTIVIDAD_FIJA') {
+                    prodFija += amount;
+                } else if (code === 'DIETAS') {
+                    dietasExplicit += amount;
+                } else if (['PRECIO_KM', 'PRECIO_DESCARGA', 'PRECIO_VIAJE', 'DESCARGAS', 'VIAJES', 'PRECIO_DESCARGA_SABADO'].includes(code)) {
+                    activityPool += amount;
+                } else {
+                    otherDietas += amount;
+                }
+
+                if (l.notas) notes.push(l.notas);
+            });
+        }
+
+        let col1 = 0; // Dietas/Kilometraje
+        let col2 = 0; // Hora de presencia
+        let col3 = 0; // Productividad cotizable seg.s.
+        let col4 = incentivos; // Incentivos
+
+        if (activityPool > 0 && dispExplicit === 0 && prodExplicit === 0) {
+            // Itemized lines from MonthlyEmployeeView: apply 375€ cap + 50/50 split
+            const topeDietas = 375;
+            const dietasFromPool = Math.min(activityPool, topeDietas);
+            const excess = Math.max(0, activityPool - topeDietas);
+            col1 = dietasFromPool + dietasExplicit + otherDietas;
+            col2 = (excess * 0.5) + horasExtra;
+            col3 = (excess * 0.5) + prodFija;
+        } else {
+            col1 = dietasExplicit + activityPool + otherDietas;
+            col2 = dispExplicit + horasExtra;
+            col3 = prodExplicit + prodFija;
+        }
+
+        return {
+            col1: Number(col1.toFixed(2)),
+            col2: Number(col2.toFixed(2)),
+            col3: Number(col3.toFixed(2)),
+            col4: Number(col4.toFixed(2)),
+            total: Number((col1 + col2 + col3 + col4).toFixed(2)),
+            notes: notes.join(', ')
+        };
+    };
+
+    const handleExportExcel = async () => {
+        try {
+            const res = await fetch(`/api/nominas?year=${year}&month=${month}&details=true`);
+            if (!res.ok) throw new Error('Error recuperando datos de nóminas');
+            const data = await res.json();
+
+            const payrolls = data.filter((r: any) => r.nomina).map((r: any) => ({
+                empleado: r.empleado,
+                ...r.nomina
+            }));
+
+            if (payrolls.length === 0) return alert('No hay nóminas generadas para exportar en este mes.');
+
+            // Sheet 1: Resumen Gestoría
+            const gestoriaRows = payrolls.map((p: any) => {
+                const cols = computeGestoriaColumns(p);
+                return {
+                    'Empleado': `${p.empleado.nombre} ${p.empleado.apellidos}`.toUpperCase(),
+                    'Rol': p.empleado.rol,
+                    'Estado': p.estado,
+                    'Dietas / Kilometraje (€)': cols.col1,
+                    'Hora de Presencia (€)': cols.col2,
+                    'Productividad Cotizable (€)': cols.col3,
+                    'Incentivos (€)': cols.col4,
+                    'Total Variables (€)': cols.total,
+                    'Notas': cols.notes
+                };
+            });
+
+            // Sheet 2: Detalle por Conceptos
+            const detailRows: any[] = [];
+            payrolls.forEach((p: any) => {
+                (p.lineas || []).forEach((l: any) => {
+                    detailRows.push({
+                        'Empleado': `${p.empleado.nombre} ${p.empleado.apellidos}`,
+                        'Rol': p.empleado.rol,
+                        'Código Concepto': l.conceptoCodigo,
+                        'Concepto': l.conceptoNombre,
+                        'Cantidad': Number(l.cantidad || 0),
+                        'Tarifa Unitaria (€)': Number(l.rate || 0),
+                        'Importe (€)': Number(l.importe || 0),
+                        'Manual (Override)': l.override ? 'SÍ' : 'NO',
+                        'Notas': l.notas || ''
+                    });
+                });
+            });
+
+            downloadExcelWorkbook(`Nominas_Gestoria_${year}_${String(month).padStart(2, '0')}.xlsx`, [
+                { name: 'Resumen_Gestoria', rows: gestoriaRows },
+                { name: 'Detalle_Conceptos', rows: detailRows }
+            ]);
+        } catch (e: any) {
+            console.error(e);
+            alert('Error exportando a Excel: ' + e.message);
+        }
+    };
+
     const handleExportGlobalPDF = async () => {
         if (!confirm('Se generará el RESUMEN de nóminas para la gestoría con la tabla resumida. ¿Continuar?')) return;
 
@@ -256,34 +381,7 @@ export default function PayrollMonthDetail(props: Props) {
             let totalCol4 = 0;
 
             payrolls.forEach((p: any) => {
-                // Map concepts to columns
-                let col1 = 0; // Dietas/Km
-                let col2 = 0; // Hora presencia
-                let col3 = 0; // Productividad
-                let col4 = 0; // Incentivo
-                let notes: string[] = [];
-
-                if (p.lineas) {
-                    p.lineas.forEach((l: any) => {
-                        const code = l.conceptoCodigo;
-                        // Ensure amount is a number (handle potential string from JSON/Prisma)
-                        const amount = Number(l.importe) || 0;
-
-                        if (['INCENTIVOS'].includes(code)) {
-                            col4 += amount;
-                        } else if (['DISPONIBILIDAD', 'HORAS_EXTRA'].includes(code)) {
-                            col2 += amount;
-                        } else if (['PRODUCTIVIDAD', 'PRODUCTIVIDAD_FIJA'].includes(code)) {
-                            col3 += amount;
-                        } else {
-                            // All others to Col 1 (Dietas, Km, Viajes, Descargas, Litros, Dietas Fijas...)
-                            // Explicitly including DIETAS to be sure
-                            col1 += amount;
-                        }
-
-                        if (l.notas) notes.push(l.notas);
-                    });
-                }
+                const { col1, col2, col3, col4, notes } = computeGestoriaColumns(p);
 
                 totalCol1 += col1;
                 totalCol2 += col2;
@@ -299,7 +397,7 @@ export default function PayrollMonthDetail(props: Props) {
                     formatCurr(col2),
                     formatCurr(col3),
                     formatCurr(col4),
-                    notes.join(', ')
+                    notes
                 ]);
             });
 
@@ -393,13 +491,16 @@ export default function PayrollMonthDetail(props: Props) {
                             <p className="text-xs text-gray-500 mt-1">Gestión mensual de variables y complementos</p>
                         </div>
                     </div>
-                    <div className="flex gap-2 w-full md:w-auto justify-end">
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto justify-end">
                         <Button onClick={handleGenerate} disabled={generating} className={generating ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'}>
                             <Calculator className="w-4 h-4 mr-2" />
                             {generating ? 'Procesando...' : 'Recalcular Todo'}
                         </Button>
+                        <Button onClick={handleExportExcel} variant="outline" className="text-emerald-700 border-emerald-300 bg-emerald-50 hover:bg-emerald-100">
+                            <Download className="w-4 h-4 mr-2" /> Exportar Excel (.xlsx)
+                        </Button>
                         <Button onClick={handleExportGlobalPDF} variant="outline" className="text-gray-700 border-gray-300">
-                            <FileText className="w-4 h-4 mr-2" /> Exportar Global
+                            <FileText className="w-4 h-4 mr-2" /> Exportar Global PDF
                         </Button>
                     </div>
                 </CardHeader>
@@ -452,6 +553,31 @@ export default function PayrollMonthDetail(props: Props) {
                                                         </Button>
                                                     </div>
                                                 </div>
+
+                                                {/* Gestoría 4-Column Distribution Preview */}
+                                                {(() => {
+                                                    const gCols = computeGestoriaColumns(details);
+                                                    return (
+                                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 bg-indigo-50/60 px-6 py-3 border-b border-indigo-100 text-xs">
+                                                            <div>
+                                                                <span className="text-indigo-500 font-semibold block">Col 1. Dietas / Km</span>
+                                                                <span className="font-mono font-bold text-indigo-950">{gCols.col1.toFixed(2)} €</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-indigo-500 font-semibold block">Col 2. Hora Presencia</span>
+                                                                <span className="font-mono font-bold text-indigo-950">{gCols.col2.toFixed(2)} €</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-indigo-500 font-semibold block">Col 3. Productividad</span>
+                                                                <span className="font-mono font-bold text-indigo-950">{gCols.col3.toFixed(2)} €</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-indigo-500 font-semibold block">Col 4. Incentivos</span>
+                                                                <span className="font-mono font-bold text-indigo-950">{gCols.col4.toFixed(2)} €</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
 
                                                 {/* Payslip Table */}
                                                 <div className="p-0 overflow-x-auto">

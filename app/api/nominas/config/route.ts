@@ -98,12 +98,32 @@ export async function POST(request: Request) {
         console.log('POST /api/nominas/config payload:', body);
         const { conceptoId, valor, rol, empleadoId } = body;
 
+        const parsedConceptoId = parseInt(conceptoId);
+        const parsedRol = rol || null;
+        const parsedEmpleadoId = empleadoId ? parseInt(empleadoId) : null;
+        const parsedValor = parseFloat(valor);
+
+        // Check if an active tariff for this exact scope already has the same value
+        const existingActive = await prisma.tarifaNomina.findFirst({
+            where: {
+                conceptoId: parsedConceptoId,
+                rol: parsedRol,
+                empleadoId: parsedEmpleadoId,
+                activo: true
+            },
+            orderBy: { createdAt: 'desc' }
+        });
+
+        if (existingActive && Math.abs(Number(existingActive.valor) - parsedValor) < 0.0001) {
+            return NextResponse.json(existingActive);
+        }
+
         // Deactivate previous active tariff for this scope
         await prisma.tarifaNomina.updateMany({
             where: {
-                conceptoId: parseInt(conceptoId),
-                rol: rol || null,
-                empleadoId: empleadoId ? parseInt(empleadoId) : null,
+                conceptoId: parsedConceptoId,
+                rol: parsedRol,
+                empleadoId: parsedEmpleadoId,
                 activo: true
             },
             data: { activo: false, fechaFin: new Date() }
@@ -111,10 +131,10 @@ export async function POST(request: Request) {
 
         const tarifa = await prisma.tarifaNomina.create({
             data: {
-                conceptoId: parseInt(conceptoId),
-                rol: rol || null,
-                empleadoId: empleadoId ? parseInt(empleadoId) : null,
-                valor: parseFloat(valor),
+                conceptoId: parsedConceptoId,
+                rol: parsedRol,
+                empleadoId: parsedEmpleadoId,
+                valor: parsedValor,
                 activo: true
             }
         });

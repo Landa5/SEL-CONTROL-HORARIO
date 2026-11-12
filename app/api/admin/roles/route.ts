@@ -5,6 +5,15 @@ import { cookies } from 'next/headers';
 
 export async function GET(request: Request) {
     try {
+        const cookieStore = await cookies();
+        const session = cookieStore.get('session')?.value;
+        if (!session) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+
+        const adminUser: any = await verifyToken(session);
+        if (!adminUser || !['ADMIN', 'OFICINA'].includes(adminUser.rol)) {
+            return NextResponse.json({ error: 'Acceso denegado' }, { status: 403 });
+        }
+
         const empleados = await prisma.empleado.findMany({
             select: {
                 id: true,

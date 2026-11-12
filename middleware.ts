@@ -1,11 +1,10 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifyToken } from './lib/auth';
+import { verifyToken } from './lib/jwt';
 
 export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session')?.value;
     const { pathname } = request.nextUrl;
-    console.log(`[Middleware] Path: ${pathname}, Session: ${session ? 'Present' : 'Absent'}`);
 
     const protectedRoutes = ['/admin', '/empleado', '/oficina', '/mecanico'];
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
@@ -27,7 +26,8 @@ export async function middleware(request: NextRequest) {
             'OFICINA': '/oficina/dashboard',
             'MECANICO': '/mecanico/dashboard',
             'CONDUCTOR': '/empleado',
-            'EMPLEADO': '/empleado'
+            'EMPLEADO': '/empleado',
+            'COMERCIAL': '/empleado'
         };
 
         const rolePermissions: Record<string, string[]> = {
@@ -35,7 +35,8 @@ export async function middleware(request: NextRequest) {
             'OFICINA': ['/oficina', '/empleado', '/admin/formacion', '/admin/tacografo'],
             'MECANICO': ['/mecanico', '/empleado'],
             'CONDUCTOR': ['/empleado'],
-            'EMPLEADO': ['/empleado']
+            'EMPLEADO': ['/empleado'],
+            'COMERCIAL': ['/empleado']
         };
 
         const rol = (payload as any).rol;

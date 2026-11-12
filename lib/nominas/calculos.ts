@@ -69,7 +69,10 @@ export async function calcularNominaEmpleado(empleadoId: number, year: number, m
 
         jornadas.forEach(j => {
             j.usosCamion.forEach(u => {
-                totalKm += (u.kmRecorridos || 0);
+                const km = (typeof u.kmRecorridos === 'number' && u.kmRecorridos > 0)
+                    ? u.kmRecorridos
+                    : ((typeof u.kmFinal === 'number' && typeof u.kmInicial === 'number' && u.kmFinal > u.kmInicial) ? (u.kmFinal - u.kmInicial) : 0);
+                totalKm += km;
                 totalDescargas += (u.descargasCount || 0);
                 totalViajes += (u.viajesCount || 0);
             });

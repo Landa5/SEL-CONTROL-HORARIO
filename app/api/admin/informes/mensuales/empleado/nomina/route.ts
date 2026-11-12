@@ -41,18 +41,25 @@ export async function POST(request: Request) {
 
         const userId = parseInt(user.id as string);
 
-        // Process the incoming lines
-        const processedLines = lineas.map((l: any, idx: number) => ({
-            conceptoCodigo: l.codigo,
-            conceptoNombre: l.nombre,
-            cantidad: parseFloat(l.cantidad) || 0,
-            rate: parseFloat(l.rate) || 0,
-            importe: parseFloat(l.importe) || 0,
-            override: true,
-            notas: l.notas || null,
-            updatedBy: userId,
-            orden: idx
-        }));
+        // Process and deduplicate incoming lines (normalize legacy DESCARGAS -> PRECIO_DESCARGA)
+        const seenCodes = new Set<string>();
+        const processedLines: any[] = [];
+        lineas.forEach((l: any, idx: number) => {
+            const canonicalCode = l.codigo === 'DESCARGAS' ? 'PRECIO_DESCARGA' : l.codigo;
+            if (seenCodes.has(canonicalCode)) return;
+            seenCodes.add(canonicalCode);
+            processedLines.push({
+                conceptoCodigo: canonicalCode,
+                conceptoNombre: l.nombre,
+                cantidad: parseFloat(l.cantidad) || 0,
+                rate: parseFloat(l.rate) || 0,
+                importe: parseFloat(l.importe) || 0,
+                override: true,
+                notas: l.notas || null,
+                updatedBy: userId,
+                orden: idx
+            });
+        });
 
         const totalVariables = processedLines.reduce((sum: number, l: any) => sum + l.importe, 0);
 

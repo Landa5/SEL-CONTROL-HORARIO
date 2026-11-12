@@ -97,6 +97,7 @@ export default function EmpleadoDashboard() {
     const [conflictPhoto, setConflictPhoto] = useState<string>('');
     const [startingShift, setStartingShift] = useState(false);
     const [endingShift, setEndingShift] = useState(false);
+    const [showEndRouteModal, setShowEndRouteModal] = useState(false);
 
     // Mantenimiento Conductor Modal
     const [showMantenimientoModal, setShowMantenimientoModal] = useState(false);
@@ -403,47 +404,79 @@ export default function EmpleadoDashboard() {
         }
     };
 
-    const handleEndShift = async () => {
+    const handleEndShift = () => {
+        if (!activeTurno || endingShift) return;
+        const parsedKm = parseInt(kmFinal);
+        if (!kmFinal || isNaN(parsedKm)) {
+            toast.error('Introduce los KM finales del vehículo para terminar la ruta.');
+            return;
+        }
+        if (parsedKm < activeTurno.kmInicial) {
+            toast.error(`Los KM finales (${parsedKm}) no pueden ser menores que los iniciales (${activeTurno.kmInicial}).`);
+            return;
+        }
+        // Pre-populate fields in modal with current values so the driver can review/edit them in one place
+        if (!numDescargas && activeTurno.descargasCount > 0) setNumDescargas(String(activeTurno.descargasCount));
+        if (!numViajes && activeTurno.viajesCount > 0) setNumViajes(String(activeTurno.viajesCount));
+        if (!litrosRepostados && activeTurno.litrosRepostados > 0) setLitrosRepostados(String(activeTurno.litrosRepostados));
+        setShowEndRouteModal(true);
+    };
+
+    const executeEndRoute = async (closeJornadaToo: boolean) => {
         if (!activeTurno || !kmFinal || endingShift) return;
+        const parsedKm = parseInt(kmFinal);
+        if (isNaN(parsedKm) || parsedKm < activeTurno.kmInicial) {
+            toast.error(`Los KM finales (${kmFinal}) no pueden ser menores que los iniciales (${activeTurno.kmInicial}).`);
+            return;
+        }
+
         setEndingShift(true);
         try {
-            // Auto-save pending values if they exist
             const payload: any = {
                 id: activeTurno.id,
                 horaFin: new Date(),
-                kmFinal: parseInt(kmFinal)
+                kmFinal: parsedKm,
+                confirmHighKm: true
             };
 
-            if (numDescargas) payload.descargasCount = numDescargas;
-            if (numViajes) payload.viajesCount = numViajes;
-            if (litrosRepostados) payload.litrosRepostados = litrosRepostados;
+            if (numDescargas !== '') payload.descargasCount = parseInt(numDescargas) || 0;
+            if (numViajes !== '') payload.viajesCount = parseInt(numViajes) || 0;
+            if (litrosRepostados !== '') payload.litrosRepostados = parseFloat(litrosRepostados) || 0;
 
-            await fetch('/api/turnos', {
+            const turnRes = await fetch('/api/turnos', {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
 
+            if (!turnRes.ok) {
+                const errData = await turnRes.json().catch(() => ({}));
+                toast.error(errData.error || 'Error al finalizar la ruta');
+                return;
+            }
+
+            setShowEndRouteModal(false);
             setKmFinal('');
             setNumDescargas('');
             setNumViajes('');
             setLitrosRepostados('');
-            await fetchData();
 
-            // Preguntar si quiere cerrar la jornada también
-            const wantClose = confirm('✅ Ruta finalizada correctamente.\n\n¿Quieres también FICHAR SALIDA y cerrar tu jornada de hoy?');
-            if (wantClose && jornada && !jornada.horaSalida) {
+            if (closeJornadaToo && jornada && !jornada.horaSalida) {
                 const res = await fetch('/api/jornadas', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: jornada.id, horaSalida: new Date(), observaciones: observaciones || '' })
                 });
                 if (res.ok) {
-                    toast.success('Jornada cerrada correctamente');
+                    toast.success('✅ Ruta y jornada finalizadas correctamente');
                     await fetchData();
                     setActiveSection('summary');
+                    return;
                 }
             }
+
+            toast.success('✅ Ruta de vehículo finalizada correctamente');
+            await fetchData();
         } finally {
             setEndingShift(false);
         }
@@ -988,6 +1021,115 @@ export default function EmpleadoDashboard() {
 
             {activeSection === 'formacion' && (
                 <EmployeeTrainingView />
+            )}
+
+            {/* MODAL RESUMEN Y FIN DE RUTA / JORNADA */}
+            {showEndRouteModal && activeTurno && (
+                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="bg-red-600 p-5 text-white flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Truck className="w-6 h-6" />
+                                <div>
+                                    <h3 className="text-lg font-black uppercase">Confirmar Fin de Ruta</h3>
+                                    <p className="text-xs text-red-100">Vehículo: {activeTurno.camion?.matricula} · Revisa los datos antes de cerrar</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            {(() => {
+                                const parsedFinal = parseInt(kmFinal) || 0;
+                                const recorridos = parsedFinal - (activeTurno.kmInicial || 0);
+                                const isHighKm = recorridos > 800;
+                                return (
+                                    <>
+                                        <div className={`p-4 rounded-xl border ${isHighKm ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+                                            <div className="flex justify-between items-center text-xs text-gray-500 font-bold uppercase">
+                                                <span>KM Inicial: {activeTurno.kmInicial?.toLocaleString()}</span>
+                                                <span>KM Final: {parsedFinal.toLocaleString()}</span>
+                                            </div>
+                                            <div className="mt-2 flex items-baseline justify-between">
+                                                <span className="text-sm font-bold text-gray-700">Distancia recorrida hoy:</span>
+                                                <span className={`text-2xl font-black ${isHighKm ? 'text-amber-700' : 'text-indigo-700'}`}>
+                                                    {recorridos.toLocaleString()} km
+                                                </span>
+                                            </div>
+                                            {isHighKm && (
+                                                <div className="mt-2 p-2 bg-amber-100 text-amber-900 rounded-lg text-xs font-bold flex items-center gap-2">
+                                                    <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                                                    <span>¡Atención! Más de 800 km en un solo turno. Verifica que no sobre ningún dígito en los KM finales.</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-3 gap-3">
+                                            <div className="bg-blue-50/70 p-3 rounded-xl border border-blue-100">
+                                                <label className="block text-[10px] font-black text-blue-700 uppercase mb-1">Descargas</label>
+                                                <Input
+                                                    type="number"
+                                                    value={numDescargas}
+                                                    onChange={e => setNumDescargas(e.target.value)}
+                                                    placeholder="0"
+                                                    className="h-10 text-center font-black text-base bg-white"
+                                                />
+                                            </div>
+                                            <div className="bg-green-50/70 p-3 rounded-xl border border-green-100">
+                                                <label className="block text-[10px] font-black text-green-700 uppercase mb-1">Viajes</label>
+                                                <Input
+                                                    type="number"
+                                                    value={numViajes}
+                                                    onChange={e => setNumViajes(e.target.value)}
+                                                    placeholder="0"
+                                                    className="h-10 text-center font-black text-base bg-white"
+                                                />
+                                            </div>
+                                            <div className="bg-orange-50/70 p-3 rounded-xl border border-orange-100">
+                                                <label className="block text-[10px] font-black text-orange-700 uppercase mb-1">Litros Rep.</label>
+                                                <Input
+                                                    type="number"
+                                                    value={litrosRepostados}
+                                                    onChange={e => setLitrosRepostados(e.target.value)}
+                                                    placeholder="0"
+                                                    className="h-10 text-center font-black text-base bg-white"
+                                                />
+                                            </div>
+                                        </div>
+                                    </>
+                                );
+                            })()}
+
+                            <div className="space-y-2.5 pt-2">
+                                <Button
+                                    onClick={() => executeEndRoute(true)}
+                                    disabled={endingShift}
+                                    className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-base shadow-lg flex items-center justify-center gap-2"
+                                >
+                                    <CheckCircle className="w-5 h-5" />
+                                    {endingShift ? 'Guardando...' : 'TERMINAR RUTA Y FICHAR SALIDA'}
+                                </Button>
+
+                                <Button
+                                    onClick={() => executeEndRoute(false)}
+                                    disabled={endingShift}
+                                    variant="outline"
+                                    className="w-full h-11 border-2 border-indigo-200 text-indigo-700 hover:bg-indigo-50 font-bold text-xs"
+                                >
+                                    🚛 Solo terminar ruta del camión (Seguir en jornada / cambiar camión)
+                                </Button>
+
+                                <Button
+                                    onClick={() => setShowEndRouteModal(false)}
+                                    disabled={endingShift}
+                                    variant="ghost"
+                                    className="w-full h-9 text-gray-500 text-xs"
+                                >
+                                    Cancelar y revisar KM
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             )}
 
             {/* MODAL MANTENIMIENTO CONDUCTOR */}

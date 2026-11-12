@@ -12,20 +12,17 @@ export const prisma =
 
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
-// Helper for write operations that may fail through the pooler (read-only replica routing)
-// Creates a temporary PrismaClient using DIRECT_URL (session mode, port 5432)
+// Singleton write client for direct DB operations (session mode, port 5432)
+const globalForWritePrisma = global as unknown as { writePrisma?: PrismaClient };
+
+export const writePrisma =
+    globalForWritePrisma.writePrisma ||
+    (process.env.DIRECT_URL
+        ? new PrismaClient({ datasources: { db: { url: process.env.DIRECT_URL } } })
+        : prisma);
+
+if (process.env.NODE_ENV !== 'production') globalForWritePrisma.writePrisma = writePrisma;
+
 export async function withWriteClient<T>(fn: (client: PrismaClient) => Promise<T>): Promise<T> {
-  const directUrl = process.env.DIRECT_URL;
-  if (!directUrl) {
-    // No DIRECT_URL available, try with the main client
-    return fn(prisma);
-  }
-  const writeClient = new PrismaClient({
-    datasources: { db: { url: directUrl } },
-  });
-  try {
-    return await fn(writeClient);
-  } finally {
-    await writeClient.$disconnect();
-  }
+    return fn(writePrisma);
 }

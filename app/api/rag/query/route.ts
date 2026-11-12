@@ -5,6 +5,7 @@
  * al RAG (evita CORS y gestiona credenciales de forma segura).
  */
 import { NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
 
 const RAG_API_URL = process.env.RAG_API_URL ?? "http://localhost:8000";
 const RAG_APP_ID = process.env.RAG_APP_ID ?? "";
@@ -12,6 +13,11 @@ const RAG_API_KEY = process.env.RAG_API_KEY ?? "";
 
 export async function POST(req: NextRequest) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ detail: "No autorizado" }, { status: 401 });
+    }
+
     const body = await req.json();
 
     const headers: Record<string, string> = {

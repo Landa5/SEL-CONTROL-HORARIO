@@ -17,8 +17,11 @@
 /.next/
 /out/
 
-# production
-/build
+# service worker / PWA generated files
+/public/sw.js*
+/public/swe-worker*
+/public/workbox*
+
 
 # misc
 .DS_Store
@@ -39,3 +42,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# database backups and sensitive data
+/backups/
+/scripts/data_dump.json
+/facturas-taller/
+active_employees.txt
+*.db
+*.db-journal
+
+# legacy generated clients
+/prisma-client-sqlite/
+/src/generated/
+
+# scratch and logs
+/scratch/
+*.log
+*output*.txt
+*lint*.txt
+*build*.txt
+*test*.txt
+

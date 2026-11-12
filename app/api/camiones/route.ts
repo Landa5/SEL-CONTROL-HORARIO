@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getSession } from '@/lib/auth';
 
 export async function GET(request: Request) {
+    const session: any = await getSession();
+    if (!session) {
+        return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -24,6 +30,7 @@ export async function GET(request: Request) {
                     }
                 }
             });
+            if (!camion) return NextResponse.json({ error: 'Camión no encontrado' }, { status: 404 });
             return NextResponse.json(camion);
         } catch (error) {
             console.error('Error fetching camion:', error);
@@ -40,6 +47,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
     try {
+        const session: any = await getSession();
+        if (!session || !['ADMIN', 'OFICINA'].includes(session.rol)) {
+            return NextResponse.json({ error: 'Acceso denegado. Se requiere rol de Administración u Oficina.' }, { status: 403 });
+        }
+
         const data = await request.json();
         const { matricula } = data;
 
@@ -78,6 +90,11 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
     try {
+        const session: any = await getSession();
+        if (!session || !['ADMIN', 'OFICINA', 'MECANICO'].includes(session.rol)) {
+            return NextResponse.json({ error: 'Acceso denegado.' }, { status: 403 });
+        }
+
         const data = await request.json();
         const { id, ...rest } = data;
         const camion = await prisma.camion.update({
@@ -98,6 +115,11 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
     try {
+        const session: any = await getSession();
+        if (!session || session.rol !== 'ADMIN') {
+            return NextResponse.json({ error: 'Acceso denegado. Solo administradores pueden eliminar camiones.' }, { status: 403 });
+        }
+
         const { searchParams } = new URL(request.url);
         const id = searchParams.get('id');
         if (!id) return NextResponse.json({ error: 'ID requerido' }, { status: 400 });

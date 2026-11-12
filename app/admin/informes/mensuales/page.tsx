@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Download, Truck } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { downloadExcelWorkbook } from '@/lib/excel';
 import MonthlyEmployeeView from '@/components/admin/MonthlyEmployeeView';
 
 // --- MAIN PAGE COMPONENT (The "Hydration Firewall") ---
@@ -99,7 +100,65 @@ function MonthlyReportClient() {
         return `${h}h ${m}m`;
     };
 
-    const { totals, averages, averagesByRole, ranking } = stats || {};
+    const { totals, averages, averagesByRole, ranking, camionRanking } = stats || {};
+
+    const handleExportExcel = () => {
+        if (!stats) return;
+
+        // Sheet 1: Empleados
+        const empRows = (ranking || []).map((emp: any) => ({
+            Empleado: emp.empleado,
+            Rol: emp.rol,
+            'Días Trabajados': emp.diasTrabajados,
+            'Total Horas': Number((emp.horas || 0).toFixed(2)),
+            'Media H/Día': Number((emp.mediaHorasDia || 0).toFixed(2)),
+            'Total KM': emp.km || 0,
+            'Media KM/Día': Math.round(emp.mediaKmDia || 0),
+            'Litros Repostados': emp.litros || 0,
+            'Consumo (L/100km)': Number((emp.consumoMedio || 0).toFixed(2)),
+            Viajes: emp.viajes || 0,
+            Descargas: emp.descargas || 0
+        }));
+
+        // Sheet 2: Flota Camiones
+        const truckRows = (camionRanking || []).map((c: any) => ({
+            Matrícula: c.matricula,
+            Modelo: c.modelo,
+            Salidas: c.salidas,
+            'Total KM': c.km,
+            'Litros Gasoil': c.litros,
+            'Consumo (L/100km)': Number((c.consumoMedio || 0).toFixed(2)),
+            Viajes: c.viajes,
+            Descargas: c.descargas,
+            'Rellenos Aceite': c.aceiteCount,
+            'Litros Aceite': c.litrosAceite,
+            'Hidráulico': c.hidraulicoCount,
+            'Refrigerante': c.refrigeranteCount,
+            'Lavados': c.lavadoCount
+        }));
+
+        // Sheet 3: KPIs y Roles
+        const roleRows = (averagesByRole || []).map((r: any) => ({
+            Rol: r.rol,
+            'Total Horas': Number((r.totalHoras || 0).toFixed(2)),
+            'Media Horas/Día': Number((r.horasPorDia || 0).toFixed(2)),
+            'Total KM': r.totalKm || 0,
+            'Media KM/Día': Math.round(r.kmPorDia || 0),
+            'Consumo Medio (L/100km)': Number((r.consumoMedio || 0).toFixed(2))
+        }));
+
+        downloadExcelWorkbook(`Informe_Mensual_SEL_${year}_${String(month).padStart(2, '0')}.xlsx`, [
+            { name: 'Empleados', rows: empRows },
+            { name: 'Flota_Camiones', rows: truckRows },
+            { name: 'Roles_KPIs', rows: roleRows }
+        ]);
+    };
+
+    const handleSelectEmployeeFromGlobal = (empId: number) => {
+        if (!empId) return;
+        setSelectedEmployeeId(empId);
+        setActiveTab('INDIVIDUAL');
+    };
 
     return (
         <div className="space-y-8 pb-12 animate-in fade-in duration-500">
@@ -109,7 +168,15 @@ function MonthlyReportClient() {
                     <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Informe Mensual</h1>
                     <p className="text-gray-500 text-sm">Análisis de productividad y costes operativos.</p>
                 </div>
-                <div className="flex gap-4">
+                <div className="flex flex-wrap items-center gap-3">
+                    <button
+                        onClick={handleExportExcel}
+                        disabled={!stats}
+                        className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold text-sm hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-sm"
+                    >
+                        <Download className="w-4 h-4" />
+                        Exportar Excel (.xlsx)
+                    </button>
                     <select
                         value={month}
                         onChange={(e) => setMonth(parseInt(e.target.value))}
@@ -241,7 +308,10 @@ function MonthlyReportClient() {
                             </div>
 
                             {/* EMPLOYEE RANKING */}
-                            <h2 className="text-lg font-black text-gray-800 uppercase tracking-widest border-b pb-2 mt-8">Desglose por Empleado</h2>
+                            <div className="flex justify-between items-end border-b pb-2 mt-8">
+                                <h2 className="text-lg font-black text-gray-800 uppercase tracking-widest">Desglose por Empleado</h2>
+                                <span className="text-xs text-blue-600 font-semibold">Haz clic en un empleado para abrir su Detalle Individual y Nómina</span>
+                            </div>
                             <Card>
                                 <CardContent className="p-0 overflow-hidden">
                                     <table className="w-full text-left text-sm">
@@ -260,9 +330,13 @@ function MonthlyReportClient() {
                                         </thead>
                                         <tbody>
                                             {ranking?.map((emp: any, idx: number) => (
-                                                <tr key={idx} className="border-b last:border-0 hover:bg-gray-50">
+                                                <tr
+                                                    key={idx}
+                                                    onClick={() => handleSelectEmployeeFromGlobal(emp.empleadoId)}
+                                                    className="border-b last:border-0 hover:bg-blue-50/60 cursor-pointer transition-colors"
+                                                >
                                                     <td className="p-4">
-                                                        <p className="font-bold text-gray-900">{emp.empleado}</p>
+                                                        <p className="font-bold text-blue-900 hover:underline">{emp.empleado}</p>
                                                         <p className="text-[10px] uppercase font-bold text-gray-400">{emp.rol}</p>
                                                     </td>
                                                     <td className="p-4 text-center hidden md:table-cell">{emp.diasTrabajados}</td>
@@ -270,7 +344,7 @@ function MonthlyReportClient() {
                                                     <td className="p-4 text-center text-gray-500 hidden md:table-cell">{(emp.mediaHorasDia || 0).toFixed(1)} h</td>
                                                     <td className="p-4 text-center font-mono">{emp.km}</td>
                                                     <td className="p-4 text-center text-gray-500 hidden md:table-cell">{Math.round(emp.mediaKmDia || 0)}</td>
-                                                    <td className="p-4 text-center font-bold text-purple-700 hidden md:table-cell">{(emp.consumoMedio || 0).toFixed(1)} L</td>
+                                                    <td className="p-4 text-center font-bold text-purple-700 hidden md:table-cell">{(emp.consumoMedio || 0).toFixed(1)} L/100</td>
                                                     <td className="p-4 text-center">{emp.viajes}</td>
                                                     <td className="p-4 text-center">{emp.descargas}</td>
                                                 </tr>
@@ -279,6 +353,84 @@ function MonthlyReportClient() {
                                     </table>
                                 </CardContent>
                             </Card>
+
+                            {/* TRUCK PERFORMANCE & CONSUMPTION RANKING */}
+                            {camionRanking && camionRanking.length > 0 && (
+                                <>
+                                    <h2 className="text-lg font-black text-gray-800 uppercase tracking-widest border-b pb-2 mt-8 flex items-center gap-2">
+                                        <Truck className="w-5 h-5 text-indigo-600" />
+                                        Rendimiento, Consumo y Mantenimiento por Camión
+                                    </h2>
+                                    <Card>
+                                        <CardContent className="p-0 overflow-x-auto">
+                                            <table className="w-full text-left text-sm">
+                                                <thead className="bg-indigo-50/60 border-b">
+                                                    <tr>
+                                                        <th className="p-4 font-bold text-indigo-950">Matrícula / Vehículo</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Salidas</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Total KM</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Repostado (L)</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Consumo Medio</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Viajes</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Descargas</th>
+                                                        <th className="p-4 font-bold text-indigo-950 text-center">Mantenimiento Conductor</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {camionRanking.map((c: any) => (
+                                                        <tr key={c.camionId} className="border-b last:border-0 hover:bg-gray-50">
+                                                            <td className="p-4">
+                                                                <p className="font-black text-indigo-900 font-mono">{c.matricula}</p>
+                                                                <p className="text-[11px] text-gray-400">{c.modelo}</p>
+                                                            </td>
+                                                            <td className="p-4 text-center font-semibold">{c.salidas}</td>
+                                                            <td className="p-4 text-center font-mono font-bold">{(c.km || 0).toLocaleString()} km</td>
+                                                            <td className="p-4 text-center font-mono">{(c.litros || 0).toLocaleString()} L</td>
+                                                            <td className="p-4 text-center">
+                                                                <span className={`px-2 py-1 rounded font-bold text-xs ${
+                                                                    c.consumoMedio > 45 ? 'bg-red-100 text-red-700' :
+                                                                    c.consumoMedio > 0 ? 'bg-purple-100 text-purple-800' : 'text-gray-400'
+                                                                }`}>
+                                                                    {c.consumoMedio > 0 ? `${c.consumoMedio.toFixed(1)} L/100km` : '—'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="p-4 text-center">{c.viajes}</td>
+                                                            <td className="p-4 text-center">{c.descargas}</td>
+                                                            <td className="p-4 text-center">
+                                                                <div className="flex flex-wrap justify-center gap-1 text-[11px]">
+                                                                    {c.aceiteCount > 0 && (
+                                                                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">
+                                                                            🛢️ Aceite ({c.aceiteCount}{c.litrosAceite > 0 ? ` · ${c.litrosAceite}L` : ''})
+                                                                        </span>
+                                                                    )}
+                                                                    {c.hidraulicoCount > 0 && (
+                                                                        <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold">
+                                                                            ⚙️ Hidr. ({c.hidraulicoCount})
+                                                                        </span>
+                                                                    )}
+                                                                    {c.refrigeranteCount > 0 && (
+                                                                        <span className="bg-cyan-100 text-cyan-800 px-2 py-0.5 rounded font-bold">
+                                                                            🌡️ Refr. ({c.refrigeranteCount})
+                                                                        </span>
+                                                                    )}
+                                                                    {c.lavadoCount > 0 && (
+                                                                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
+                                                                            🚿 Lavado ({c.lavadoCount})
+                                                                        </span>
+                                                                    )}
+                                                                    {c.aceiteCount === 0 && c.hidraulicoCount === 0 && c.refrigeranteCount === 0 && c.lavadoCount === 0 && (
+                                                                        <span className="text-gray-300">—</span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </CardContent>
+                                    </Card>
+                                </>
+                            )}
                         </>
                     )}
                 </div>
@@ -303,6 +455,7 @@ function MonthlyReportClient() {
 
                     {selectedEmployeeId ? (
                         <MonthlyEmployeeView
+                            key={`${selectedEmployeeId}-${year}-${month}`}
                             employeeId={selectedEmployeeId}
                             year={year}
                             month={month}

@@ -62,6 +62,36 @@ export async function GET(request: Request) {
             }
         });
 
+        // 4b. Fetch Tachograph Daily Summaries linked to this employee for the month
+        const tachoDrivers = await prisma.tachographDriver.findMany({
+            where: { linkedEmployeeId: parseInt(employeeId) },
+            select: { id: true, fullName: true, cardNumber: true }
+        });
+        const tachoDriverIds = tachoDrivers.map(d => d.id);
+        const tachoSummaries = tachoDriverIds.length > 0
+            ? await prisma.tachographDailySummary.findMany({
+                where: {
+                    driverId: { in: tachoDriverIds },
+                    date: { gte: startDate, lte: endDate }
+                }
+            })
+            : [];
+
+        const tachoByDate: Record<string, { drivingMinutes: number; workMinutes: number; availabilityMinutes: number }> = {};
+        let totalTachoDrivingMin = 0;
+        let totalTachoWorkMin = 0;
+        tachoSummaries.forEach(ts => {
+            const dKey = format(new Date(ts.date), 'yyyy-MM-dd');
+            if (!tachoByDate[dKey]) {
+                tachoByDate[dKey] = { drivingMinutes: 0, workMinutes: 0, availabilityMinutes: 0 };
+            }
+            tachoByDate[dKey].drivingMinutes += (ts.totalDrivingMinutes || 0);
+            tachoByDate[dKey].workMinutes += (ts.totalDrivingMinutes || 0) + (ts.totalOtherWorkMinutes || 0);
+            tachoByDate[dKey].availabilityMinutes += (ts.totalAvailabilityMinutes || 0);
+            totalTachoDrivingMin += (ts.totalDrivingMinutes || 0);
+            totalTachoWorkMin += (ts.totalDrivingMinutes || 0) + (ts.totalOtherWorkMinutes || 0);
+        });
+
         // Helper to parse "HH:MM"
         const parseTimeStr = (timeStr: string | null) => {
             if (!timeStr) return null;
@@ -180,6 +210,61 @@ export async function GET(request: Request) {
                 return Math.max(0, total);
             };
 
+            // Helper: Resolve effective shift end time (avoiding multi-day auto-close or past unclosed shifts inflating hours)
+            const resolveShiftEnd = (shift: any): Date => {
+                const shiftStart = new Date(shift.horaEntrada);
+                const maxReasonableMs = 16 * 60 * 60 * 1000; // 16 hours max for a single shift
+
+                // Check latest UsoCamion.horaFin within 16h of shiftStart
+                let maxUsoFin: Date | null = null;
+                if (Array.isArray(shift.usosCamion)) {
+                    for (const u of shift.usosCamion) {
+                        if (u.horaFin) {
+                            const fin = new Date(u.horaFin);
+                            const diff = fin.getTime() - shiftStart.getTime();
+                            if (diff > 0 && diff <= maxReasonableMs) {
+                                if (!maxUsoFin || fin > maxUsoFin) maxUsoFin = fin;
+                            }
+                        }
+                    }
+                }
+
+                const isAutoClosed = typeof shift.observaciones === 'string' && shift.observaciones.includes('Cierre automático');
+
+                if (shift.horaSalida && !isAutoClosed) {
+                    const rawEnd = new Date(shift.horaSalida);
+                    const diff = rawEnd.getTime() - shiftStart.getTime();
+                    if (diff >= 0 && diff <= maxReasonableMs) {
+                        return rawEnd;
+                    }
+                }
+
+                // Fallback 1: Truck route end time (driver clicked "Terminar Ruta")
+                if (maxUsoFin) return maxUsoFin;
+
+                // Fallback 2: Stored totalHoras if reasonable
+                if (typeof shift.totalHoras === 'number' && shift.totalHoras > 0 && shift.totalHoras <= 16) {
+                    return new Date(shiftStart.getTime() + shift.totalHoras * 60 * 60 * 1000);
+                }
+
+                // Fallback 3: If shift is from today and still open, use current time
+                if (!shift.horaSalida && isSameDay(shiftStart, new Date())) {
+                    const now = new Date();
+                    if (now.getTime() - shiftStart.getTime() <= maxReasonableMs) return now;
+                }
+
+                // Fallback 4: Standard daily hours from entry
+                return new Date(shiftStart.getTime() + standardDailyHours * 60 * 60 * 1000);
+            };
+
+            const getUsoKm = (u: any): number => {
+                if (typeof u.kmRecorridos === 'number' && u.kmRecorridos > 0) return u.kmRecorridos;
+                if (typeof u.kmFinal === 'number' && typeof u.kmInicial === 'number' && u.kmFinal > u.kmInicial) {
+                    return u.kmFinal - u.kmInicial;
+                }
+                return 0;
+            };
+
             // Find ALL Shifts for this day (may have morning + afternoon)
             // BUG FIX: Previously used shifts.find() which only returned the FIRST shift,
             // ignoring a second shift (e.g., afternoon). Now we use filter() to get ALL.
@@ -192,6 +277,9 @@ export async function GET(request: Request) {
             let kmDia = 0;
             let viajesDia = 0;
             let descargasDia = 0;
+            let litrosDia = 0;
+            let firstUsoId: number | null = null;
+            let hadAutoClose = false;
 
             if (dayShifts.length > 0) {
                 daysWorkedCount++;
@@ -202,14 +290,20 @@ export async function GET(request: Request) {
                 // Display: first entry → last exit
                 const firstShift = dayShifts[0];
                 const lastShift = dayShifts[dayShifts.length - 1];
+                const lastShiftEffectiveEnd = resolveShiftEnd(lastShift);
 
                 startStr = formatTime(new Date(firstShift.horaEntrada));
-                endStr = lastShift.horaSalida ? formatTime(new Date(lastShift.horaSalida)) : 'En curso';
+                endStr = (lastShift.horaSalida || lastShift.estado === 'CERRADA')
+                    ? formatTime(lastShiftEffectiveEnd)
+                    : (isSameDay(new Date(lastShift.horaEntrada), new Date()) ? 'En curso' : formatTime(lastShiftEffectiveEnd));
 
                 // Accumulate worked minutes from ALL shifts
                 for (const shift of dayShifts) {
+                    if (typeof shift.observaciones === 'string' && shift.observaciones.includes('Cierre automático')) {
+                        hadAutoClose = true;
+                    }
                     const shiftStart = new Date(shift.horaEntrada);
-                    const shiftEnd = shift.horaSalida ? new Date(shift.horaSalida) : new Date();
+                    const shiftEnd = resolveShiftEnd(shift);
 
                     // Strict Schedule Logic: Count hours from Schedule Start if arrived early (only for first shift)
                     let effectiveStart = shiftStart;
@@ -229,9 +323,11 @@ export async function GET(request: Request) {
                     // Accumulate truck usage from ALL shifts
                     if (shift.usosCamion && shift.usosCamion.length > 0) {
                         shift.usosCamion.forEach((u: any) => {
-                            kmDia += (u.kmRecorridos || 0);
+                            if (!firstUsoId) firstUsoId = u.id;
+                            kmDia += getUsoKm(u);
                             viajesDia += (u.viajesCount || 0);
                             descargasDia += (u.descargasCount || 0);
+                            litrosDia += (u.litrosRepostados || 0);
                         });
                     }
                 }
@@ -240,7 +336,7 @@ export async function GET(request: Request) {
                 // apply the lunch deduction as before
                 if (dayShifts.length === 1) {
                     const singleStart = new Date(firstShift.horaEntrada);
-                    const singleEnd = firstShift.horaSalida ? new Date(firstShift.horaSalida) : new Date();
+                    const singleEnd = resolveShiftEnd(firstShift);
 
                     let effectiveStart = singleStart;
                     if (emp.horaEntradaPrevista) {
@@ -267,10 +363,15 @@ export async function GET(request: Request) {
                 }
             }
 
-            // If they worked on a weekend/holiday/absence, expectedMinutes for OVERTIME calculation
-            // is debatable. Usually: Overtime = Worked - Expected.
-            // If Expected is 0, then ALL worked is Overtime. OK.
-            // But if they just worked, we count it.
+            // Detect operational anomalies for the day
+            const anomalies: string[] = [];
+            if (dayShifts.length > 0) {
+                if (workedMinutes > 12 * 60) anomalies.push('Jornada > 12h');
+                if (workedMinutes > 0 && workedMinutes < 30) anomalies.push('Jornada < 30 min');
+                if (kmDia > 600) anomalies.push(`KM elevados (${kmDia} km)`);
+                if (kmDia === 0 && (descargasDia > 0 || viajesDia > 0)) anomalies.push('0 km con actividad de ruta');
+                if (hadAutoClose) anomalies.push('Cierre automático');
+            }
 
             const overtime = Math.max(0, workedMinutes - expectedMinutes);
 
@@ -278,8 +379,11 @@ export async function GET(request: Request) {
             totalOvertimeMinutes += overtime;
             totalExpectedMinutes += expectedMinutes;
 
+            const tachoDay = tachoByDate[dateStr];
+
             return {
                 id: dayShifts[0]?.id,
+                usoId: firstUsoId,
                 date: dateStr,
                 dayType,
                 start: startStr,
@@ -290,11 +394,15 @@ export async function GET(request: Request) {
                 km: kmDia,
                 viajes: viajesDia,
                 descargas: descargasDia,
+                litros: litrosDia,
+                anomalies,
+                tachoDrivingMinutes: tachoDay?.drivingMinutes || 0,
+                tachoWorkMinutes: tachoDay?.workMinutes || 0,
                 shiftCount: dayShifts.length,
                 allShiftTimes: dayShifts.length > 1
                     ? dayShifts.map(s => {
                         const sStart = formatTime(new Date(s.horaEntrada));
-                        const sEnd = s.horaSalida ? formatTime(new Date(s.horaSalida)) : 'En curso';
+                        const sEnd = formatTime(resolveShiftEnd(s));
                         return `${sStart}-${sEnd}`;
                     }).join(', ')
                     : undefined,
@@ -304,15 +412,14 @@ export async function GET(request: Request) {
 
         // ... (previous logic for stats)
 
-        // 5. Fetch Tariffs to Calculate Incentives
-        // We need both GLOBAL tariffs (empleadoId: null) and SPECIFIC tariffs (empleadoId: this employee)
-        // Specific generally overrides global. But simpler logic: Fetch all matching this employee OR global, then map.
+        // 5. Fetch Tariffs to Calculate Incentives (Hierarchy: Empleado > Rol > Global)
         const activeTariffs = await prisma.tarifaNomina.findMany({
             where: {
                 activo: true,
                 OR: [
                     { empleadoId: parseInt(employeeId) },
-                    { empleadoId: null } // Global
+                    { empleadoId: null, rol: emp.rol },
+                    { empleadoId: null, rol: null }
                 ]
             },
             include: {
@@ -320,28 +427,23 @@ export async function GET(request: Request) {
             }
         });
 
-        // Resolve active tariff per concept (prefer active specific over global)
-        const relevantTariffs = new Map<string, number>(); // code -> value
-        activeTariffs.forEach(t => {
-            const code = t.concepto.codigo;
-            // If specific, always set. If global, set only if not set (or overwrite if we processed global first? No, we process list.)
-            // Logic: Store specific separate from global, then merge.
-        });
-
         const globalTariffs: Record<string, number> = {};
+        const roleTariffs: Record<string, number> = {};
         const specificTariffs: Record<string, number> = {};
 
         activeTariffs.forEach(t => {
             const code = t.concepto.codigo;
             if (t.empleadoId) {
                 specificTariffs[code] = t.valor;
-            } else {
+            } else if (t.rol === emp.rol) {
+                roleTariffs[code] = t.valor;
+            } else if (t.rol === null) {
                 globalTariffs[code] = t.valor;
             }
         });
 
-        // Merge: Specific overrides Global
-        const tariffs = { ...globalTariffs, ...specificTariffs };
+        // Merge: Specific overrides Role, which overrides Global
+        const tariffs = { ...globalTariffs, ...roleTariffs, ...specificTariffs };
 
         // 6. Calculate ALL totals from UsosCamion
         let verifiedKm = 0;
@@ -350,7 +452,10 @@ export async function GET(request: Request) {
         shifts.forEach(s => {
             if (s.usosCamion && s.usosCamion.length > 0) {
                 s.usosCamion.forEach((u: any) => {
-                    verifiedKm += (u.kmRecorridos || 0);
+                    const km = (typeof u.kmRecorridos === 'number' && u.kmRecorridos > 0)
+                        ? u.kmRecorridos
+                        : ((typeof u.kmFinal === 'number' && typeof u.kmInicial === 'number' && u.kmFinal > u.kmInicial) ? (u.kmFinal - u.kmInicial) : 0);
+                    verifiedKm += km;
                     verifiedDescargas += (u.descargasCount || 0);
                     verifiedViajes += (u.viajesCount || 0);
                 });
@@ -531,7 +636,31 @@ export async function GET(request: Request) {
             });
         }
 
-        // Summary
+        // --- N. PRODUCTIVIDAD_FIJA ---
+        if (tariffs['PRODUCTIVIDAD_FIJA'] && tariffs['PRODUCTIVIDAD_FIJA'] > 0) {
+            incentives.push({
+                codigo: 'PRODUCTIVIDAD_FIJA',
+                nombre: 'Productividad Fija',
+                cantidad: 1,
+                precio: tariffs['PRODUCTIVIDAD_FIJA'],
+                total: tariffs['PRODUCTIVIDAD_FIJA'],
+                tipo: 'FIJO'
+            });
+        }
+
+        // --- O. INCENTIVOS ---
+        if (tariffs['INCENTIVOS'] && tariffs['INCENTIVOS'] > 0) {
+            incentives.push({
+                codigo: 'INCENTIVOS',
+                nombre: 'Incentivos',
+                cantidad: 1,
+                precio: tariffs['INCENTIVOS'],
+                total: tariffs['INCENTIVOS'],
+                tipo: 'FIJO'
+            });
+        }
+
+        // Summary & Tachograph / Gestoría Config
         const stats = {
             employee,
             period: { month, year },
@@ -546,6 +675,21 @@ export async function GET(request: Request) {
                 totalViajes: verifiedViajes,
                 diasVacaciones,
                 diasAusencia
+            },
+            tachographSummary: {
+                linkedDriver: tachoDrivers[0] || null,
+                daysWithData: Object.keys(tachoByDate).length,
+                drivingHours: Math.round((totalTachoDrivingMin / 60) * 100) / 100,
+                totalWorkHours: Math.round((totalTachoWorkMin / 60) * 100) / 100
+            },
+            gestoriaConfig: {
+                dietaTope: tariffs['DIETA_TOPE'] ?? 375,
+                dietasBase: tariffs['DIETAS'] ?? 0,
+                pctProductividad: tariffs['PORCENTAJE_PRODUCTIVIDAD'] || 50,
+                descuentoVacaciones: tariffs['DESCUENTO_VACACIONES'] ?? 0,
+                descuentoAusencia: tariffs['DESCUENTO_AUSENCIA'] ?? 0,
+                productividadFija: tariffs['PRODUCTIVIDAD_FIJA'] ?? 0,
+                incentivosFijos: tariffs['INCENTIVOS'] ?? 0
             },
             shifts: shiftDetails,
             incentives: incentives,
