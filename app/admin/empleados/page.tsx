@@ -1,11 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
-import { Trash2, Edit, Plus, User, Briefcase, Lock, Phone, Mail, Award, FileText } from 'lucide-react';
+import { Trash2, Edit, Plus, User, Briefcase, Lock, Phone, Mail, Award, FileText, Eye } from 'lucide-react';
 import DocumentManager from '@/components/documents/DocumentManager';
+import { DataTable, DataTableColumn } from '@/components/ui/DataTable';
+import { toast } from 'sonner';
 
 // Enum simulation for dropdown
 const ROLES = [
@@ -17,6 +20,7 @@ const ROLES = [
 ];
 
 export default function AdminEmpleados() {
+    const router = useRouter();
     const [empleados, setEmpleados] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -101,14 +105,15 @@ export default function AdminEmpleados() {
             });
 
             if (res.ok) {
+                toast.success(editingId ? 'Ficha de empleado actualizada' : 'Nuevo empleado dado de alta');
                 closeModal();
                 fetchEmpleados();
             } else {
                 const err = await res.json();
-                alert(err.error || 'Error al guardar');
+                toast.error(err.error || 'Error al guardar');
             }
         } catch (error) {
-            alert('Error de conexión');
+            toast.error('Error de conexión');
         }
     };
 
@@ -118,12 +123,13 @@ export default function AdminEmpleados() {
             const res = await fetch(`/api/empleados?id=${id}`, { method: 'DELETE' });
             if (!res.ok) {
                 const err = await res.json();
-                alert(err.error || 'Error al eliminar');
+                toast.error(err.error || 'Error al eliminar');
             } else {
+                toast.success('Empleado dado de baja');
                 fetchEmpleados();
             }
         } catch (e) {
-            alert('Error de conexión al eliminar');
+            toast.error('Error de conexión al eliminar');
         }
     };
 
@@ -190,120 +196,234 @@ export default function AdminEmpleados() {
         setEditingId(null);
     };
 
+    const columns: DataTableColumn<any>[] = [
+        {
+            key: 'nombre',
+            header: 'Empleado',
+            sortable: true,
+            getValue: emp => `${emp.nombre} ${emp.apellidos || ''}`,
+            exportValue: emp => `${emp.nombre} ${emp.apellidos || ''}`.trim(),
+            render: emp => (
+                <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold shrink-0">
+                        {emp.nombre?.charAt(0) || 'E'}
+                    </div>
+                    <div>
+                        <button
+                            onClick={e => {
+                                e.stopPropagation();
+                                router.push(`/admin/empleados/${emp.id}`);
+                            }}
+                            className="font-bold text-gray-900 hover:text-blue-600 text-left transition-colors"
+                        >
+                            {emp.nombre} {emp.apellidos}
+                        </button>
+                        <p className="text-xs text-gray-500 font-mono">{emp.dni || 'Sin DNI'}</p>
+                    </div>
+                </div>
+            )
+        },
+        {
+            key: 'rol',
+            header: 'Rol / Usuario',
+            sortable: true,
+            exportValue: emp => `${emp.rol} (@${emp.usuario})`,
+            render: emp => (
+                <div className="space-y-1">
+                    <span
+                        className={`inline-flex px-2 py-0.5 rounded text-[11px] font-bold ${
+                            emp.rol === 'ADMIN'
+                                ? 'bg-purple-100 text-purple-800'
+                                : emp.rol === 'MECANICO'
+                                ? 'bg-orange-100 text-orange-800'
+                                : emp.rol === 'OFICINA'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-green-100 text-green-800'
+                        }`}
+                    >
+                        {emp.rol}
+                    </span>
+                    <div className="text-xs text-gray-500 font-mono bg-gray-100 px-1.5 py-0.5 rounded w-fit">
+                        @{emp.usuario}
+                    </div>
+                </div>
+            )
+        },
+        {
+            key: 'telefono',
+            header: 'Contacto',
+            exportValue: emp => [emp.telefono, emp.email].filter(Boolean).join(' / '),
+            render: emp => (
+                <div className="text-xs space-y-1">
+                    {emp.telefono && (
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                            <Phone className="w-3 h-3 text-gray-400" /> {emp.telefono}
+                        </div>
+                    )}
+                    {emp.email && (
+                        <div className="flex items-center gap-1.5 text-slate-600">
+                            <Mail className="w-3 h-3 text-gray-400" /> {emp.email}
+                        </div>
+                    )}
+                    {!emp.telefono && !emp.email && <span className="text-gray-400 italic">Sin contacto</span>}
+                </div>
+            )
+        },
+        {
+            key: 'documentacion',
+            header: 'Documentación y Vigencia',
+            exportValue: emp => {
+                if (!emp.perfilProfesional) return 'Sin datos';
+                const c = emp.perfilProfesional.carnetCaducidad
+                    ? new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString('es-ES')
+                    : '-';
+                return `${emp.perfilProfesional.carnetTipo || ''} Exp: ${c}`;
+            },
+            render: emp =>
+                emp.perfilProfesional ? (
+                    <div className="space-y-1 text-xs">
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold bg-gray-100 px-1.5 py-0.5 rounded">
+                                {emp.perfilProfesional.carnetTipo || 'Sin tipo'}
+                            </span>
+                            {emp.perfilProfesional.carnetCaducidad ? (
+                                <span
+                                    className={
+                                        new Date(emp.perfilProfesional.carnetCaducidad) < new Date()
+                                            ? 'text-red-600 font-bold'
+                                            : 'text-gray-600'
+                                    }
+                                >
+                                    Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString('es-ES')}
+                                </span>
+                            ) : (
+                                <span className="text-red-500">Sin fecha</span>
+                            )}
+                        </div>
+                        {emp.perfilProfesional.tieneAdr && (
+                            <div className="flex items-center gap-2">
+                                <span className="font-bold bg-orange-100 text-orange-800 px-1.5 py-0.5 rounded">ADR</span>
+                                {emp.perfilProfesional.adrCaducidad ? (
+                                    <span
+                                        className={
+                                            new Date(emp.perfilProfesional.adrCaducidad) < new Date()
+                                                ? 'text-red-600 font-bold'
+                                                : 'text-gray-600'
+                                        }
+                                    >
+                                        Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString('es-ES')}
+                                    </span>
+                                ) : (
+                                    <span className="text-red-500">Sin fecha</span>
+                                )}
+                            </div>
+                        )}
+                        {emp.perfilProfesional.dniCaducidad && (
+                            <div className="text-gray-400 text-[10px]">
+                                DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString('es-ES')}
+                            </div>
+                        )}
+                    </div>
+                ) : emp.rol === 'CONDUCTOR' || emp.rol === 'MECANICO' ? (
+                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
+                        ⚠ Faltan Datos
+                    </span>
+                ) : (
+                    <span className="text-xs text-gray-400 italic">No requiere</span>
+                )
+        },
+        {
+            key: 'activo',
+            header: 'Estado',
+            sortable: true,
+            exportValue: emp => (emp.activo ? 'ACTIVO' : 'BAJA'),
+            render: emp => (
+                <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        emp.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'
+                    }`}
+                >
+                    {emp.activo ? 'ACTIVO' : 'BAJA'}
+                </span>
+            )
+        },
+        {
+            key: 'actions',
+            header: 'Acciones',
+            align: 'right',
+            render: emp => (
+                <div className="flex items-center justify-end gap-1.5" onClick={e => e.stopPropagation()}>
+                    <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => router.push(`/admin/empleados/${emp.id}`)}
+                        className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 text-xs gap-1"
+                        title="Abrir Ficha 360°"
+                    >
+                        <Eye className="w-3.5 h-3.5" /> 360°
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => openEdit(emp)}
+                        className="hover:bg-blue-100 text-blue-600"
+                        title="Editar"
+                    >
+                        <Edit className="w-3.5 h-3.5" />
+                    </Button>
+                    {emp.activo && (
+                        <Button
+                            size="sm"
+                            className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-100"
+                            onClick={() => handleDelete(emp.id)}
+                            title="Dar de baja"
+                        >
+                            <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                    )}
+                </div>
+            )
+        }
+    ];
+
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Gestión de Empleados</h1>
-                    <p className="text-gray-500 text-sm">Administra el personal, roles y accesos.</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Gestión de Empleados (360°)</h1>
+                    <p className="text-gray-500 text-sm">
+                        Administra el personal, roles, caducidades y accede a la ficha 360° de cada trabajador.
+                    </p>
                 </div>
                 <Button onClick={openNew} className="gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-md">
                     <Plus className="w-4 h-4" /> Nuevo Empleado
                 </Button>
             </div>
 
-            <Card className="border-none shadow-md">
-                <CardContent className="p-0 overflow-hidden rounded-xl">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-gray-100 border-b border-gray-200">
-                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Empleado</th>
-                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Contacto</th>
-                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Documentación</th>
-                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase">Rol / Usuario</th>
-                                    <th className="p-4 font-bold text-gray-600 text-sm uppercase text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-100">
-                                {empleados.map(emp => (
-                                    <tr key={emp.id} className={`hover:bg-blue-50 transition-colors ${!emp.activo ? 'opacity-50 grayscale bg-gray-50' : 'bg-white'}`}>
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold">
-                                                    {emp.nombre.charAt(0)}
-                                                </div>
-                                                <div>
-                                                    <p className="font-bold text-gray-900">{emp.nombre} {emp.apellidos}</p>
-                                                    <p className="text-xs text-gray-500 font-mono">{emp.dni}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-sm">
-                                            {emp.telefono && <div className="flex items-center gap-2"><Phone className="w-3 h-3 text-gray-400" /> {emp.telefono}</div>}
-                                            {emp.email && <div className="flex items-center gap-2"><Mail className="w-3 h-3 text-gray-400" /> {emp.email}</div>}
-                                        </td>
-                                        <td className="p-4">
-                                            {emp.perfilProfesional ? (
-                                                <div className="space-y-1 text-xs">
-                                                    {/* Carnet */}
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="font-bold bg-gray-100 px-1 rounded">
-                                                            {emp.perfilProfesional.carnetTipo || 'Sin tipo'}
-                                                        </span>
-                                                        {emp.perfilProfesional.carnetCaducidad ? (
-                                                            <span className={`${new Date(emp.perfilProfesional.carnetCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                                                Exp: {new Date(emp.perfilProfesional.carnetCaducidad).toLocaleDateString()}
-                                                            </span>
-                                                        ) : <span className="text-red-500">Sin fecha</span>}
-                                                    </div>
-                                                    {/* ADR */}
-                                                    {emp.perfilProfesional.tieneAdr && (
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="font-bold bg-orange-100 text-orange-800 px-1 rounded">ADR</span>
-                                                            {emp.perfilProfesional.adrCaducidad ? (
-                                                                <span className={`${new Date(emp.perfilProfesional.adrCaducidad) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
-                                                                    Exp: {new Date(emp.perfilProfesional.adrCaducidad).toLocaleDateString()}
-                                                                </span>
-                                                            ) : <span className="text-red-500">Sin fecha</span>}
-                                                        </div>
-                                                    )}
-                                                    {/* DNI Warning if near */}
-                                                    {emp.perfilProfesional.dniCaducidad && (
-                                                        <div className="text-gray-400 text-[10px]">
-                                                            DNI Exp: {new Date(emp.perfilProfesional.dniCaducidad).toLocaleDateString()}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                (emp.rol === 'CONDUCTOR' || emp.rol === 'MECANICO') ? (
-                                                    <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800">
-                                                        ⚠ Faltan Datos
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400 italic">No requiere</span>
-                                                )
-                                            )}
-                                        </td>
-                                        <td className="p-4">
-                                            <div className="space-y-1">
-                                                <span className={`inline-flex px-2 py-1 rounded text-xs font-bold ${emp.rol === 'ADMIN' ? 'bg-purple-100 text-purple-800' :
-                                                    emp.rol === 'MECANICO' ? 'bg-orange-100 text-orange-800' :
-                                                        emp.rol === 'OFICINA' ? 'bg-blue-100 text-blue-800' :
-                                                            'bg-green-100 text-green-800'
-                                                    }`}>
-                                                    {emp.rol}
-                                                </span>
-                                                <div className="text-xs text-gray-500 font-mono bg-gray-100 px-1 rounded w-fit">@{emp.usuario}</div>
-                                            </div>
-                                        </td>
-                                        <td className="p-4 text-right space-x-2">
-                                            <Button size="sm" variant="secondary" onClick={() => openEdit(emp)} className="hover:bg-blue-100 text-blue-600">
-                                                <Edit className="w-4 h-4" />
-                                            </Button>
-                                            {emp.activo && (
-                                                <Button size="sm" className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-100" onClick={() => handleDelete(emp.id)}>
-                                                    <Trash2 className="w-4 h-4" />
-                                                </Button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                </CardContent>
-            </Card>
+            <DataTable
+                data={empleados}
+                columns={columns}
+                loading={loading}
+                searchPlaceholder="Buscar por nombre, apellidos, DNI, usuario o teléfono..."
+                searchKeys={['nombre', 'apellidos', 'dni', 'usuario', 'telefono', 'email']}
+                filters={[
+                    {
+                        key: 'rol',
+                        label: 'Rol',
+                        options: ROLES
+                    },
+                    {
+                        key: 'activo',
+                        label: 'Estado',
+                        options: [
+                            { value: 'true', label: 'Activos' },
+                            { value: 'false', label: 'De Baja' }
+                        ]
+                    }
+                ]}
+                exportFilename="Plantilla_Empleados_SEL"
+                onRowClick={emp => router.push(`/admin/empleados/${emp.id}`)}
+            />
 
             {/* UPGRADED MODAL */}
             {isModalOpen && (

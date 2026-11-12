@@ -8,6 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/Dialog';
 import { PlusCircle, Wrench, Package, MinusCircle, RefreshCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { DataTable, DataTableColumn } from '@/components/ui/DataTable';
 
 interface Categoria {
     id: number;
@@ -215,53 +216,113 @@ export default function InventarioPage() {
                         </Dialog>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {articulos.map(art => (
-                            <Card key={art.id} className={art.cantidad <= art.stockMinimo ? 'border-red-400 shadow-sm' : 'shadow-sm'}>
-                                <CardHeader className="p-4 pb-2">
-                                    <div className="flex justify-between items-start">
-                                        <CardTitle className="text-md font-bold text-gray-800">{art.nombre}</CardTitle>
-                                        <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-semibold uppercase">{art.categoria.nombre}</span>
+                    <DataTable
+                        data={articulos.map(a => ({
+                            ...a,
+                            categoriaNombre: a.categoria?.nombre || 'Sin categoría',
+                            estadoStock: a.cantidad <= a.stockMinimo && a.stockMinimo > 0 ? 'BAJO' : 'OK'
+                        }))}
+                        loading={loading}
+                        searchPlaceholder="Buscar por nombre, referencia o ubicación..."
+                        searchKeys={['nombre', 'referencia', 'ubicacion', 'categoriaNombre']}
+                        filters={[
+                            {
+                                key: 'categoriaNombre',
+                                label: 'Categoría',
+                                options: categorias.map(c => ({ value: c.nombre, label: c.nombre }))
+                            },
+                            {
+                                key: 'estadoStock',
+                                label: 'Nivel de Stock',
+                                options: [
+                                    { value: 'BAJO', label: '⚠ Bajo Stock' },
+                                    { value: 'OK', label: 'Stock Normal' }
+                                ]
+                            }
+                        ]}
+                        exportFilename="Inventario_Taller_SEL"
+                        columns={[
+                            {
+                                key: 'nombre',
+                                header: 'Artículo / Repuesto',
+                                sortable: true,
+                                render: art => (
+                                    <div>
+                                        <p className="font-bold text-slate-900">{art.nombre}</p>
+                                        {art.referencia && (
+                                            <p className="text-xs text-slate-500 font-mono">Ref: {art.referencia}</p>
+                                        )}
                                     </div>
-                                    {art.referencia && <p className="text-xs text-gray-500">Ref: {art.referencia}</p>}
-                                </CardHeader>
-                                <CardContent className="p-4 pt-2">
-                                    <div className="flex justify-between items-end mt-2">
-                                        <div>
-                                            <div className="text-2xl font-black text-gray-800">
-                                                {art.cantidad} <span className="text-sm font-normal text-gray-500">uds</span>
+                                )
+                            },
+                            {
+                                key: 'categoriaNombre',
+                                header: 'Categoría',
+                                sortable: true,
+                                render: art => (
+                                    <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs font-bold uppercase">
+                                        {art.categoriaNombre}
+                                    </span>
+                                )
+                            },
+                            {
+                                key: 'ubicacion',
+                                header: 'Ubicación',
+                                sortable: true,
+                                render: art => <span className="text-xs text-slate-600">{art.ubicacion || '---'}</span>
+                            },
+                            {
+                                key: 'cantidad',
+                                header: 'Stock Actual',
+                                sortable: true,
+                                align: 'right',
+                                render: art => (
+                                    <div className="text-right">
+                                        <span className="text-base font-black text-slate-900">{art.cantidad}</span>{' '}
+                                        <span className="text-xs text-slate-400">uds</span>
+                                        {art.cantidad <= art.stockMinimo && art.stockMinimo > 0 && (
+                                            <div className="text-[10px] font-bold text-red-600">
+                                                ¡Bajo Stock! (Mín: {art.stockMinimo})
                                             </div>
-                                            {(art.cantidad <= art.stockMinimo && art.stockMinimo > 0) && (
-                                                <p className="text-xs text-red-500 font-bold mt-1">¡Bajo Stock! (Mín: {art.stockMinimo})</p>
-                                            )}
-                                        </div>
-
-                                        <div className="flex gap-2">
-                                            <Button size="sm" variant="outline" className="text-green-600 hover:bg-green-50 hover:text-green-700" onClick={() => {
+                                        )}
+                                    </div>
+                                )
+                            },
+                            {
+                                key: 'actions',
+                                header: 'Movimientos',
+                                align: 'right',
+                                render: art => (
+                                    <div className="flex justify-end gap-1.5">
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-emerald-700 border-emerald-200 hover:bg-emerald-50 text-xs gap-1"
+                                            onClick={() => {
                                                 setSelectedArticulo(art);
                                                 setMovTipo('ENTRADA');
                                                 setIsMovDialogOpen(true);
-                                            }}>
-                                                <PlusCircle className="h-4 w-4" />
-                                            </Button>
-                                            <Button size="sm" variant="outline" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => {
+                                            }}
+                                        >
+                                            <PlusCircle className="h-3.5 w-3.5" /> Entrada
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="text-rose-700 border-rose-200 hover:bg-rose-50 text-xs gap-1"
+                                            onClick={() => {
                                                 setSelectedArticulo(art);
                                                 setMovTipo('SALIDA');
                                                 setIsMovDialogOpen(true);
-                                            }}>
-                                                <MinusCircle className="h-4 w-4" />
-                                            </Button>
-                                        </div>
+                                            }}
+                                        >
+                                            <MinusCircle className="h-3.5 w-3.5" /> Salida
+                                        </Button>
                                     </div>
-                                </CardContent>
-                            </Card>
-                        ))}
-                        {articulos.length === 0 && (
-                            <div className="col-span-full text-center text-gray-500 py-8 bg-white border border-dashed rounded-lg">
-                                No hay artículos en el almacén. Dale a "Nuevo Artículo" para empezar.
-                            </div>
-                        )}
-                    </div>
+                                )
+                            }
+                        ]}
+                    />
                 </TabsContent>
 
                 <TabsContent value="categorias" className="mt-4 space-y-4">

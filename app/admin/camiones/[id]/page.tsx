@@ -2,19 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { format, startOfMonth, endOfMonth, parseISO, subMonths } from 'date-fns';
-import { es } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
 import {
     Truck,
-    Calendar,
     Droplet,
     Activity,
     ArrowLeft,
-    MapPin,
-    Download,
     Fuel,
-    TrendingUp,
-    Wrench
+    Wrench,
+    FileText,
+    Euro,
+    ShieldCheck,
+    ClipboardCheck
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -31,6 +30,7 @@ export default function DetalleCamionPage() {
 
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [tab, setTab] = useState<'RESUMEN' | 'RUTAS' | 'TALLER' | 'MANT_CONDUCTOR' | 'DOCUMENTOS'>('RESUMEN');
 
     useEffect(() => {
         if (id) fetchStats();
@@ -51,283 +51,385 @@ export default function DetalleCamionPage() {
         }
     };
 
-    if (loading) return <div className="p-8 text-center">Calculando estadísticas...</div>;
+    if (loading) return <div className="p-8 text-center animate-pulse text-slate-500">Cargando Ficha 360° del Camión...</div>;
     if (!data) return <div className="p-8 text-center">No se encontraron datos.</div>;
 
-    const { camion, totales, diario, registros } = data;
+    const { camion, totales, diario, registros, tareas = [], mantenimientosConductor = [] } = data;
+    const maxKm = Math.max(...(diario || []).map((d: any) => d.km), 100);
 
-    // Find max KM for chart scaling
-    const maxKm = Math.max(...diario.map((d: any) => d.km), 100);
+    const getExpBadge = (dateStr: string | null, label: string) => {
+        if (!dateStr) return <span className="px-2.5 py-1 rounded bg-slate-100 text-slate-400 text-xs">{label}: ---</span>;
+        const d = new Date(dateStr);
+        const days = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        const color =
+            days < 0
+                ? 'bg-red-100 text-red-800 border-red-300'
+                : days <= 30
+                ? 'bg-amber-100 text-amber-800 border-amber-300'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-200';
+        return (
+            <span className={`px-2.5 py-1 rounded-lg border text-xs font-bold ${color}`}>
+                {label}: {format(d, 'dd/MM/yyyy')} ({days < 0 ? 'CADUCADO' : `${days}d`})
+            </span>
+        );
+    };
 
     return (
-        <div className="p-6 space-y-8 bg-gray-50 min-h-screen">
-            {/* HEADER */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                <div className="flex items-center gap-4">
-                    <Button variant="ghost" onClick={() => router.back()}>
-                        <ArrowLeft className="w-5 h-5" />
-                    </Button>
-                    <div>
-                        <h1 className="text-3xl font-black text-gray-900 flex items-center gap-3">
-                            <Truck className="w-8 h-8 text-blue-600" />
-                            {camion.matricula}
-                        </h1>
-                        <p className="text-gray-500">{camion.marca} {camion.modelo} • {camion.nVin || 'Sin VIN'}</p>
+        <div className="space-y-6 pb-12">
+            {/* HEADER 360° */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
+                    <div className="flex items-start sm:items-center gap-4">
+                        <Button variant="ghost" onClick={() => router.push('/admin/camiones')}>
+                            <ArrowLeft className="w-5 h-5" />
+                        </Button>
+                        <div className="p-3.5 rounded-2xl bg-blue-600 text-white shadow-md">
+                            <Truck className="w-8 h-8" />
+                        </div>
+                        <div>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                                <h1 className="text-2xl font-black text-slate-900 font-mono">{camion.matricula}</h1>
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">
+                                    {camion.estado || 'DISPONIBLE'}
+                                </span>
+                                <span className="text-xs font-mono font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                    Odómetro: {(camion.kmActual || 0).toLocaleString('es-ES')} km
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                                {camion.marca} {camion.modelo} • Bastidor/VIN: {camion.nVin || 'Sin especificar'}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {getExpBadge(camion.itvVencimiento, 'ITV')}
+                                {getExpBadge(camion.seguroVencimiento, 'Seguro')}
+                                {getExpBadge(camion.tacografoVencimiento, 'Tacógrafo')}
+                                {getExpBadge(camion.adrVencimiento, 'ADR')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                            className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm text-xs"
+                            onClick={() => router.push(`/admin/tareas?q=${camion.matricula}`)}
+                        >
+                            <Wrench className="w-4 h-4 mr-1.5" />
+                            Taller / Averías
+                        </Button>
+                        <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-xl border text-xs">
+                            <input
+                                type="date"
+                                value={fromDate}
+                                onChange={e => setFromDate(e.target.value)}
+                                className="px-2 py-1 border rounded bg-white text-xs"
+                            />
+                            <span className="text-gray-400">a</span>
+                            <input
+                                type="date"
+                                value={toDate}
+                                onChange={e => setToDate(e.target.value)}
+                                className="px-2 py-1 border rounded bg-white text-xs"
+                            />
+                        </div>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <Button
-                        className="bg-orange-600 hover:bg-orange-700 text-white shadow-sm"
-                        onClick={() => router.push(`/admin/tareas/nueva?tipo=TALLER&matricula=${camion.matricula}`)}
-                    >
-                        <Wrench className="w-4 h-4 mr-2" />
-                        Reportar Avería
-                    </Button>
-
-                    {/* DATE FILTERS */}
-                    <div className="flex items-center gap-2 bg-white p-2 rounded-lg shadow-sm border">
-                        <input
-                            type="date"
-                            value={fromDate}
-                            onChange={(e) => setFromDate(e.target.value)}
-                            className="p-2 border rounded text-sm"
-                        />
-                        <span className="text-gray-400">➡️</span>
-                        <input
-                            type="date"
-                            value={toDate}
-                            onChange={(e) => setToDate(e.target.value)}
-                            className="p-2 border rounded text-sm"
-                        />
+                {/* KPI CARDS */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mt-6 pt-5 border-t border-slate-100">
+                    <div className="p-3 rounded-xl bg-blue-50/60 border border-blue-100">
+                        <p className="text-[10px] font-bold uppercase text-blue-600">KM Periodo</p>
+                        <p className="text-xl font-black text-blue-950">{totales.km.toLocaleString('es-ES')} km</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-orange-50/60 border border-orange-100">
+                        <p className="text-[10px] font-bold uppercase text-orange-700">Consumo Medio</p>
+                        <p className="text-xl font-black text-orange-950">{totales.consumoMedio} L/100</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-purple-50/60 border border-purple-100">
+                        <p className="text-[10px] font-bold uppercase text-purple-700">Litros Gasoil</p>
+                        <p className="text-xl font-black text-purple-950">{totales.litros} L</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                        <p className="text-[10px] font-bold uppercase text-emerald-700">Viajes / Descargas</p>
+                        <p className="text-xl font-black text-emerald-950">
+                            {totales.viajes} / {totales.descargas}
+                        </p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-rose-50/60 border border-rose-100">
+                        <p className="text-[10px] font-bold uppercase text-rose-700">Coste Taller Acum.</p>
+                        <p className="text-xl font-black text-rose-950">{(totales.costeTaller || 0).toLocaleString('es-ES')} €</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-100 border border-slate-200">
+                        <p className="text-[10px] font-bold uppercase text-slate-600">Coste / KM Est.</p>
+                        <p className="text-xl font-black text-slate-900">{(totales.costePorKm || 0).toFixed(2)} €/km</p>
                     </div>
                 </div>
             </div>
 
-            {/* KPI CARDS */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="border-l-4 border-l-blue-600 shadow-sm hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase">Kilómetros</p>
-                                <h3 className="text-3xl font-black text-gray-900">{totales.km.toLocaleString()}</h3>
-                            </div>
-                            <div className="p-2 bg-blue-50 rounded-lg">
-                                <Activity className="w-6 h-6 text-blue-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-orange-600 shadow-sm hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase">Consumo Medio</p>
-                                <h3 className="text-3xl font-black text-gray-900 flex items-baseline gap-1">
-                                    {totales.consumoMedio}
-                                    <span className="text-sm text-gray-500 font-normal">L/100km</span>
-                                </h3>
-                            </div>
-                            <div className="p-2 bg-orange-50 rounded-lg">
-                                <Fuel className="w-6 h-6 text-orange-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-purple-600 shadow-sm hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase">Litros Repostados</p>
-                                <h3 className="text-3xl font-black text-gray-900">{totales.litros} L</h3>
-                            </div>
-                            <div className="p-2 bg-purple-50 rounded-lg">
-                                <Droplet className="w-6 h-6 text-purple-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                <Card className="border-l-4 border-l-green-600 shadow-sm hover:shadow-md transition-shadow">
-                    <CardContent className="p-6">
-                        <div className="flex justify-between items-start">
-                            <div>
-                                <p className="text-xs font-bold text-gray-400 uppercase">Actividad</p>
-                                <div className="flex gap-4 mt-1">
-                                    <div>
-                                        <span className="text-xl font-bold">{totales.viajes}</span>
-                                        <span className="text-xs text-gray-500 ml-1">Viajes</span>
-                                    </div>
-                                    <div>
-                                        <span className="text-xl font-bold">{totales.descargas}</span>
-                                        <span className="text-xs text-gray-500 ml-1">Descargas</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="p-2 bg-green-50 rounded-lg">
-                                <TrendingUp className="w-6 h-6 text-green-600" />
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
+            {/* 360° TABS */}
+            <div className="bg-white border rounded-xl p-1.5 flex items-center gap-1 overflow-x-auto shadow-2xs">
+                {[
+                    { id: 'RESUMEN', label: 'Resumen y Evolución', icon: Activity },
+                    { id: 'RUTAS', label: `Rutas y Repostajes (${registros.length})`, icon: Fuel },
+                    { id: 'TALLER', label: `Taller y Averías (${tareas.length})`, icon: Wrench },
+                    {
+                        id: 'MANT_CONDUCTOR',
+                        label: `Mant. Conductores (${mantenimientosConductor.length})`,
+                        icon: ClipboardCheck
+                    },
+                    { id: 'DOCUMENTOS', label: 'Documentos y Ficha Técnica', icon: FileText }
+                ].map(t => {
+                    const Icon = t.icon;
+                    return (
+                        <button
+                            key={t.id}
+                            onClick={() => setTab(t.id as any)}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
+                                tab === t.id
+                                    ? 'bg-blue-600 text-white shadow-xs'
+                                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                            }`}
+                        >
+                            <Icon className="w-3.5 h-3.5" />
+                            <span>{t.label}</span>
+                        </button>
+                    );
+                })}
             </div>
 
-            {/* CHARTS SECTION */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* DAILY KM CHART */}
-                <Card className="lg:col-span-2 shadow-sm">
+            {/* TAB 1: RESUMEN */}
+            {tab === 'RESUMEN' && (
+                <Card className="shadow-xs">
                     <CardHeader>
-                        <CardTitle>Evolución Diaria (KM)</CardTitle>
+                        <CardTitle className="text-base font-bold text-gray-800">
+                            Evolución Diaria de Kilómetros y Repostaje
+                        </CardTitle>
                     </CardHeader>
                     <CardContent>
                         {diario.length === 0 ? (
-                            <div className="h-64 flex items-center justify-center text-gray-400">Sin datos para mostrar</div>
+                            <p className="text-center text-gray-400 py-8">Sin actividad en este rango de fechas.</p>
                         ) : (
-                            <div className="h-64 flex items-end gap-2 overflow-x-auto pb-2">
-                                {diario.map((day: any) => {
-                                    const heightPercentage = (day.km / maxKm) * 100;
-                                    return (
-                                        <div key={day.date} className="group relative flex flex-col items-center gap-1 min-w-[40px]">
-                                            <div
-                                                className="w-8 bg-blue-500 rounded-t hover:bg-blue-600 transition-all relative"
-                                                style={{ height: `${heightPercentage}%` }}
-                                            >
-                                                {/* Tooltip */}
-                                                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-black text-white text-xs py-1 px-2 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
-                                                    <p className="font-bold">{day.km} KM</p>
-                                                    <p className="text-[10px] text-gray-300">{format(parseISO(day.date), 'dd/MM')}</p>
-                                                    {day.litros > 0 && <p className="text-[10px] text-orange-300">{day.litros} L</p>}
-                                                </div>
-                                            </div>
-                                            <span className="text-[10px] text-gray-400 rotate-0">
-                                                {format(parseISO(day.date), 'dd')}
+                            <div className="space-y-3">
+                                {diario.map((day: any) => (
+                                    <div key={day.date} className="space-y-1">
+                                        <div className="flex justify-between text-xs text-gray-600">
+                                            <span className="font-bold">
+                                                {format(new Date(day.date), 'dd MMM yyyy')} ({day.conductores.join(', ')})
+                                            </span>
+                                            <span className="font-mono font-bold">
+                                                {day.km} km {day.litros > 0 ? `• ${day.litros}L` : ''}
                                             </span>
                                         </div>
-                                    );
-                                })}
+                                        <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden flex">
+                                            <div
+                                                className="bg-blue-600 h-full rounded-full transition-all duration-500"
+                                                style={{ width: `${(day.km / maxKm) * 100}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         )}
                     </CardContent>
                 </Card>
+            )}
 
-                {/* CONSUMPTION SUMMARY */}
-                <Card className="shadow-sm bg-gradient-to-br from-slate-900 to-slate-800 text-white border-0">
-                    <CardContent className="p-8 flex flex-col justify-center h-full">
-                        <h3 className="text-lg font-medium text-slate-300 mb-6">Eficiencia del Periodo</h3>
-
-                        <div className="space-y-6">
-                            <div>
-                                <div className="flex justify-between items-end mb-1">
-                                    <span className="text-sm text-slate-400">Rendimiento (KM/L)</span>
-                                    <span className="text-2xl font-bold">
-                                        {totales.litros > 0 ? (totales.km / totales.litros).toFixed(2) : '0'}
-                                        <span className="text-sm text-slate-500 ml-1">km/l</span>
-                                    </span>
-                                </div>
-                                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                                    <div className="h-full bg-emerald-500 w-3/4"></div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <div className="flex justify-between items-end mb-1">
-                                    <span className="text-sm text-slate-400">Intensidad de Uso</span>
-                                    <span className="text-2xl font-bold">
-                                        {diario.length}
-                                        <span className="text-sm text-slate-500 ml-1">días</span>
-                                    </span>
-                                </div>
-                                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                                    {/* Simple visual based on days in range (approx 30 days) */}
-                                    <div className="h-full bg-blue-500" style={{ width: `${Math.min((diario.length / 30) * 100, 100)}%` }}></div>
-                                </div>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* DOCUMENTATION SECTION */}
-            <Card className="shadow-sm">
-                <CardHeader>
-                    <CardTitle>Gestión Documental</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {id ? (
-                        <DocumentManager entityId={Number(id)} entityType="CAMION" />
-                    ) : (
-                        <p>Cargando...</p>
-                    )}
-                </CardContent>
-            </Card>
-
-            {/* DETAILED TABLE */}
-            <Card className="shadow-sm">
-                <CardHeader>
-                    <CardTitle>Registro Detallado</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div className="overflow-x-auto">
+            {/* TAB 2: RUTAS */}
+            {tab === 'RUTAS' && (
+                <Card className="shadow-xs">
+                    <CardContent className="p-0 overflow-x-auto">
                         <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-50 text-gray-500 uppercase font-bold text-xs">
+                            <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
                                 <tr>
-                                    <th className="p-4 rounded-tl-lg">Fecha</th>
-                                    <th className="p-4">Conductor</th>
-                                    <th className="p-4 text-center">Horario</th>
-                                    <th className="p-4 text-center">KM Recorridos</th>
-                                    <th className="p-4 text-center">Repostaje</th>
-                                    <th className="p-4 text-right rounded-tr-lg">Actividad</th>
+                                    <th className="px-4 py-3">Fecha</th>
+                                    <th className="px-4 py-3">Conductor</th>
+                                    <th className="px-4 py-3">Horario</th>
+                                    <th className="px-4 py-3 text-right">KM Inicio</th>
+                                    <th className="px-4 py-3 text-right">KM Fin</th>
+                                    <th className="px-4 py-3 text-right">Total KM</th>
+                                    <th className="px-4 py-3 text-center">Viajes / Desc.</th>
+                                    <th className="px-4 py-3 text-right">Repostado</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {registros.map((reg: any) => (
-                                    <tr key={reg.id} className="hover:bg-blue-50/50 transition-colors group">
-                                        <td className="p-4 font-medium text-gray-900">
-                                            {format(parseISO(reg.horaInicio), 'dd MMM yyyy', { locale: es })}
-                                        </td>
-                                        <td className="p-4 text-gray-600">
-                                            {reg.jornada?.empleado?.nombre} {reg.jornada?.empleado?.apellidos}
-                                        </td>
-                                        <td className="p-4 text-center text-gray-500">
-                                            {format(parseISO(reg.horaInicio), 'HH:mm')} -
-                                            {reg.horaFin ? format(parseISO(reg.horaFin), 'HH:mm') : '...'}
-                                        </td>
-                                        <td className="p-4 text-center font-bold text-blue-700">
-                                            {reg.kmRecorridos} km
-                                        </td>
-                                        <td className="p-4 text-center">
-                                            {reg.litrosRepostados > 0 ? (
-                                                <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded font-bold">
-                                                    {reg.litrosRepostados} L
-                                                </span>
-                                            ) : (
-                                                <span className="text-gray-300">-</span>
-                                            )}
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {reg.viajesCount > 0 && (
-                                                    <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">
-                                                        {reg.viajesCount} Viajes
+                                {registros.map((reg: any) => {
+                                    const kmRec =
+                                        reg.kmRecorridos ||
+                                        (reg.kmFinal && reg.kmInicial ? Math.max(0, reg.kmFinal - reg.kmInicial) : 0);
+                                    return (
+                                        <tr key={reg.id} className="hover:bg-gray-50/50">
+                                            <td className="px-4 py-3 font-medium">
+                                                {format(new Date(reg.horaInicio), 'dd/MM/yyyy')}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {reg.jornada?.empleado
+                                                    ? `${reg.jornada.empleado.nombre} ${reg.jornada.empleado.apellidos || ''}`
+                                                    : 'Desconocido'}
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-500 font-mono text-xs">
+                                                {format(new Date(reg.horaInicio), 'HH:mm')} -{' '}
+                                                {reg.horaFin ? format(new Date(reg.horaFin), 'HH:mm') : 'En curso'}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-mono text-gray-500">
+                                                {reg.kmInicial}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-mono text-gray-500">
+                                                {reg.kmFinal || '-'}
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-bold text-blue-600 font-mono">
+                                                {kmRec > 0 ? `+${kmRec} km` : '-'}
+                                            </td>
+                                            <td className="px-4 py-3 text-center font-mono text-xs">
+                                                {reg.viajesCount || 0}v / {reg.descargasCount || 0}d
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                {reg.litrosRepostados > 0 ? (
+                                                    <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold text-xs">
+                                                        {reg.litrosRepostados} L
                                                     </span>
+                                                ) : (
+                                                    '-'
                                                 )}
-                                                {reg.descargasCount > 0 && (
-                                                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs">
-                                                        {reg.descargasCount} Desc.
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
-                    </div>
-                </CardContent>
-            </Card>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* TAB 3: TALLER Y AVERÍAS */}
+            {tab === 'TALLER' && (
+                <Card className="shadow-xs">
+                    <CardContent className="p-0 overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
+                                <tr>
+                                    <th className="px-4 py-3">Fecha</th>
+                                    <th className="px-4 py-3">Avería / Mantenimiento</th>
+                                    <th className="px-4 py-3">Tipo</th>
+                                    <th className="px-4 py-3">Prioridad</th>
+                                    <th className="px-4 py-3">Estado</th>
+                                    <th className="px-4 py-3 text-right">Coste (€)</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {tareas.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="px-4 py-8 text-center text-slate-400 italic">
+                                            Sin intervenciones de taller registradas para este vehículo.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    tareas.map((t: any) => (
+                                        <tr key={t.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3 text-xs">
+                                                {format(new Date(t.createdAt), 'dd/MM/yyyy')}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <p className="font-bold text-slate-800">{t.titulo}</p>
+                                                <p className="text-xs text-slate-400 truncate max-w-md">
+                                                    {t.descripcion}
+                                                </p>
+                                            </td>
+                                            <td className="px-4 py-3 text-xs font-semibold">{t.tipo}</td>
+                                            <td className="px-4 py-3">
+                                                <span
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                        t.prioridad === 'ALTA' || t.prioridad === 'URGENTE'
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : 'bg-slate-100 text-slate-700'
+                                                    }`}
+                                                >
+                                                    {t.prioridad}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span
+                                                    className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                                        t.estado === 'COMPLETADA'
+                                                            ? 'bg-emerald-100 text-emerald-800'
+                                                            : 'bg-amber-100 text-amber-800'
+                                                    }`}
+                                                >
+                                                    {t.estado}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-right font-mono font-bold">
+                                                {Number(t.costeTotal || t.costeEstimado || 0) > 0
+                                                    ? `${Number(t.costeTotal || t.costeEstimado).toFixed(2)} €`
+                                                    : '---'}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* TAB 4: MANTENIMIENTO DE CONDUCTORES */}
+            {tab === 'MANT_CONDUCTOR' && (
+                <Card className="shadow-xs">
+                    <CardContent className="p-0 overflow-x-auto">
+                        <table className="w-full text-sm text-left">
+                            <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b">
+                                <tr>
+                                    <th className="px-4 py-3">Fecha</th>
+                                    <th className="px-4 py-3">Conductor</th>
+                                    <th className="px-4 py-3">Aceite Motor</th>
+                                    <th className="px-4 py-3">Hidráulico</th>
+                                    <th className="px-4 py-3">Refrigerante</th>
+                                    <th className="px-4 py-3">Lavado</th>
+                                    <th className="px-4 py-3">Observaciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {mantenimientosConductor.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="px-4 py-8 text-center text-slate-400 italic">
+                                            Sin registros de mantenimiento diario por conductores.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    mantenimientosConductor.map((m: any) => (
+                                        <tr key={m.id} className="hover:bg-slate-50">
+                                            <td className="px-4 py-3 text-xs font-bold">
+                                                {format(new Date(m.fecha), 'dd/MM/yyyy')}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs">
+                                                {m.empleado
+                                                    ? `${m.empleado.nombre} ${m.empleado.apellidos || ''}`
+                                                    : '---'}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs">
+                                                {m.aceite ? `Sí (${m.litrosAceite || 0} L)` : '-'}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs">{m.hidraulico ? 'Sí' : '-'}</td>
+                                            <td className="px-4 py-3 text-xs">{m.refrigerante ? 'Sí' : '-'}</td>
+                                            <td className="px-4 py-3 text-xs">{m.lavado ? 'Sí' : '-'}</td>
+                                            <td className="px-4 py-3 text-xs text-slate-500">
+                                                {m.observaciones || '---'}
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* TAB 5: DOCUMENTOS */}
+            {tab === 'DOCUMENTOS' && (
+                <Card className="shadow-xs">
+                    <CardContent className="p-6">
+                        <DocumentManager entityId={camion.id} entityType="CAMION" />
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }

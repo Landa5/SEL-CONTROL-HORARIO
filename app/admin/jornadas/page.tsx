@@ -4,9 +4,10 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Search, FileSpreadsheet, Calendar, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { downloadExcelWorkbook } from '@/lib/excel';
 
 import TimelinePeopleView from '@/components/jornadas/TimelinePeopleView';
 import TimelineView from '@/components/jornadas/TimelineView';
@@ -177,7 +178,65 @@ function JornadasContent() {
         return dates;
     };
 
-    const groupedJornadas = jornadas.reduce((acc: any, jor) => {
+    const [searchText, setSearchText] = useState('');
+    const [filterRol, setFilterRol] = useState('ALL');
+    const [filterEstado, setFilterEstado] = useState('ALL');
+    const [dateFrom, setDateFrom] = useState('');
+    const [dateTo, setDateTo] = useState('');
+    const [quickRange, setQuickRange] = useState('');
+
+    const applyQuickRange = (preset: 'TODAY' | 'WEEK' | 'MONTH' | 'PREV_MONTH' | 'ALL') => {
+        setQuickRange(preset);
+        const now = new Date();
+        const fmt = (d: Date) => d.toISOString().split('T')[0];
+        if (preset === 'ALL') {
+            setDateFrom('');
+            setDateTo('');
+            return;
+        }
+        if (preset === 'TODAY') {
+            const s = fmt(now);
+            setDateFrom(s);
+            setDateTo(s);
+            return;
+        }
+        if (preset === 'WEEK') {
+            const day = now.getDay() || 7;
+            const mon = new Date(now);
+            mon.setDate(now.getDate() - day + 1);
+            setDateFrom(fmt(mon));
+            setDateTo(fmt(now));
+            return;
+        }
+        if (preset === 'MONTH') {
+            setDateFrom(fmt(new Date(now.getFullYear(), now.getMonth(), 1)));
+            setDateTo(fmt(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
+            return;
+        }
+        if (preset === 'PREV_MONTH') {
+            setDateFrom(fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1)));
+            setDateTo(fmt(new Date(now.getFullYear(), now.getMonth(), 0)));
+        }
+    };
+
+    const filteredJornadas = jornadas.filter(jor => {
+        if (searchText.trim()) {
+            const q = searchText.toLowerCase().trim();
+            const empName = `${jor.empleado?.nombre || ''} ${jor.empleado?.apellidos || ''}`.toLowerCase();
+            const mats = (jor.usosCamion || []).map((u: any) => (u.camion?.matricula || '').toLowerCase()).join(' ');
+            if (!empName.includes(q) && !mats.includes(q)) return false;
+        }
+        if (filterRol !== 'ALL' && jor.empleado?.rol !== filterRol) return false;
+        if (filterEstado !== 'ALL' && jor.estado !== filterEstado) return false;
+        if (dateFrom || dateTo) {
+            const dStr = jor.fecha ? format(new Date(jor.fecha), 'yyyy-MM-dd') : '';
+            if (dateFrom && dStr < dateFrom) return false;
+            if (dateTo && dStr > dateTo) return false;
+        }
+        return true;
+    });
+
+    const groupedJornadas = filteredJornadas.reduce((acc: any, jor) => {
         try {
             if (!jor.fecha) return acc;
             const d = new Date(jor.fecha);
@@ -363,6 +422,45 @@ function JornadasContent() {
         document.body.removeChild(link);
     };
 
+    const exportExcel = () => {
+        const jornadasWithRest = calculateRest13to16(filteredJornadas);
+        const rows = jornadasWithRest.map(jor => {
+            let kmTotal = 0;
+            let countDescargas = 0;
+            let countViajes = 0;
+            let countRepostajes = 0;
+
+            (jor.usosCamion || []).forEach((t: any) => {
+                const km =
+                    typeof t.kmRecorridos === 'number' && t.kmRecorridos > 0
+                        ? t.kmRecorridos
+                        : t.kmFinal && t.kmInicial
+                        ? Math.max(0, parseInt(t.kmFinal) - parseInt(t.kmInicial))
+                        : 0;
+                kmTotal += km;
+                countDescargas += t.descargasCount || t.descargas?.length || 0;
+                countViajes += t.viajesCount || 0;
+                countRepostajes += t.litrosRepostados || 0;
+            });
+
+            return {
+                ID: jor.id,
+                Empleado: `${jor.empleado?.nombre || ''} ${jor.empleado?.apellidos || ''}`.trim(),
+                Rol: jor.empleado?.rol || '',
+                Fecha: jor.fecha ? format(new Date(jor.fecha), 'yyyy-MM-dd') : '',
+                Entrada: safeFormatTime(jor.horaEntrada),
+                Salida: jor.horaSalida ? safeFormatTime(jor.horaSalida) : 'En curso',
+                'Total Horas': Number((jor.totalHoras || 0).toFixed(2)),
+                Estado: jor.estado,
+                'KM Totales': kmTotal,
+                Descargas: countDescargas,
+                Viajes: countViajes,
+                'Litros Repostados': countRepostajes
+            };
+        });
+        downloadExcelWorkbook('Informe_Jornadas_SEL.xlsx', [{ name: 'Jornadas', rows }]);
+    };
+
     // Helper for rendering Sort Arrow
     const SortIcon = ({ column }: { column: string }) => {
         if (sortConfig.key !== column) return <span className="text-gray-300 ml-1 text-[10px]">⇅</span>;
@@ -372,15 +470,117 @@ function JornadasContent() {
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-between items-center bg-white p-6 rounded-xl border shadow-sm">
-                <div>
-                    <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Informes de Jornada</h1>
-                    <p className="text-gray-500 text-sm">Registro histórico detallado de actividad y kilómetros.</p>
+            <div className="bg-white p-6 rounded-xl border shadow-sm space-y-4">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                        <h1 className="text-2xl font-black text-gray-900 uppercase tracking-tight">Jornadas y Rutas</h1>
+                        <p className="text-gray-500 text-sm">
+                            Registro histórico detallado de fichajes, actividad en ruta y kilómetros ({filteredJornadas.length} registros).
+                        </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                        <Button onClick={exportCSV} variant="outline" className="gap-2 font-bold text-xs">
+                            <Download className="w-4 h-4" /> CSV
+                        </Button>
+                        <Button
+                            onClick={exportExcel}
+                            className="gap-2 shadow-sm font-bold bg-emerald-600 text-white hover:bg-emerald-700 text-xs"
+                        >
+                            <FileSpreadsheet className="w-4 h-4" /> EXPORTAR EXCEL (.XLSX)
+                        </Button>
+                    </div>
                 </div>
-                <div className="flex gap-2">
-                    <Button onClick={exportCSV} variant="secondary" className="gap-2 shadow-sm font-bold bg-gray-900 text-white hover:bg-gray-800">
-                        <Download className="w-4 h-4" /> EXPORTAR CSV
-                    </Button>
+
+                {/* Search & Quick Filters Bar */}
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="relative flex-1 min-w-[220px] max-w-sm">
+                            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                            <input
+                                type="text"
+                                value={searchText}
+                                onChange={e => setSearchText(e.target.value)}
+                                placeholder="Buscar por empleado o matrícula..."
+                                className="w-full pl-9 pr-8 py-2 text-xs font-medium border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            {searchText && (
+                                <button
+                                    onClick={() => setSearchText('')}
+                                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                >
+                                    <X className="w-3.5 h-3.5" />
+                                </button>
+                            )}
+                        </div>
+                        <select
+                            value={filterRol}
+                            onChange={e => setFilterRol(e.target.value)}
+                            className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-lg bg-white text-slate-700"
+                        >
+                            <option value="ALL">Rol: Todos</option>
+                            <option value="CONDUCTOR">Conductores</option>
+                            <option value="MECANICO">Mecánicos</option>
+                            <option value="OFICINA">Oficina</option>
+                            <option value="ADMIN">Administración</option>
+                        </select>
+                        <select
+                            value={filterEstado}
+                            onChange={e => setFilterEstado(e.target.value)}
+                            className="px-3 py-2 text-xs font-semibold border border-slate-200 rounded-lg bg-white text-slate-700"
+                        >
+                            <option value="ALL">Estado: Todos</option>
+                            <option value="TRABAJANDO">En Curso (Trabajando)</option>
+                            <option value="CERRADA">Cerrada</option>
+                        </select>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-500 flex items-center gap-1 mr-1">
+                                <Calendar className="w-3.5 h-3.5 text-blue-600" /> Rango rápido:
+                            </span>
+                            {[
+                                { id: 'TODAY', label: 'Hoy' },
+                                { id: 'WEEK', label: 'Esta Semana' },
+                                { id: 'MONTH', label: 'Este Mes' },
+                                { id: 'PREV_MONTH', label: 'Mes Anterior' },
+                                { id: 'ALL', label: 'Todo' }
+                            ].map(p => (
+                                <button
+                                    key={p.id}
+                                    onClick={() => applyQuickRange(p.id as any)}
+                                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition-colors ${
+                                        quickRange === p.id
+                                            ? 'bg-blue-600 text-white'
+                                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                    }`}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs">
+                            <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={e => {
+                                    setDateFrom(e.target.value);
+                                    setQuickRange('');
+                                }}
+                                className="px-2 py-1 border border-slate-200 rounded bg-white text-xs"
+                            />
+                            <span className="text-slate-400">a</span>
+                            <input
+                                type="date"
+                                value={dateTo}
+                                onChange={e => {
+                                    setDateTo(e.target.value);
+                                    setQuickRange('');
+                                }}
+                                className="px-2 py-1 border border-slate-200 rounded bg-white text-xs"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
 

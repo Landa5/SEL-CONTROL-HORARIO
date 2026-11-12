@@ -32,14 +32,27 @@ export async function GET(request: Request) {
             take: 5
         });
 
-        // 1.2 Urgent Absences (Pending & starting soon)
+        // 1.2 Urgent Absences (All Pending Absences)
         const urgentAbsences = await prisma.ausencia.findMany({
             where: {
-                estado: 'PENDIENTE',
-                fechaInicio: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) }
+                estado: 'PENDIENTE'
             },
-            include: { empleado: { select: { nombre: true, apellidos: true } } },
-            take: 5
+            include: { empleado: { select: { id: true, nombre: true, apellidos: true, rol: true } } },
+            orderBy: { fechaInicio: 'asc' },
+            take: 8
+        });
+
+        // 1.2b Open Shifts right now
+        const openShifts = await prisma.jornadaLaboral.findMany({
+            where: { estado: 'TRABAJANDO' },
+            include: {
+                empleado: { select: { id: true, nombre: true, apellidos: true, rol: true } },
+                usosCamion: {
+                    where: { horaFin: null },
+                    include: { camion: { select: { id: true, matricula: true } } }
+                }
+            },
+            orderBy: { horaEntrada: 'asc' }
         });
 
         // 1.3 Expirations
@@ -237,6 +250,7 @@ export async function GET(request: Request) {
             section1: {
                 criticalTasks,
                 urgentAbsences,
+                openShifts,
                 criticalAlerts, // Combined expirations
                 isStable: criticalTasks.length === 0 && urgentAbsences.length === 0 && criticalAlerts.length === 0
             },

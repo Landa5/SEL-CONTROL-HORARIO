@@ -6,6 +6,22 @@ export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session')?.value;
     const { pathname } = request.nextUrl;
 
+    // 1. Protect all /api/admin/* endpoints at middleware level
+    if (pathname.startsWith('/api/admin')) {
+        if (!session) {
+            return NextResponse.json({ error: 'No autenticado' }, { status: 401 });
+        }
+        const payload = await verifyToken(session);
+        if (!payload) {
+            return NextResponse.json({ error: 'Sesión inválida o expirada' }, { status: 401 });
+        }
+        const rol = String((payload as any).rol || '').toUpperCase();
+        if (!['ADMIN', 'OFICINA', 'MECANICO'].includes(rol)) {
+            return NextResponse.json({ error: 'No autorizado para rutas de administración' }, { status: 403 });
+        }
+        return NextResponse.next();
+    }
+
     const protectedRoutes = ['/admin', '/empleado', '/oficina', '/mecanico'];
     const isProtectedRoute = protectedRoutes.some(route => pathname.startsWith(route));
 
@@ -23,8 +39,8 @@ export async function middleware(request: NextRequest) {
 
         const roleRoutes: Record<string, string> = {
             'ADMIN': '/admin/dashboard',
-            'OFICINA': '/oficina/dashboard',
-            'MECANICO': '/mecanico/dashboard',
+            'OFICINA': '/admin/dashboard',
+            'MECANICO': '/admin/tareas',
             'CONDUCTOR': '/empleado',
             'EMPLEADO': '/empleado',
             'COMERCIAL': '/empleado'
@@ -32,8 +48,29 @@ export async function middleware(request: NextRequest) {
 
         const rolePermissions: Record<string, string[]> = {
             'ADMIN': ['/admin', '/oficina', '/mecanico', '/empleado'],
-            'OFICINA': ['/oficina', '/empleado', '/admin/formacion', '/admin/tacografo'],
-            'MECANICO': ['/mecanico', '/empleado'],
+            'OFICINA': [
+                '/oficina',
+                '/empleado',
+                '/admin/dashboard',
+                '/admin/empleados',
+                '/admin/ausencias',
+                '/admin/jornadas',
+                '/admin/formacion',
+                '/admin/evaluaciones',
+                '/admin/camiones',
+                '/admin/tareas',
+                '/admin/tacografo',
+                '/admin/informes',
+                '/admin/alquiler'
+            ],
+            'MECANICO': [
+                '/mecanico',
+                '/empleado',
+                '/admin/dashboard',
+                '/admin/camiones',
+                '/admin/tareas',
+                '/admin/inventario'
+            ],
             'CONDUCTOR': ['/empleado'],
             'EMPLEADO': ['/empleado'],
             'COMERCIAL': ['/empleado']
@@ -63,5 +100,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
+    matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)', '/api/admin/:path*'],
 };

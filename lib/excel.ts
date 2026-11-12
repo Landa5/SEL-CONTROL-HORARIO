@@ -6,7 +6,8 @@
 
 export interface ExcelSheetData {
     name: string;
-    rows: Record<string, string | number | boolean | null | undefined>[];
+    headers?: string[];
+    rows: Record<string, string | number | boolean | null | undefined>[] | (string | number | boolean | null | undefined)[][];
 }
 
 function escapeXml(str: string): string {
@@ -28,7 +29,23 @@ function colIndexToLetter(index: number): string {
     return letter;
 }
 
-function buildWorksheetXml(rows: Record<string, any>[]): string {
+function buildWorksheetXml(rowsInput: any[], explicitHeaders?: string[]): string {
+    let rows: Record<string, any>[] = [];
+    if (explicitHeaders && explicitHeaders.length > 0 && Array.isArray(rowsInput)) {
+        rows = rowsInput.map((r) => {
+            if (Array.isArray(r)) {
+                const obj: Record<string, any> = {};
+                explicitHeaders.forEach((h, i) => {
+                    obj[h] = r[i];
+                });
+                return obj;
+            }
+            return r;
+        });
+    } else {
+        rows = rowsInput as Record<string, any>[];
+    }
+
     if (!rows || rows.length === 0) {
         return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
@@ -36,7 +53,7 @@ function buildWorksheetXml(rows: Record<string, any>[]): string {
 </worksheet>`;
     }
 
-    const headers = Object.keys(rows[0]);
+    const headers = explicitHeaders && explicitHeaders.length > 0 ? explicitHeaders : Object.keys(rows[0]);
 
     // Compute column widths
     const colWidths = headers.map((h) => {
@@ -196,6 +213,7 @@ function createZipStore(files: { path: string; content: string }[]): Uint8Array 
 export function downloadExcelWorkbook(filename: string, sheets: ExcelSheetData[]): void {
     const safeSheets = sheets.map((s, idx) => ({
         name: s.name.replace(/[\\/?*[\]:]/g, '_').slice(0, 31) || `Hoja${idx + 1}`,
+        headers: s.headers,
         rows: s.rows
     }));
 
@@ -290,7 +308,7 @@ export function downloadExcelWorkbook(filename: string, sheets: ExcelSheetData[]
     safeSheets.forEach((s, i) => {
         files.push({
             path: `xl/worksheets/sheet${i + 1}.xml`,
-            content: buildWorksheetXml(s.rows)
+            content: buildWorksheetXml(s.rows as any[], s.headers)
         });
     });
 

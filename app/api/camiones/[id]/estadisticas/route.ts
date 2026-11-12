@@ -15,10 +15,31 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
         const startDate = from ? startOfDay(parseISO(from)) : startOfMonth(new Date());
         const endDate = to ? endOfDay(parseISO(to)) : endOfDay(new Date());
 
-        // 1. Fetch Truck Details
-        const camion = await prisma.camion.findUnique({
-            where: { id: camionId }
-        });
+        // 1. Fetch Truck Details with Taller Tasks & Driver Maintenances
+        const [camion, tareas, mantenimientosConductor] = await Promise.all([
+            prisma.camion.findUnique({
+                where: { id: camionId }
+            }),
+            prisma.tarea.findMany({
+                where: {
+                    OR: [{ camionId: camionId }]
+                },
+                include: {
+                    creadoPor: { select: { nombre: true, apellidos: true } },
+                    asignadoA: { select: { nombre: true, apellidos: true } }
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 40
+            }),
+            prisma.mantenimientoConductor.findMany({
+                where: { usoCamion: { camionId: camionId } },
+                include: {
+                    empleado: { select: { nombre: true, apellidos: true } }
+                },
+                orderBy: { creadoEn: 'desc' },
+                take: 40
+            })
+        ]);
 
         if (!camion) {
             return NextResponse.json({ error: 'Camión no encontrado' }, { status: 404 });
@@ -107,6 +128,11 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
             }))
             .sort((a, b) => a.date.localeCompare(b.date));
 
+        const costeTaller = tareas.reduce((acc, t: any) => acc + Number(t.costeTotal || t.costeEstimado || 0), 0);
+        const costeCombustibleEst = Math.round(totalLitros * 1.45 * 100) / 100;
+        const costeTotalOperativo = Math.round((costeTaller + costeCombustibleEst) * 100) / 100;
+        const costePorKm = totalKm > 0 ? Math.round((costeTotalOperativo / totalKm) * 1000) / 1000 : 0;
+
         return NextResponse.json({
             camion,
             periodo: {
@@ -118,10 +144,16 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
                 litros: totalLitros,
                 consumoMedio: parseFloat(consumoMedio.toFixed(2)),
                 viajes: totalViajes,
-                descargas: totalDescargas
+                descargas: totalDescargas,
+                costeTaller: Math.round(costeTaller * 100) / 100,
+                costeCombustibleEst,
+                costeTotalOperativo,
+                costePorKm
             },
             diario: dailyStats,
-            registros: usos // Return raw records for the detailed table
+            registros: usos, // Return raw records for the detailed table
+            tareas,
+            mantenimientosConductor
         });
 
     } catch (error) {

@@ -81,7 +81,7 @@ export default function EmpleadoDashboard() {
     const [monthlyDetails, setMonthlyDetails] = useState<any[]>([]);
 
     // View control
-    const [activeSection, setActiveSection] = useState<'summary' | 'jornada' | 'vehiculo' | 'revision' | 'vacaciones' | 'taller' | 'formacion' | 'profile'>('summary');
+    const [activeSection, setActiveSection] = useState<'summary' | 'jornada' | 'vehiculo' | 'nomina' | 'revision' | 'vacaciones' | 'taller' | 'formacion' | 'profile'>('jornada');
 
     // Form states
     const [observaciones, setObservaciones] = useState('');
@@ -308,6 +308,7 @@ export default function EmpleadoDashboard() {
             body: JSON.stringify(payload)
         });
         if (res.ok) {
+            toast.success('✅ Entrada fichada correctamente');
             await fetchData();
             if (session?.rol === 'CONDUCTOR') {
                 setActiveSection('vehiculo');
@@ -315,14 +316,15 @@ export default function EmpleadoDashboard() {
                 setActiveSection('summary');
             }
         } else {
-            alert('Error iniciando jornada');
+            toast.error('Error iniciando jornada');
         }
     };
 
     const handleClockOut = async () => {
         if (!jornada) return;
         if (activeTurno) {
-            alert('Debes terminar la ruta del vehículo antes de poder cerrar tu jornada. Ve a la pestaña "Vehículo" y completa los KM finales.');
+            toast.warning('Debes terminar la ruta del vehículo antes de cerrar tu jornada. Completa los KM finales.');
+            setActiveSection('vehiculo');
             return;
         }
 
@@ -343,9 +345,12 @@ export default function EmpleadoDashboard() {
             body: JSON.stringify(payload)
         });
         if (res.ok) {
+            toast.success('✅ Jornada finalizada correctamente');
             setObservaciones('');
             await fetchData();
             setActiveSection('summary');
+        } else {
+            toast.error('Error al cerrar la jornada');
         }
     };
 
@@ -368,9 +373,10 @@ export default function EmpleadoDashboard() {
             }
 
             if (res.ok) {
+                toast.success('🚛 Ruta iniciada correctamente');
                 fetchData();
             } else {
-                alert(data.error || 'Error al iniciar ruta');
+                toast.error(data.error || 'Error al iniciar ruta');
             }
         } finally {
             setStartingShift(false);
@@ -378,7 +384,7 @@ export default function EmpleadoDashboard() {
     };
 
     const handleConfirmConflict = async () => {
-        if (!jornada || !selectedCamion || !kmInicial || !conflictPhoto) return alert("Debes subir una foto");
+        if (!jornada || !selectedCamion || !kmInicial || !conflictPhoto) return toast.error("Debes subir una foto del odómetro");
 
         const res = await fetch('/api/turnos', {
             method: 'POST',
@@ -394,13 +400,14 @@ export default function EmpleadoDashboard() {
         });
 
         if (res.ok) {
+            toast.success('Kilometraje confirmado e inicio de ruta registrado');
             setShowConflictModal(false);
             setConflictPhoto('');
             setConflictData(null);
             fetchData();
         } else {
             const data = await res.json();
-            alert(data.error || 'Error al resolver conflicto');
+            toast.error(data.error || 'Error al resolver conflicto');
         }
     };
 
@@ -493,10 +500,10 @@ export default function EmpleadoDashboard() {
 
         if (res.ok) {
             setNumDescargas('');
-            alert('Descargas actualizadas correctamente');
+            toast.success('Descargas actualizadas correctamente');
             fetchData();
         } else {
-            alert('Error al actualizar descargas');
+            toast.error('Error al actualizar descargas');
         }
     };
 
@@ -511,10 +518,10 @@ export default function EmpleadoDashboard() {
 
         if (res.ok) {
             setLitrosRepostados('');
-            alert('Repostaje registrado correctamente');
+            toast.success('Repostaje registrado correctamente');
             fetchData();
         } else {
-            alert('Error al registrar repostaje');
+            toast.error('Error al registrar repostaje');
         }
     };
 
@@ -529,10 +536,10 @@ export default function EmpleadoDashboard() {
 
         if (res.ok) {
             setNumViajes('');
-            alert('Viajes actualizados correctamente');
+            toast.success('Viajes actualizados correctamente');
             fetchData();
         } else {
-            alert('Error al actualizar viajes');
+            toast.error('Error al actualizar viajes');
         }
     };
 
@@ -619,18 +626,27 @@ export default function EmpleadoDashboard() {
 
     const isConductor = session?.rol === 'CONDUCTOR' || session?.rol === 'MECANICO';
 
-    // Navigation Configuration
+    // Navigation Configuration (5 pestañas principales + accesos operativos)
     const navItems = [
-        { id: 'summary', label: 'Resumen', icon: LayoutDashboard },
-        { id: 'jornada', label: 'Mi Control de Días', icon: Clock, badgeCount: !jornada ? 1 : 0 },
-        ...(isConductor ? [{ id: 'vehiculo', label: 'Vehículo', icon: Truck }] : []),
-        ...(isConductor ? [{ id: 'revision', label: 'Revisión Mensual', icon: ClipboardCheck, badgeCount: isConductor && !revisionDelMes ? 1 : 0 }] : []),
-        { id: 'vacaciones', label: 'Vacaciones/Bajas', icon: Calendar },
-        { id: 'taller', label: 'Reportar Avería', icon: AlertTriangle, badgeCount: tareas.length },
+        { id: 'jornada', label: 'Fichar', icon: Clock, badgeCount: !jornada ? 1 : 0 },
+        ...(isConductor ? [{ id: 'vehiculo', label: 'Vehículo / Ruta', icon: Truck, badgeCount: activeTurno ? 1 : 0 }] : []),
+        { id: 'summary', label: 'Mi Jornada', icon: LayoutDashboard },
+        { id: 'vacaciones', label: 'Ausencias', icon: Calendar },
+        { id: 'nomina', label: 'Nómina y Variables', icon: DollarSign },
         { id: 'formacion', label: 'Formación', icon: BookOpen },
+        ...(isConductor ? [{ id: 'revision', label: 'Revisión Mensual', icon: ClipboardCheck, badgeCount: isConductor && !revisionDelMes ? 1 : 0 }] : []),
+        { id: 'taller', label: 'Reportar Avería', icon: AlertTriangle, badgeCount: tareas.length },
         { id: 'profile', label: 'Mi Perfil', icon: User },
         ...(session?.rol === 'ADMIN' ? [{ id: 'admin-back', label: 'Panel Admon', icon: LayoutDashboard }] : []),
         ...(session?.rol === 'OFICINA' ? [{ id: 'office-back', label: 'Panel Oficina', icon: LayoutDashboard }] : []),
+    ];
+
+    const primaryTabs = [
+        { id: isConductor && jornada && !jornada.horaSalida ? 'vehiculo' : 'jornada', matchIds: ['jornada', 'vehiculo'], label: 'Fichar', icon: Clock },
+        { id: 'summary', matchIds: ['summary'], label: 'Mi Jornada', icon: LayoutDashboard },
+        { id: 'vacaciones', matchIds: ['vacaciones'], label: 'Ausencias', icon: Calendar },
+        { id: 'nomina', matchIds: ['nomina'], label: 'Nómina', icon: DollarSign },
+        { id: 'formacion', matchIds: ['formacion'], label: 'Formación', icon: BookOpen },
     ];
 
     return (
@@ -654,11 +670,132 @@ export default function EmpleadoDashboard() {
         >
             {/* OFFLINE BANNER */}
             {!isOnline && (
-                <div className="bg-orange-500 text-white p-2 text-center text-sm font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
+                <div className="bg-orange-500 text-white p-2 rounded-xl mb-4 text-center text-sm font-bold flex items-center justify-center gap-2 animate-in slide-in-from-top-2">
                     <WifiOff className="w-4 h-4" />
                     MODO OFFLINE - Los datos se guardarán localmente
                 </div>
             )}
+
+            {/* CABECERA SIEMPRE VISIBLE: BOTÓN DE FICHAR GRANDE Y ESTADO EN TIEMPO REAL */}
+            <div className="mb-5 bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+                {!jornada ? (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="text-center sm:text-left">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black uppercase bg-amber-100 text-amber-800">
+                                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" /> Jornada sin iniciar
+                            </span>
+                            <h2 className="text-lg sm:text-xl font-black text-slate-900 mt-1">
+                                Hola, {session?.nombre || 'compañero'} · {format(new Date(), "EEEE d 'de' MMMM", { locale: es })}
+                            </h2>
+                            <p className="text-xs text-slate-500">Pulsa el botón para registrar tu hora de entrada de hoy.</p>
+                        </div>
+                        <Button
+                            onClick={handleClockIn}
+                            size="xl"
+                            className="w-full sm:w-auto min-w-[260px] h-16 text-lg sm:text-xl font-black bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 rounded-xl flex items-center justify-center gap-3"
+                        >
+                            <Clock className="w-6 h-6" />
+                            FICHAR ENTRADA
+                        </Button>
+                    </div>
+                ) : !jornada.horaSalida ? (
+                    <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                        <div className="flex flex-wrap items-center gap-3">
+                            <div className="bg-blue-600 text-white px-4 py-2.5 rounded-xl text-center">
+                                <p className="text-[10px] font-black uppercase tracking-wider text-blue-100">Entrada Hoy</p>
+                                <p className="text-2xl font-black leading-none mt-0.5">{format(new Date(jornada.horaEntrada), 'HH:mm')}</p>
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black uppercase bg-emerald-100 text-emerald-800">
+                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" /> En Jornada Activa
+                                    </span>
+                                    {isConductor && activeTurno && (
+                                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-black uppercase bg-indigo-100 text-indigo-800">
+                                            🚛 {activeTurno.camion?.matricula} ({activeTurno.kmInicial} km)
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    {isConductor
+                                        ? activeTurno
+                                            ? `Ruta activa con ${activeTurno.camion?.matricula} · Descargas: ${activeTurno.descargasCount || 0} · Viajes: ${activeTurno.viajesCount || 0}`
+                                            : 'Jornada iniciada · Selecciona un camión para iniciar ruta o ficha salida.'
+                                        : 'Jornada en curso · Pulsa Fichar Salida al terminar tu turno.'}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-2.5">
+                            {isConductor && !activeTurno && (
+                                <Button
+                                    onClick={() => setActiveSection('vehiculo')}
+                                    className="h-14 px-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-xl flex items-center justify-center gap-2 shadow-md"
+                                >
+                                    <Truck className="w-5 h-5" /> ASIGNAR CAMIÓN
+                                </Button>
+                            )}
+                            {isConductor && activeTurno && (
+                                <Button
+                                    onClick={() => setActiveSection('vehiculo')}
+                                    className="h-14 px-5 bg-indigo-600 hover:bg-indigo-700 text-white font-black text-base rounded-xl flex items-center justify-center gap-2 shadow-md"
+                                >
+                                    <Truck className="w-5 h-5" /> GESTIONAR RUTA / KM FINALES
+                                </Button>
+                            )}
+                            <Button
+                                onClick={handleClockOut}
+                                className="h-14 px-6 bg-red-600 hover:bg-red-700 text-white font-black text-base rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-red-600/20"
+                            >
+                                <LogOut className="w-5 h-5" /> FICHAR SALIDA
+                            </Button>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                            <div className="p-3 rounded-xl bg-emerald-100 text-emerald-700">
+                                <CheckCircle className="w-7 h-7" />
+                            </div>
+                            <div>
+                                <span className="text-xs font-black uppercase text-emerald-700">Jornada de hoy completada</span>
+                                <p className="text-sm font-bold text-slate-800">
+                                    Horario registrado: {format(new Date(jornada.horaEntrada), 'HH:mm')} - {format(new Date(jornada.horaSalida), 'HH:mm')}
+                                </p>
+                            </div>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={() => setJornada(null)} className="font-bold text-xs">
+                            Iniciar otro turno hoy
+                        </Button>
+                    </div>
+                )}
+            </div>
+
+            {/* BARRA DE 5 PESTAÑAS PRINCIPALES (OPTIMIZADA PARA MÓVIL Y ESCRITORIO) */}
+            <div className="mb-6 bg-slate-100 p-1.5 rounded-2xl grid grid-cols-5 gap-1 border border-slate-200">
+                {primaryTabs.map((tab) => {
+                    const Icon = tab.icon;
+                    const isActive = tab.matchIds.includes(activeSection);
+                    return (
+                        <button
+                            key={tab.label}
+                            type="button"
+                            onClick={() => {
+                                setActiveSection(tab.id as any);
+                                if (tab.id === 'summary') setSelectedMonth(null);
+                            }}
+                            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 py-2.5 px-2 rounded-xl text-[11px] sm:text-xs font-black transition-all ${
+                                isActive
+                                    ? 'bg-white text-blue-600 shadow-sm border border-slate-200/80'
+                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
+                            }`}
+                        >
+                            <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-blue-600' : 'text-slate-500'}`} />
+                            <span className="truncate">{tab.label}</span>
+                        </button>
+                    );
+                })}
+            </div>
 
             {/* CONTENT INJECTION */}
             {activeSection === 'summary' && (
@@ -990,6 +1127,81 @@ export default function EmpleadoDashboard() {
             )}
 
             {activeSection === 'vacaciones' && <div className="bg-white p-6 rounded-xl shadow-sm"><EmployeeAbsenceView /></div>}
+
+            {activeSection === 'nomina' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <Card className="border-t-4 border-t-emerald-600 shadow-sm">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-emerald-900">
+                                <DollarSign className="w-5 h-5 text-emerald-600" />
+                                Mi Nómina y Variables Mensuales
+                            </CardTitle>
+                            <p className="text-xs text-slate-500">
+                                Resumen transparente de los kilómetros, viajes, descargas y jornadas computadas cada mes para el cálculo de tus incentivos y variables de nómina.
+                            </p>
+                        </CardHeader>
+                        <CardContent>
+                            {monthlyStats.length === 0 ? (
+                                <div className="p-8 text-center text-slate-400 border-2 border-dashed rounded-xl">
+                                    No hay registros mensuales todavía.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {monthlyStats.map((stat: any) => {
+                                        const [year, month] = stat.month.split('-');
+                                        const dateObj = new Date(parseInt(year), parseInt(month) - 1);
+                                        return (
+                                            <div
+                                                key={stat.month}
+                                                className="p-5 rounded-2xl border border-slate-200 bg-slate-50/60 hover:bg-white hover:shadow-md transition-all flex flex-col justify-between"
+                                            >
+                                                <div className="flex items-center justify-between mb-4">
+                                                    <div>
+                                                        <span className="text-[10px] font-black uppercase text-slate-400">{year}</span>
+                                                        <h3 className="text-lg font-black text-slate-900 capitalize">
+                                                            {format(dateObj, 'MMMM', { locale: es })}
+                                                        </h3>
+                                                    </div>
+                                                    <span className="px-2.5 py-1 rounded-full text-[10px] font-black uppercase bg-emerald-100 text-emerald-800">
+                                                        {stat.jornadasCount || 0} jornadas
+                                                    </span>
+                                                </div>
+
+                                                <div className="grid grid-cols-3 gap-2 text-center mb-4">
+                                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                                        <p className="text-[10px] font-black uppercase text-blue-600">KM</p>
+                                                        <p className="text-sm font-black text-slate-900 mt-0.5">{(stat.totalKm || 0).toLocaleString()}</p>
+                                                    </div>
+                                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                                        <p className="text-[10px] font-black uppercase text-emerald-600">Viajes</p>
+                                                        <p className="text-sm font-black text-slate-900 mt-0.5">{stat.totalViajes || 0}</p>
+                                                    </div>
+                                                    <div className="bg-white p-2.5 rounded-xl border border-slate-200/80">
+                                                        <p className="text-[10px] font-black uppercase text-indigo-600">Descargas</p>
+                                                        <p className="text-sm font-black text-slate-900 mt-0.5">{stat.totalDescargas || 0}</p>
+                                                    </div>
+                                                </div>
+
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => {
+                                                        setActiveSection('summary');
+                                                        handleMonthClick(stat.month);
+                                                    }}
+                                                    className="w-full text-xs font-bold text-slate-700"
+                                                >
+                                                    Ver desglose día a día →
+                                                </Button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
 
             {activeSection === 'taller' && (
                 <Card>
