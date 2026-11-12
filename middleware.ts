@@ -2,9 +2,30 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifyToken } from './lib/jwt';
 
+// Traslado al VPS de SEL (12/11/2026): la app vive en https://app.selsel.es.
+// La copia que sigue en Vercel solo redirige y no deja escribir en la base antigua (Supabase).
+const NUEVA_URL = 'https://app.selsel.es';
+
 export async function middleware(request: NextRequest) {
     const session = request.cookies.get('session')?.value;
     const { pathname } = request.nextUrl;
+
+    const host = request.headers.get('host') || '';
+    if (process.env.VERCEL === '1' || host.endsWith('.vercel.app')) {
+        const destino = new URL(pathname + request.nextUrl.search, NUEVA_URL);
+        if (pathname.startsWith('/api/')) {
+            return NextResponse.json(
+                { error: 'La app se ha trasladado a ' + NUEVA_URL, nuevaUrl: destino.toString() },
+                { status: 410 }
+            );
+        }
+        return NextResponse.redirect(destino, 308);
+    }
+
+    // El resto de /api (salvo /api/admin) no pasa por las comprobaciones de sesion de abajo, igual que antes
+    if (pathname.startsWith('/api/') && !pathname.startsWith('/api/admin')) {
+        return NextResponse.next();
+    }
 
     // 1. Protect all /api/admin/* endpoints at middleware level
     if (pathname.startsWith('/api/admin')) {
@@ -100,5 +121,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)', '/api/admin/:path*'],
+    // Incluye /api para poder cortar la escritura en Vercel; en el VPS esas rutas pasan sin cambios (ver arriba)
+    matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
